@@ -500,3 +500,16 @@ FileProvider按能力声明list/read/write/rename/resume/chmod/hash/atomicReplac
 -   Remote Build
 -   Git集成
 -   Debug
+
+
+### 当前实现补充：终端文件工作区（2026-09-24）
+
+终端侧栏复用 SFTP 文件操作，新增当前目录名称筛选及 file.chmod IPC。schema 验证整数 0–511，服务检查租约所有者、文件类型后通过 SFTP 设置权限；拒绝符号链接与特殊文件。三位模式会清除特殊权限位；lstat 与 chmod 并非原子操作，不能防止远端路径并发替换。目录异步响应通过请求序号避免过期列表覆盖最新路径。尚未实现 Shell cd 自动同步、目录同步和大目录虚拟化。
+
+### 当前实现补充：跟随活动终端（2026-09-24）
+
+文件侧栏新增“跟随终端”开关，默认关闭。仅活动标签启用轮询，以约 800ms 间隔串行请求 terminal.cwd，切换分屏后丢弃旧请求结果，目录或终端 ID 变化时加载目录。关闭跟随后停止更新，继续手动浏览；目录失败在文件栏内提示，不打断终端。
+
+Linux 能力优先通过 SFTP readlink('/proc/self') 探测，查询与 SFTP 初始化共用 8 秒上限；失败后通过独立 SSH exec 执行 readlink 查询。cwd 查询同样支持回退，并缓存成功的 exec 查询方式。辅助通道使用随机响应标识隔离登录横幅、限制输出大小、超时关闭，路径仅允许服务生成的 /proc/self 或数字 PID 的 cwd。支持时使用 PTY exec 的 sh 包装命令报告带随机会话标识的 PID，再 exec 用户登录 Shell；固定长度缓冲处理分片标识，不解析提示符或猜测 cd 输入。terminal.cwd 验证终端所有者，仅允许读取已绑定数字 PID 的 cwd 链接，校验返回路径。探测失败或 exec 请求被拒绝时回退普通 shell 请求。
+
+本轮范围为初始登录 Shell 的物理 cwd；嵌套 ssh、容器、tmux、子 Shell 和受限 SFTP 命名空间不保证跟随。现有运行会话不注入命令，需重新打开终端。实现依据：https://docs.kernel.org/filesystems/proc.html 。

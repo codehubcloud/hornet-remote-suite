@@ -1,0 +1,8 @@
+.tools/
+src/node_modules/
+src/dist/
+src/release/
+src/coverage/
+src/test-results/
+src/.cache/
+*.log

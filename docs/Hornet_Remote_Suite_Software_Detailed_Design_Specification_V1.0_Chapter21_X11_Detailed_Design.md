@@ -1,7 +1,7 @@
 # Hornet Remote Suite 软件详细设计说明书 V1.0
 ## 第21章 X11 图形应用与 XDMCP 详细设计
 
-修订日期：2026-09-24。需求 HRS-X11；本章为待实现设计。官方能力基线见 [Xmanager 功能表](https://www.xshell.com/en/xmanager-all-features/)。
+修订日期：2026-09-24。需求 HRS-X11；本章为目标设计，当前实现差异见21.8。官方能力基线见 [Xmanager 功能表](https://www.xshell.com/en/xmanager-all-features/)。
 
 ## 21.1 能力与实现边界
 
@@ -72,3 +72,11 @@ T-X11-02：错误 cookie、分片握手、显示端口冲突、缺少 xauth、X 
 T-X11-03：受控 LAN XDMCP 登录与取消；防火墙阻断时有可诊断错误。
 
 工程任务：HORNET-X11-001 引擎 PoC；002 cookie 代理；003 生命周期与窗口管理；004 XDMCP；005 扩展/字体兼容清单。M0 未完成001不得承诺 M2 工期。
+
+## 21.8 当前源码实现及明确差异
+
+`src/services/x11` 已实现 SSH X11 exec 请求、随机伪 cookie、MIT-MAGIC-COOKIE-1 握手验证/替换、大小端与分片处理、10秒握手超时、32通道限制、SSH租约及停止清理。真实cookie通过 Main 原生文件选择器读取Xauthority，按显示号选择，仅保存在服务内存，不返回Renderer。
+
+当前依赖用户已安装并启动、监听本机回环入口且开启cookie认证的X Server，程序不自动安装/启动/停止该引擎，也无法证明其其他监听接口已关闭。只允许一个活动X11会话，使用既有显示，不提供21.3要求的每信任域独立X Server。远端用户命令在表单中可见，按用户点击执行；后台不重复执行，stdout/stderr只排空、不持久化。关闭转发不承诺已后台化的远端程序必然退出。
+
+协议代理的大小端、错误cookie、分片及本地TCP转发已通过自动测试；尚无真实X应用、字体/GLX/剪贴板/多窗口矩阵验证。引擎管理、独立显示隔离、窗口定位和XDMCP仍未实现，因此状态为“需配置/实验”，不能声明完成Xmanager等价功能。

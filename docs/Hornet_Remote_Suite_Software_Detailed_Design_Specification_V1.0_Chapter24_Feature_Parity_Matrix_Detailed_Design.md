@@ -1,7 +1,7 @@
 # Hornet Remote Suite 软件详细设计说明书 V1.0
 ## 第24章 Power Suite 8 功能对照与验收追踪
 
-核对日期：2026-09-24。基线为NetSarang官方四产品规格页及版本8功能标记。网页会更新，不把全部功能都当作版本8新增。所有Hornet实现状态均为“待实现/待验证”，本表不是兼容认证报告。
+核对日期：2026-09-24。基线为NetSarang官方四产品规格页及版本8功能标记。网页会更新，不把全部功能都当作版本8新增。下表是设计追踪基线，源码已有部分核心实现；实现证据见24.6，本表不是兼容认证报告。
 
 ## 24.1 对标口径
 
@@ -56,7 +56,7 @@ C-LEGACY-01是本设计的安全取舍，不是用户已确认的“可忽略需
 
 脚本API和专有会话/密码格式不承诺源码或加密数据直接兼容；提供字段迁移报告。X11多窗口允许原生窗口，内嵌单窗口须PoC；SecureXDMCP、历史X扩展和认证扩展尚待验证。Windows首先验证，其他OS/架构不能列为完整支持。
 
-RDP高级重定向、FTPS、IDE、AI为独立扩展，不能掩盖对标缺项。每个C-*组发布时填写未实现、部分支持、已验证支持或明确差异，并附子用例/版本/证据。当前全部尚无实现验收证据。
+RDP高级重定向、FTPS、IDE、AI为独立扩展，不能掩盖对标缺项。每个C-*组发布时填写未实现、部分支持、已验证支持或明确差异，并附子用例/版本/证据。已有自动化验证不等于完整的对标验收。
 
 ## 24.5 官方来源与技术依据
 
@@ -73,3 +73,18 @@ RDP高级重定向、FTPS、IDE、AI为独立扩展，不能掩盖对标缺项�
 | [RFC 1179](https://www.rfc-editor.org/rfc/rfc1179) | LPD协议 |
 
 资料用于核对公开能力，非复制专有实现。引擎选型、资源模型、阈值与分期是本项目设计决策。
+
+## 24.6 源码实现证据补充（2026-09-24）
+
+| 追踪ID | 当前实现状态 | 证据及未覆盖项 |
+|---|---|---|
+| C-SSH-01 | 部分支持：本地/远程静态TCP转发、动态SOCKS5 CONNECT | `src/services/ssh/tunnels.ts`、`src/services/ssh/socks.ts`、`src/tests/integration/tunnels.test.ts`、`src/tools/smoke.mjs`；跳板和上游代理未实现，SOCKS仅无认证TCP子集，真实服务端矩阵待验证 |
+| C-X11-01 | 部分实现：SSH cookie转发代理，需已有X Server | `src/services/x11`、`src/tests/unit/x11.test.ts`；原生引擎管理和真实GUI互通未完成，见21.8 |
+| C-DESK-01 | 部分支持：VNC内嵌；RDP原生窗口PoC | `src/services/desktop/vnc.ts`、`src/services/native`、`src/tools/smoke.mjs`、`src/tools/native-smoke.mjs`；RDP仅控件初始化验证，内嵌帧桥未实现，见22.8 |
+| C-PRINT-01 | 部分实现：LPD接收及Windows提交适配 | `src/services/print/lpd.ts`、`src/services/native/NativeHost.cs`、`src/tests/integration/native-protocols.test.ts`；实体打印及完整队列生命周期待验证，见23.8 |
+
+其他核心功能已有的测试结果与明确边界统一记录于 [源码验证记录](../src/VALIDATION.md) 和 [源码说明](../src/README.md)，不把某一功能组的部分通过标记为全组兼容。
+
+终端文件工作区增量（2026-09-24）：C-TERM-01 已补充滚屏文本前后搜索；C-FILE-02 已补充当前目录名称筛选、三位权限修改，并在 SSH 终端左侧直接呈现 SFTP。证据：`TerminalWorkspace.tsx`、`TerminalView.tsx`、`FileView.tsx`、`tests/integration/ssh-sftp.test.ts`、`tools/smoke.mjs`。仍为部分支持：本地 shell、任意终端分屏、目录同步和 Shell 当前目录自动跟随未实现。
+
+终端工作区增量（2026-09-24）：C-TERM-01 已增加终端标题右键排列已有终端（上下/左右分屏）、临时重命名、取消分屏及分隔条调宽调高，分割不创建 Shell。C-FILE-02 已增加 Linux 初始登录 Shell cwd 跟随开关；仍不覆盖跨标签任意拖拽布局、本地 Shell、tmux/嵌套 SSH 目录跟随及目录同步。

@@ -1,0 +1,9 @@
+{
+  "node": "24.21.0",
+  "packageManager": "npm (bundled with Node 24.21.0)",
+  "electron": "44.4.5",
+  "typescript": "7.0.2",
+  "lockfile": "package-lock.json",
+  "validatedPlatform": "Windows x64",
+  "status": "development; not a signed release"
+}

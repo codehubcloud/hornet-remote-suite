@@ -1,0 +1,117 @@
+import { z } from 'zod';
+import { printConfigSchema, type PrintConfig, type PrintStatus, type RdpConfig, type X11Status } from './native';
+
+const id = z.string().uuid();
+const text = z.string().min(1).max(255).refine(v => !/[\x00-\x1f\x7f]/.test(v), 'Contains control characters');
+export const profileSchema = z.object({
+  profileId: id, name: text, host: text, port: z.number().int().min(1).max(65535),
+  username: text, group: z.string().max(128), authType: z.enum(['password', 'privateKey', 'agent']),
+  revision: z.number().int().nonnegative(),
+}).strict();
+export type Profile = z.infer<typeof profileSchema>;
+export const tunnelConfigSchema = z.object({
+  profileId: id, kind: z.enum(['local', 'remote', 'dynamic']),
+  bindHost: z.enum(['127.0.0.1', '::1']),
+  bindPort: z.number().int().min(0).max(65535),
+  targetHost: z.string().min(1).max(253).refine(v => !/[\s\x00-\x1f\x7f/\\]/.test(v), 'Invalid destination host'),
+  targetPort: z.number().int().min(1).max(65535),
+  allowedHosts: z.array(z.string().min(1).max(253).regex(/^[a-zA-Z0-9.*:_-]+$/)).max(64).optional(),
+  allowedPorts: z.array(z.number().int().min(1).max(65535)).max(64).optional(),
+}).strict();
+export type TunnelConfig = z.infer<typeof tunnelConfigSchema>;
+export interface TunnelSnapshot extends TunnelConfig {
+  tunnelId: string; connectionId: string; leaseId: string;
+  state: 'starting'|'listening'|'stopping'|'stopped'|'failed';
+  activeStreams: number; bytesToTarget: number; bytesFromTarget: number; error?: string;
+}
+export const remotePath = z.string().min(1).max(4096).refine(v => !v.includes('\0'), 'Invalid path');
+export const schemas = {
+  'print.status': z.object({}).strict(),
+  'print.start': printConfigSchema,
+  'print.stop': z.object({}).strict(),
+  'print.submit': z.object({jobId:id}).strict(),
+  'print.cancel': z.object({jobId:id}).strict(),
+  'x11.status': z.object({}).strict(),
+  'x11.launch': z.object({profileId:id,command:z.string().min(1).max(4096).refine(v=>!v.includes('\0'))}).strict(),
+  'x11.stop': z.object({id}).strict(),
+  'vnc.open': z.object({ profileId: id, host: text, port: z.number().int().min(1).max(65535) }).strict(),
+  'vnc.close': z.object({ desktopId: id }).strict(),
+  'tunnel.list': z.object({}).strict(),
+  'tunnel.create': tunnelConfigSchema,
+  'tunnel.stop': z.object({ tunnelId: id }).strict(),
+  'profile.list': z.object({}).strict(),
+  'profile.save': z.object({ profile: profileSchema, expectedRevision: z.number().int().nonnegative() }).strict(),
+  'group.remove': z.object({ path: z.string().min(1).max(128), members: z.array(z.object({profileId:id,revision:z.number().int().positive()}).strict()).max(10000) }).strict(),
+  'profile.delete': z.object({ profileId: id, expectedRevision: z.number().int().positive() }).strict(),
+  'connection.open': z.object({ profileId: id, purpose: z.enum(['terminal', 'files']) }).strict(),
+  'connection.release': z.object({ leaseId: id }).strict(),
+  'connection.close': z.object({ connectionId: id, generation: z.number().int().positive() }).strict(),
+  'auth.respond': z.object({ challengeId: id, response: z.string().max(65536), remember: z.boolean() }).strict(),
+  'auth.cancel': z.object({ challengeId: id }).strict(),
+  'trust.resolve': z.object({ challengeId: id, decision: z.enum(['accept', 'reject']) }).strict(),
+  'terminal.cwd': z.object({terminalId:id}).strict(),
+  'terminal.create': z.object({ connectionId: id, cols: z.number().int().min(1).max(1000), rows: z.number().int().min(1).max(1000), trackDirectory:z.boolean().optional() }).strict(),
+  'terminal.attach': z.object({ terminalId: id }).strict(),
+  'terminal.resize': z.object({ terminalId: id, generation: z.number().int().positive(), cols: z.number().int().min(1).max(1000), rows: z.number().int().min(1).max(1000) }).strict(),
+  'terminal.close': z.object({ terminalId: id }).strict(),
+  'file.list': z.object({ connectionId: id, path: remotePath }).strict(),
+  'file.read': z.object({ connectionId: id, path: remotePath }).strict(),
+  'file.mkdir': z.object({ connectionId: id, path: remotePath }).strict(),
+  'file.rename': z.object({ connectionId: id, path: remotePath, target: remotePath }).strict(),
+  'file.chmod': z.object({ connectionId: id, path: remotePath, mode: z.number().int().min(0).max(511) }).strict(),
+  'file.remove': z.object({ connectionId: id, path: remotePath }).strict(),
+  'file.save': z.object({ connectionId: id, path: remotePath, content: z.string().max(131072), expectedHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+  'transfer.start': z.object({ connectionId: id, direction: z.enum(['upload','download']), pathGrantId: id, remotePath, idempotencyKey: id }).strict(),
+  'task.list': z.object({}).strict(),
+  'task.cancel': z.object({ taskId: id, expectedRevision: z.number().int().positive() }).strict(),
+  'task.pause': z.object({ taskId: id, expectedRevision: z.number().int().positive() }).strict(),
+  'task.resume': z.object({ taskId: id, expectedRevision: z.number().int().positive() }).strict(),
+  'layout.load': z.object({}).strict(),
+  'layout.save': z.object({ profileIds: z.array(id).max(100), activeProfileId: id.optional() }).strict(),
+  'capability.list': z.object({}).strict(),
+} as const;
+export type Method = keyof typeof schemas;
+export const envelopeSchema = z.object({
+  version: z.literal(1), requestId: id, deadlineMs: z.number().finite(),
+  method: z.enum(Object.keys(schemas) as [Method, ...Method[]]), payload: z.unknown()
+}).strict();
+export const terminalInputSchema = z.object({
+  terminalId: id, generation: z.number().int().positive(), seq: z.number().int().positive(),
+  data: z.string().max(32768)
+}).strict();
+export const terminalAckSchema = z.object({ terminalId: id, seq: z.number().int().positive() }).strict();
+export type Result<T> = { ok: true; requestId: string; data: T }
+  | { ok: false; requestId: string; error: { code: string; message: string; retryable: boolean } };
+export interface Lease { connectionId: string; leaseId: string; generation: number }
+export interface FileEntry { name: string; path: string; kind: 'directory'|'file'|'link'; size: number; modified: number; mode: number }
+export interface FilePage { path: string; entries: FileEntry[]; truncated: boolean }
+export type TaskState = 'queued'|'running'|'verifying'|'committing'|'pausing'|'paused'|'cancelling'|'cancelled'|'succeeded'|'failed'|'conflict';
+export interface TaskSnapshot { taskId: string; profileId: string; direction: 'upload'|'download'; name: string; state: TaskState; totalBytes: number; transferredBytes: number; revision: number; error?: string; updatedAt: number }
+export interface Capability { id: string; name: string; state: 'available'|'unavailable'|'requires-setup'|'experimental'; reason: string }
+export type HornetEvent =
+  | { type: 'tunnel.state'; tunnel: TunnelSnapshot }
+  | { type: 'challenge'; challengeId: string; kind: 'password'|'privateKey'|'passphrase'|'keyboard'|'trust'; profileId: string; title: string; message: string; echo?: boolean }
+  | { type: 'challenge.closed'; challengeId: string }
+  | { type: 'connection.state'; connectionId: string; profileId: string; generation: number; state: string; error?: string }
+  | { type: 'terminal.data'; terminalId: string; generation: number; seq: number; data: Uint8Array }
+  | { type: 'terminal.closed'; terminalId: string }
+  | { type: 'task.state'; task: TaskSnapshot }
+  | { type: 'service.error'; message: string };
+export interface Layout { profileIds: string[]; activeProfileId?: string }
+export interface HornetApi {
+  print:{status():Promise<PrintStatus>;start(config:PrintConfig):Promise<PrintStatus>;stop():Promise<void>;submit(jobId:string):Promise<unknown>;cancel(jobId:string):Promise<void>;printers():Promise<string[]>};
+  x11:{status():Promise<X11Status>;configure(display:number):Promise<X11Status|null>;launch(profileId:string,command:string):Promise<{id:string}>;stop(id:string):Promise<void>};
+  rdp:{probe():Promise<{available:boolean;presentation:string}>;open(config:RdpConfig):Promise<{id:string}>;list():Promise<{id:string;state:string;reason?:number}[]>;close(id:string):Promise<void>};
+  vnc: { open(profileId: string, host: string, port: number): Promise<{ desktopId: string; url: string; token: string }>; close(desktopId: string): Promise<void> };
+  tunnel: { list(): Promise<TunnelSnapshot[]>; create(config: TunnelConfig): Promise<TunnelSnapshot>; stop(tunnelId: string): Promise<void> };
+  profiles: { removeGroup(path:string,members:{profileId:string;revision:number}[]):Promise<void>; list(): Promise<Profile[]>; save(profile: Profile, expectedRevision: number): Promise<Profile>; delete(profileId: string, expectedRevision: number): Promise<void>; import(): Promise<number|null>; export(): Promise<boolean> };
+  connection: { open(profileId: string, purpose: 'terminal'|'files'): Promise<Lease>; release(leaseId: string): Promise<void>; close(connectionId: string, generation: number): Promise<void> };
+  auth: { respond(challengeId: string, response: string, remember: boolean): Promise<void>; cancel(challengeId: string): Promise<void>; trust(challengeId: string, decision: 'accept'|'reject'): Promise<void>; chooseKey(challengeId: string): Promise<boolean>; lock(): Promise<void> };
+  terminal: { cwd(terminalId:string):Promise<{path:string|null;reason?:string}>; create(connectionId: string, cols: number, rows: number,trackDirectory?:boolean): Promise<{ terminalId: string; generation: number }>; attach(terminalId: string): Promise<void>; write(terminalId: string,generation: number,seq: number,data: string): void; ack(terminalId: string,seq: number): void; resize(terminalId: string,generation: number,cols: number,rows: number): Promise<void>; close(terminalId: string): Promise<void> };
+  file: { chmod(connectionId:string,path:string,mode:number):Promise<void>; list(connectionId: string,path: string): Promise<FilePage>; read(connectionId: string,path: string): Promise<{ content: string; hash: string }>; save(connectionId: string,path: string,content: string,expectedHash: string): Promise<{ hash: string }>; choose(direction: 'upload'|'download',name?: string): Promise<{ pathGrantId: string; name: string }|null>; mkdir(connectionId:string,path:string):Promise<void>; rename(connectionId:string,path:string,target:string):Promise<void>; remove(connectionId:string,path:string):Promise<void> };
+  transfer: { start(connectionId: string,direction: 'upload'|'download',pathGrantId: string,remotePath: string,idempotencyKey: string): Promise<TaskSnapshot> };
+  task: { list(): Promise<TaskSnapshot[]>; pause(taskId: string,expectedRevision: number): Promise<void>; cancel(taskId: string,expectedRevision: number): Promise<void>; resume(taskId: string,expectedRevision: number): Promise<void> };
+  layout: { load(): Promise<Layout>; save(layout: Layout): Promise<void> };
+  capabilities(): Promise<Capability[]>;
+  onEvent(listener: (event: HornetEvent) => void): () => void;
+}
