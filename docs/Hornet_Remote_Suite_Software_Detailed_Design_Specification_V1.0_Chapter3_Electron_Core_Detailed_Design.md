@@ -34,7 +34,7 @@
                             |
                             |
     +-----------------------v------------------------+
-    | Preload Process                                |
+    | Preload Isolated Context                                |
     |                                                |
     | Secure API Bridge                              |
     | IPC Wrapper                                    |
@@ -102,64 +102,23 @@ Main Process负责：
 
 # 3.4 应用启动流程
 
-时序：
+获取单实例锁 → app.whenReady → 打开凭据服务与数据库/迁移 → 注册受限 IPC → 启动核心服务并等待就绪 → 创建窗口/加载本地 UI → 恢复配置和布局。耗时协议服务按需启动；加载 UI 前须能响应请求，避免原流程先加载 Renderer 再注册 IPC 的竞争。失败显示诊断窗口，不进入伪 READY。
 
-    Electron
+# 3.5 启动伪代码
 
-     |
-
-    main.ts
-
-     |
-
-    app.ready
-
-     |
-
-    WindowManager.create()
-
-     |
-
-    Load Renderer
-
-     |
-
-    Register IPC
-
-     |
-
-    Start Services
-
-     |
-
-    Application Ready
-
-------------------------------------------------------------------------
-
-# 3.5 main.ts设计
-
-入口：
-
-``` typescript
-async function bootstrap(){
-
-
-await app.whenReady();
-
-
-WindowManager.create();
-
-
-IPCManager.register();
-
-
-ServiceManager.start();
-
-
+```typescript
+async function bootstrap() {
+  if (!app.requestSingleInstanceLock()) { app.quit(); return; }
+  await app.whenReady();
+  await dataService.openAndMigrate();
+  await credentialService.initialize();
+  ipcManager.register();
+  await serviceManager.startCore();
+  await windowManager.create();
 }
 ```
 
-------------------------------------------------------------------------
+入口捕获失败并逆序释放已启动服务；数据库迁移失败不加载可写业务界面。
 
 # 3.6 WindowManager设计
 
@@ -282,6 +241,8 @@ minHeight:number;
     contextIsolation=true
 
     nodeIntegration=false
+
+    sandbox=true
 
 ------------------------------------------------------------------------
 
@@ -589,9 +550,9 @@ WindowConfig
 
 BrowserWindow
 
-周期：
+工作量：
 
-5天
+待 M0 技术验证后估算，见第18章。
 
 ------------------------------------------------------------------------
 
@@ -599,9 +560,9 @@ BrowserWindow
 
 实现IPC Framework
 
-周期：
+工作量：
 
-7天
+待 M0 技术验证后估算，见第18章。
 
 ------------------------------------------------------------------------
 
@@ -609,13 +570,25 @@ BrowserWindow
 
 实现ServiceManager
 
-周期：
+工作量：
 
-5天
+待 M0 技术验证后估算，见第18章。
 
 ------------------------------------------------------------------------
 
-# 3.20 下一章节
+# 3.20 进程划分、监督与退出
+
+Main 只负责窗口、能力授权、资源协调与服务监督；SSH/SFTP/FTP/PTY 在核心 utility process，SQLite 由数据服务单写，X Server/RDP/打印由受控原生辅助进程运行。Preload 不独立成进程。utility process 用于故障隔离，不自动构成第三方代码安全沙箱。API依据 [Electron utilityProcess](https://www.electronjs.org/docs/latest/api/utility-process)。
+
+服务注册接口为 start/health/stop；登记服务版本、协议版本和拥有的 resourceId。启动超时15秒；运行中每5秒心跳，连续3次丢失标故障。后台服务恢复仅重建基础设施，副作用按 task 类型处理，不能自动重执行命令。
+
+Renderer 崩溃只丢视图订阅；服务可保留其任务和租约30秒以便重建视图，逾期清理无任务所属的资源。Main 崩溃时辅助进程必须检测父管道断开并退出；安装为独立打印服务的进程是明确例外。
+
+退出顺序：停止接收请求 → 展示未完成任务 → 保存布局/检查点 → 关闭协议通道和原生窗口 → 停服务 → 关闭数据库。等待超过10秒显示仍运行任务并允许用户选择继续等待或强制结束；不得以超时直接把打印标为成功。监听器、MessagePort、临时cookie和子进程句柄都需登记释放。
+
+服务清单包含 ConnectionCoordinator、CredentialService、TransferService、TunnelService、X11Service、DesktopService、PrintService。窗口/数据/服务不能各自维护另一份权威连接状态。
+
+# 3.21 下一章节
 
 第4章 IPC通信详细设计
 

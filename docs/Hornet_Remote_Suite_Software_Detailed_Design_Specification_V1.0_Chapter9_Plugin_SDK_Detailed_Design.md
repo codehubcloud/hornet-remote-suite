@@ -43,7 +43,7 @@ Plugin SDK用于实现 Hornet Remote Suite 的插件扩展能力。
 +----------------------v-------------------------+
 | Plugin Package                                 |
 |                                                |
-| manifest.json                                  |
+| package.json                                  |
 | main.js                                        |
 | ui components                                  |
 | resources                                      |
@@ -534,7 +534,7 @@ Application Continue
 
 目的：
 
-防止恶意插件。
+验证插件来源和完整性；签名不能证明代码无恶意。
 
 
 流程：
@@ -642,39 +642,49 @@ status TEXT
 
 Plugin Manager
 
-周期：
+工作量：
 
-10天
+待 M0 技术验证后估算，见第18章。
 
 
 ## HORNET-PLUGIN-002
 
 Runtime
 
-周期：
+工作量：
 
-15天
+待 M0 技术验证后估算，见第18章。
 
 
 ## HORNET-PLUGIN-003
 
 Plugin SDK
 
-周期：
+工作量：
 
-15天
+待 M0 技术验证后估算，见第18章。
 
 
 ## HORNET-PLUGIN-004
 
 Marketplace
 
-周期：
+工作量：
 
-20天
+待 M0 技术验证后估算，见第18章。
 
 
 ---
+
+# 9.22 可执行隔离边界与权限契约
+
+本章为M4设计。独立Node进程只能隔离崩溃，拥有Node/fs/net的第三方插件可以绕过Host API；不能将其称为安全沙箱。默认第三方扩展仅允许无Node、固定CSP的隔离Web内容/受限运行时，经broker调用能力；任意Node/native扩展在完成OS级沙箱验证前仅允许明确标记的受信任内置插件。
+
+permissions必须细化为作用域，如file.read(profileId, root)、file.write、terminal.execute(profileId)、network(domain)、ui.panel；主进程每次调用重新校验，禁止getCurrentSession返回原始连接或凭据。撤销权限后关闭对应句柄/订阅。插件不能自行构造租约越权访问另一主机。
+
+插件manifest增加engines.hornet、apiVersion、入口摘要、权限schema；解包防路径穿越/符号链接，限制包大小，校验完整签名链后原子安装。升级新增权限不能静默继承。CPU/内存/请求速率超预算先终止该插件，主服务继续。
+
+第三方UI不直接注入主React树；贡献点为受校验声明或隔离视图。Marketplace发布与购买属于可选服务，基础套件不依赖其在线状态。
 
 # 下一章节
 

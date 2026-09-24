@@ -1,716 +1,81 @@
-# Hornet Remote Suite 软件详细说明设计书 V1.0
+# Hornet Remote Suite 软件详细设计说明书 V1.0
+## 第20章 工程目录与代码规范
 
-# 第20章 源码工程目录设计与代码规范
+修订日期：2026-09-24。以下是拟建工程规范，当前src尚无可验收实现；不代表目录已落地。
 
----
+## 20.1 唯一工程布局
 
-# 20.1 设计目标
-
-本章节定义 Hornet Remote Suite 源码工程组织方式、模块边界、代码规范和开发模板。
-
-目标：
-
-- 支持多人并行开发
-- 保证代码可维护性
-- 支持持续集成
-- 支持插件扩展
-- 支持长期商业版本演进
-
-
----
-
-# 20.2 总体仓库设计
-
-
-推荐采用 Monorepo 架构。
-
-
-```
-hornet-remote-suite
-
-├── apps
-
-├── packages
-
-├── services
-
-├── native
-
-├── plugins
-
-├── tools
-
-├── docs
-
-├── tests
-
-└── ci
-
-```
-
-
----
-
-# 20.3 顶层目录说明
-
-
-## apps
-
-
-存放客户端应用。
-
-
-```
-apps
-
-└── desktop
-
-    ├── main
-
-    ├── renderer
-
-    └── preload
-
+```text
+apps/
+  desktop/
+    main/           # 窗口、授权、服务监督、IPC路由
+    preload/        # 最小白名单桥
+    renderer/       # React UI、ViewHost、Zustand视图状态
+  cli/              # 复用任务API的命令行入口
+packages/
+  contracts/        # DTO、Zod schema、错误码、IPC registry
+  core/             # Profile、ConnectionCoordinator、租约、任务
+  storage/          # Repository、SQLite迁移、一致性备份
+  security/         # 凭据适配、信任、策略、脱敏
+  ui/               # 共享组件
+  plugin-sdk/       # M4受限API
+services/           # 本地后台服务源码，不代表云服务
+  protocol-host/
+  ssh/
+  terminal/
+  file/             # SFTP/FTP provider、传输与同步
+  tunnel/
+  x11/
+  desktop/
+  print/
+  ide/              # M4
+  ai/               # M4
+native/
+  xserver-adapter/
+  rdp-helper/
+  print-helper/
+  platform/
+server/             # M4可选企业服务，与本地services区分
+tests/
+  unit/
+  integration/
+  e2e/
+  performance/
+  fixtures/
+ci/
+  scripts/
+  manifests/
+docs/
 ```
 
+所有旧章节中的electron/main、renderer/src或database等目录均为模块内示意，以此布局归一化；不同时建立apps/desktop/main和apps/desktop/electron/main。实施迁移时再处置现有src，不在文档任务中移动源码。
 
----
+## 20.2 依赖规则
 
-# 20.4 Electron目录设计
+renderer只能依赖contracts、ui和受限preload类型；禁止导入ssh2、fs、net、storage、native。preload只依赖contracts和Electron桥API。服务依赖core/contracts/security及自己的adapter，不能反向依赖UI。企业server不作为desktop编译/启动必需项。
 
+contracts不依赖Electron/Node运行时；数据类型、schema与IPC注册表只维护一份。UI state不是连接/任务的权威存储。每个辅助进程有协议版本握手与健康状态。
 
-```
-desktop
+## 20.3 编码规范
 
+TypeScript strict模式；边界用unknown和schema收窄，禁止以any绕过IPC/插件校验。类/组件PascalCase，函数camelCase，常量UPPER_SNAKE_CASE；名称表达profile、connection、channel、lease、view与task语义，避免含糊sessionId。
 
-├── electron
+异步接口Promise，内部异常映射到第4章Result；副作用以taskId跟踪。资源实现dispose/close并绑定所有者，订阅返回unsubscribe；取消使用AbortSignal/服务任务协议，不把Promise.race超时当成操作已停止。
 
+禁止拼接不可信shell命令、把密码放命令行、从Renderer指定可执行路径、日志输出秘密。主机、URI和文件路径通过对应平台/协议解析器处理。
 
-│   ├── main
+## 20.4 原生与工具链
 
+Native限定操作系统/协议桥接职责，使用CMake与固定编译工具链；优先进程隔离，N-API仅在必要处使用并做ABI测试。自研crypto不是默认工作项。
 
-│   │   ├── main.ts
+Node/pnpm/Electron/引擎精确版本及摘要在ci/manifests登记；按13章维护受支持LTS。开发容器可运行Linux工具和服务夹具，不能替代Windows/macOS原生GUI及打印验证。
 
+## 20.5 测试与评审
 
-│   │   ├── window
+Vitest、GoogleTest、Playwright分层使用，验收归第12章。新增协议provider必须提供能力探测、正常路径、取消、异常清理与断线场景；不能只有接口mock测试。
 
+Review检查跨主机身份、租约释放、幂等/结果未知、背压、秘密生命周期、迁移兼容和平台限制。提交采用Conventional Commits；发布分支策略由团队确定，避免未经团队规模验证强制复杂Git Flow。
 
-│   │   ├── ipc
+## 20.6 后续章节
 
-
-│   │   └── services
-
-
-│   │
-
-
-│   ├── preload
-
-
-│   │   └── index.ts
-
-
-│   │
-
-
-│   └── config
-
-
-└── renderer
-
-    ├── components
-
-    ├── pages
-
-    ├── hooks
-
-    ├── store
-
-    └── styles
-
-```
-
-
----
-
-# 20.5 Main Process规范
-
-
-目录：
-
-```
-main
-
-├── bootstrap
-
-├── window
-
-├── ipc
-
-├── service
-
-├── database
-
-└── security
-
-```
-
-
-职责：
-
-- 窗口管理
-- IPC注册
-- 服务启动
-- 系统资源管理
-
-
----
-
-# 20.6 Renderer工程设计
-
-
-采用：
-
-React + TypeScript。
-
-
-目录：
-
-
-```
-renderer
-
-
-├── components
-
-├── layouts
-
-├── pages
-
-├── hooks
-
-├── store
-
-├── api
-
-├── assets
-
-└── utils
-
-```
-
-
----
-
-# 20.7 UI组件规范
-
-
-组件：
-
-```
-PascalCase
-
-```
-
-
-例如：
-
-
-```typescript
-TerminalPanel.tsx
-
-FileExplorer.tsx
-
-SessionTree.tsx
-
-```
-
-
----
-
-# 20.8 Service层设计
-
-
-目录：
-
-
-```
-services
-
-
-├── ssh
-
-├── sftp
-
-├── terminal
-
-├── ide
-
-├── ai
-
-└── plugin
-
-```
-
-
-每个服务包含：
-
-
-```
-service
-
-├── interface
-
-├── model
-
-├── impl
-
-├── test
-
-└── index.ts
-
-```
-
-
----
-
-# 20.9 SSH模块代码结构
-
-
-```
-ssh
-
-
-├── SSHService.ts
-
-├── SSHClient.ts
-
-├── SSHConnection.ts
-
-├── AuthManager.ts
-
-├── HostVerifier.ts
-
-└── test
-
-```
-
-
----
-
-# 20.10 IPC代码规范
-
-
-目录：
-
-```
-ipc
-
-├── channels.ts
-
-├── IPCManager.ts
-
-├── ssh.ipc.ts
-
-├── file.ipc.ts
-
-└── terminal.ipc.ts
-
-```
-
-
-Channel命名：
-
-```
-module.action
-
-```
-
-
-例如：
-
-```
-ssh.connect
-
-file.upload
-
-terminal.create
-
-```
-
-
----
-
-# 20.11 TypeScript编码规范
-
-
-## 命名规则
-
-
-类：
-
-```
-PascalCase
-
-```
-
-
-函数：
-
-```
-camelCase
-
-```
-
-
-常量：
-
-```
-UPPER_CASE
-
-```
-
-
-接口：
-
-```
-IXXX
-
-```
-
-
-示例：
-
-
-```typescript
-interface ISSHService
-
-class SSHManager
-
-const MAX_TIMEOUT
-
-```
-
-
----
-
-# 20.12 TypeScript代码模板
-
-
-Service：
-
-
-```typescript
-export class SSHService {
-
-
-async connect(config:SSHConfig)
-{
-
-}
-
-
-}
-
-```
-
-
----
-
-# 20.13 React代码规范
-
-
-组件：
-
-- 单一职责
-- Hooks管理状态
-- 禁止业务逻辑进入UI
-
-
-示例：
-
-```
-TerminalView
-
-|
-
-useTerminal()
-
-|
-
-TerminalService
-
-```
-
-
----
-
-# 20.14 状态管理设计
-
-
-推荐：
-
-Zustand。
-
-
-目录：
-
-```
-store
-
-├── sessionStore.ts
-
-├── terminalStore.ts
-
-├── fileStore.ts
-
-└── aiStore.ts
-
-```
-
-
----
-
-# 20.15 Native模块设计
-
-
-用于：
-
-- 高性能IO
-- PTY扩展
-- 系统能力
-
-
-目录：
-
-```
-native
-
-
-├── terminal
-
-├── crypto
-
-└── system
-
-```
-
-
-采用：
-
-- C++
-- CMake
-
-
----
-
-# 20.16 Plugin工程模板
-
-
-```
-hornet-plugin-demo
-
-
-├── package.json
-
-├── src
-
-│   ├── index.ts
-
-│   ├── commands
-
-│   └── panels
-
-└── README.md
-
-```
-
-
----
-
-# 20.17 测试目录设计
-
-
-```
-tests
-
-
-├── unit
-
-├── integration
-
-├── e2e
-
-└── performance
-
-```
-
-
----
-
-# 20.18 CI目录设计
-
-
-```
-ci
-
-
-├── docker
-
-├── scripts
-
-├── pipeline
-
-└── release
-
-```
-
-
----
-
-# 20.19 Git提交规范
-
-
-采用 Conventional Commits。
-
-
-格式：
-
-
-```
-type(scope): message
-
-```
-
-
-示例：
-
-
-```
-feat(ssh): add private key auth
-
-fix(sftp): fix upload retry
-
-docs(api): update plugin api
-
-```
-
-
----
-
-# 20.20 Code Review规范
-
-
-检查：
-
-- 功能正确性
-- 安全问题
-- 性能影响
-- 测试覆盖
-- 文档更新
-
-
----
-
-# 20.21 开发环境规范
-
-
-推荐：
-
-Node:
-
-```
-20 LTS
-
-```
-
-
-Package:
-
-```
-pnpm
-
-```
-
-
-IDE:
-
-```
-VSCode
-
-```
-
-
----
-
-# 20.22 Docker开发环境
-
-
-提供：
-
-
-```
-Dockerfile
-
-docker-compose.yml
-
-```
-
-
-包含：
-
-- Node
-- CMake
-- GCC
-- Clang
-- Python
-
-
----
-
-# 20.23 开发任务拆分
-
-
-## HORNET-CODE-001
-
-工程初始化
-
-周期：
-
-5天
-
-
-## HORNET-CODE-002
-
-基础框架
-
-周期：
-
-15天
-
-
-## HORNET-CODE-003
-
-模块模板
-
-周期：
-
-10天
-
-
----
-
-# 下一章节
-
-
-# 第21章 核心源码实现设计
-
-内容：
-
-- Electron启动代码
-- IPC实现代码
-- SSH Service代码
-- Terminal实现代码
-- SFTP实现代码
-- Plugin Loader代码
-- AI Agent代码框架
+第21章X11、第22章RDP/VNC、第23章LPD打印、第24章对标矩阵。源码实现应与这些设计同目录版本化维护，不再预告不存在的“第21章核心源码实现设计”。

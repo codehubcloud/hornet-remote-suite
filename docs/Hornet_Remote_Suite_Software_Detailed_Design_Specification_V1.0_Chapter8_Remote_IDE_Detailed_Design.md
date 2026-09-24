@@ -89,12 +89,12 @@ Remote IDE模块用于实现类似 VSCode Remote SSH 的远程开发能力。
 
 ## 8.4.1 Workspace定义
 
-Workspace表示一个远程开发工程。
+本章原Workspace更名为RemoteProject，避免与统一工作台WorkspaceLayout混淆。以下局部伪代码按第1章模型实现。
 
 数据结构：
 
 ``` typescript
-interface Workspace {
+interface RemoteProject {
 
 
 id:string;
@@ -103,7 +103,7 @@ id:string;
 name:string;
 
 
-host:string;
+profileId:string;
 
 
 remotePath:string;
@@ -151,7 +151,7 @@ language:string;
 
 目录：
 
-    ~/.hornet/cache
+    app.getPath("userData")/cache
 
 缓存内容：
 
@@ -206,27 +206,7 @@ content:string;
 
 # 8.8 保存流程
 
-Ctrl+S：
-
-    Editor Save Event
-
-     |
-
-    EditorManager
-
-     |
-
-    FileService
-
-     |
-
-    SFTP Upload
-
-     |
-
-    Remote Update
-
-------------------------------------------------------------------------
+打开文件时保存profileId、身份版本、路径与来源指纹。Ctrl+S经第7章统一FileService进行冲突检测、临时文件上传、提交与缓存版本更新；不能绕过任务系统直接覆盖。远端已变更时显示diff/另存/用户选择覆盖。保存失败保留本地dirty buffer，不错误显示已保存。
 
 # 8.9 Monaco Editor设计
 
@@ -500,16 +480,7 @@ Debug Adapter Protocol。
 
 # 8.20 性能设计
 
-目标：
-
-  项目       指标
-  ---------- ----------
-  打开文件   \<1s
-  代码补全   \<200ms
-  远程构建   稳定
-  大工程     10万文件
-
-------------------------------------------------------------------------
+扩展阶段单独验收：≤1MiB文本在受控LAN打开p95≤1秒；语言服务已完成索引后的补全p95≤200ms。10万文件工程记录索引时间、资源消耗与取消响应，需按语言与实际工程制定门槛，不称“可接受”。不把语言服务器冷启动算成编辑器渲染性能。
 
 # 8.21 测试设计
 
@@ -529,35 +500,45 @@ Debug Adapter Protocol。
 
 Monaco集成
 
-周期：
+工作量：
 
-7天
+待 M0 技术验证后估算，见第18章。
 
 ## HORNET-IDE-002
 
 Remote Cache
 
-周期：
+工作量：
 
-10天
+待 M0 技术验证后估算，见第18章。
 
 ## HORNET-IDE-003
 
 LSP支持
 
-周期：
+工作量：
 
-15天
+待 M0 技术验证后估算，见第18章。
 
 ## HORNET-IDE-004
 
 Build Manager
 
-周期：
+工作量：
 
-10天
+待 M0 技术验证后估算，见第18章。
 
 ------------------------------------------------------------------------
+
+# 8.23 Agent、LSP与执行边界
+
+本章属M4扩展；基础远程编辑可在M1/M2以SFTP完成，不依赖Agent。Monaco不等于VSCode Remote：LSP client、JSON-RPC传输、URI映射、语言服务器安装、调试适配器与扩展兼容都需单独实现。
+
+Agent为可选部署，用户明确启用后在远端用户目录按版本/架构安装，验证包签名/摘要，失败回滚，不默认sudo。通信用已认证SSH通道和版本握手，不开放公网端口。无Agent时提供受限编辑与显式SSH命令，禁用无法满足的能力。
+
+LSP通过stdio/受控SSH子通道桥接，区分诊断日志与协议字节；URI携带profile与工程映射。取消、断线与进程崩溃使请求失败，不能无限重复执行构建。DAP需真正的debug adapter，gdb/lldb本身不能直接当成DAP服务器。
+
+构建/Git使用明确cwd与参数，参数化启动；用户shell命令按目标shell规则处理，不用字符串拼接不可信文件名。工程首次打开设信任状态，构建脚本及Git hooks执行前遵循信任策略。
 
 # 下一章节
 

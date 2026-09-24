@@ -358,7 +358,11 @@ file.write(path,data)
 interface AIContext {
 
 
-sessionId:string;
+profileId:string;
+
+connectionId:string;
+
+generation:number;
 
 
 host:string;
@@ -510,47 +514,13 @@ ADMIN_APPROVAL
 
 ---
 
-# 10.14 危险命令检测
+# 10.14 命令与工具授权
 
+rm、dd等黑名单仅用于提示，不能作为安全边界。模型输出、终端日志和检索文档均不可信；任意shell可通过解释器、重定向、管道或编码间接改变系统。
 
-禁止自动执行：
+默认提供结构化只读工具及作用域校验。执行任意shell、写文件、发布或打印等副作用需由可信UI展示实际目标主机、目录、命令/变更，并生成绑定tool + 参数摘要 + profileId + connection generation + 有效期的一次性授权。参数或目标变化必须重新授权，模型不能自批。
 
-```
-rm -rf
-
-mkfs
-
-dd
-
-format
-
-shutdown
-
-```
-
-
-处理：
-
-
-```
-AI
-
- |
-
-SecurityGuard
-
- |
-
-User Confirm
-
- |
-
-Execute
-
-```
-
-
----
+企业策略可以进一步限制，但不能仅信任模型标注的READ_ONLY/SAFE。
 
 # 10.15 日志分析设计
 
@@ -702,7 +672,7 @@ Knowledge Base
 CREATE TABLE ai_history
 (
 id INTEGER PRIMARY KEY,
-session_id TEXT,
+profile_id TEXT,
 question TEXT,
 answer TEXT,
 time INTEGER
@@ -766,39 +736,47 @@ Root cause...
 
 Agent Runtime
 
-周期：
+工作量：
 
-15天
+待 M0 技术验证后估算，见第18章。
 
 
 ## HORNET-AI-002
 
 Tool Calling
 
-周期：
+工作量：
 
-15天
+待 M0 技术验证后估算，见第18章。
 
 
 ## HORNET-AI-003
 
 RAG Service
 
-周期：
+工作量：
 
-20天
+待 M0 技术验证后估算，见第18章。
 
 
 ## HORNET-AI-004
 
 Security Guard
 
-周期：
+工作量：
 
-10天
+待 M0 技术验证后估算，见第18章。
 
 
 ---
+
+# 10.24 数据外发、停止与阶段约束
+
+本章为M4增量，不作为核心套件连接前置。默认不自动上传终端历史、文件和日志；提供上下文预览、脱敏、主机作用域与云/私有模型选项。系统凭据、私钥与X cookie永不进入上下文。历史保存可关闭、可删除，不能默认把所有会话内容写ai_history。
+
+工具调用复用既有服务和第4章权限/任务契约；不得另建绕过主机信任的SSH客户端。Agent设置最大步数、执行时长与费用预算，stop停止新工具并尽力取消运行任务，明确已发生副作用不能撤销。不自动重试结果未知的命令。
+
+验收以权限约束、数据范围和执行结果为准，包含日志提示注入、跨主机上下文污染、审批后修改参数与取消竞争。
 
 # 下一章节
 

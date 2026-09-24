@@ -95,48 +95,21 @@ services/ssh
 
 ---
 
-# 5.4 SSHService设计
-
-
-## 职责
-
-
-对外提供SSH能力。
-
-
-接口：
-
+# 5.4 SSHService契约
 
 ```typescript
 interface ISSHService {
-
-
-connect(
-config:SSHConfig
-):Promise<SSHSession>;
-
-
-disconnect(
-id:string
-):Promise<boolean>;
-
-
-execute(
-id:string,
-command:string
-):Promise<string>;
-
-
-openShell(
-id:string
-):Promise<ShellChannel>;
-
+  acquire(profileId: string, purpose: string):
+    Promise<{ connectionId: string; leaseId: string; generation: number }>;
+  release(leaseId: string): Promise<void>;
+  execute(connectionId: string, command: string):
+    Promise<{ taskId: string }>;
+  openShell(connectionId: string, cols: number, rows: number):
+    Promise<{ channelId: string; terminalId: string }>;
 }
-
 ```
 
-
----
+服务接口是后台内部契约；IPC只能通过第4章受限方法调用。exec输出流式传输，终态必须包含exitCode或signal、stdout/stderr截断标志，不返回无限长字符串。
 
 # 5.5 SSHClient设计
 
@@ -188,54 +161,9 @@ close();
 
 # 5.6 SSH状态机设计
 
+统一使用第1章RuntimeConnection状态：connecting → verifying → authenticating → ready。连接可保持ready并拥有多个运行任务，不因每个任务切换连接状态。网络中断转reconnecting；认证或信任失败转failed；主动断开closing → closed。
 
-状态：
-
-
-```
-INIT
-
- |
-
-CONNECTING
-
- |
-
-AUTHENTICATING
-
- |
-
-READY
-
- |
-
-RUNNING
-
- |
-
-DISCONNECTED
-
-
-FAILED
-
-```
-
-
-状态说明：
-
-
-|状态|说明|
-|-|-|
-|INIT|初始化|
-|CONNECTING|建立TCP|
-|AUTHENTICATING|认证|
-|READY|连接完成|
-|RUNNING|执行任务|
-|FAILED|失败|
-|DISCONNECTED|断开|
-
-
----
+每条状态事件包含connectionId、generation和seq。用户取消MFA/信任挑战时终止本次握手并释放租约；未授权前不能创建业务channel。
 
 # 5.7 SSH连接流程
 
@@ -296,38 +224,9 @@ Session Ready
 
 # 5.8 SSH配置设计
 
+配置保存使用第1章 ConnectionProfile，包含 host、port、username、credentialId、routeProfileIds 和经过schema校验的SSH选项。运行时SSHConfig由凭据服务解析，密码/私钥仅在认证期间按需传入，不出现在持久化配置或普通IPC响应中。
 
-```typescript
-interface SSHConfig {
-
-
-host:string;
-
-
-port:number;
-
-
-username:string;
-
-
-authType:AuthType;
-
-
-password?:string;
-
-
-privateKey?:string;
-
-
-timeout:number;
-
-
-}
-
-```
-
-
----
+认证支持密码、加密私钥、Agent、keyboard-interactive；挑战按challengeId/connectionId绑定，MFA等待支持取消。GSSAPI/Kerberos、PKCS#11和OpenSSH CA列为第24章高级兼容，必须验证实际认证后端，不推断ssh2原生全部支持。
 
 # 5.9 认证模块设计
 
@@ -428,7 +327,7 @@ Agent
 
  |
 
-Private Key
+Sign Challenge（私钥留在Agent）
 
  |
 
@@ -582,117 +481,23 @@ xterm-256color
 
 ---
 
-# 5.17 Connection Pool设计
+# 5.17 Connection Pool与租约
 
+复用键和租约遵循1.6节。连接索引用connectionId，复用索引按端点、用户、凭据版本、跳板链/代理/信任策略构建；不能仅以host作为key。终端、SFTP、X11和隧道分别持有leaseId。
 
-目的：
-
-管理多个服务器连接。
-
-
-结构：
-
-
-```typescript
-Map<string,SSHConnection>
-
-```
-
-
-示例：
-
-```
-Server01
-
- ├── Shell1
-
- ├── Shell2
-
-
-Server02
-
- └── Shell1
-
-```
-
-
----
+默认每连接8个活跃channel，全局32条连接；超过限制排队并可取消，参数通过性能测试后调整。大型传输可独立连接，仍复用认证资料，不要求所有操作挤在同一SSH transport。服务不向Renderer暴露原始ssh2对象。
 
 # 5.18 自动重连设计
 
+连接状态沿第1章状态机；握手中先verifying，再authenticating。网络暂态错误按1、2、4、8、16秒退避并增加±20%抖动，最多5次；用户可停止。认证失败、主机key改变和策略拒绝立即停止。
 
-触发：
-
-- 网络断开
-- Server关闭
-- Socket异常
-
-
-策略：
-
-```
-1s
-
-5s
-
-10s
-
-30s
-
-```
-
-
-流程：
-
-```
-DISCONNECTED
-
- |
-
-ReconnectManager
-
- |
-
-Retry
-
- |
-
-CONNECTED
-
-```
-
-
----
+每次重连增加generation；旧channel关闭，旧输出事件丢弃。普通SSH shell不能恢复原进程；用户启用且远端安装tmux时，才可另建channel显式attach已保存的远端会话。不得回放输入、exec或登录脚本。SFTP由任务层验证检查点后恢复；X11遵循21章。
 
 # 5.19 Host Key校验
 
+在认证前校验算法、主机/端口、信任域及公钥指纹。首次连接在可信UI展示SHA-256指纹供核对，用户接受后写known_host；拒绝或超时则终止。已有key改变默认拒绝，不能自动覆盖或降级接受。
 
-目的：
-
-防止MITM攻击。
-
-
-流程：
-
-```
-First Connect
-
- |
-
-Get Host Key
-
- |
-
-Known Hosts Check
-
- |
-
-Save/Reject
-
-```
-
-
----
+每一跳均独立校验，禁止因经跳板而跳过最终目标校验。并发首连同主机只允许一个有效信任挑战；可信记录更新后再次检查。算法允许列表随锁定库版本维护，弱算法不作为默认兼容策略。
 
 # 5.20 密钥安全存储
 
@@ -796,39 +601,49 @@ Keychain
 
 SSHClient实现
 
-周期：
+工作量：
 
-7天
+待 M0 技术验证后估算，见第18章。
 
 
 ## HORNET-SSH-002
 
 认证模块
 
-周期：
+工作量：
 
-5天
+待 M0 技术验证后估算，见第18章。
 
 
 ## HORNET-SSH-003
 
 Connection Pool
 
-周期：
+工作量：
 
-7天
+待 M0 技术验证后估算，见第18章。
 
 
 ## HORNET-SSH-004
 
 Reconnect机制
 
-周期：
+工作量：
 
-5天
+待 M0 技术验证后估算，见第18章。
 
 
 ---
+
+# 5.25 跳板、代理、转发与Agent边界
+
+跳板链通过上一跳的direct-tcpip建立下一跳SSH，逐跳认证并持有依赖租约；最多4跳、拒绝循环，取消时逆序清理。代理支持SOCKS5/HTTP CONNECT适配，区分代理认证与SSH认证。
+
+TunnelService统一管理local、remote、dynamic转发。默认监听loopback；开放非本机地址需明确配置。remote转发检查服务端实际绑定结果；dynamic SOCKS按目的地址和端口策略控制，DNS解析位置需在配置中说明。转发记录connectionId、leaseId、监听地址、目的地、状态与字节统计。
+
+本地Agent只用于签名，不导出私钥；Agent forwarding是独立权限，默认关闭。使用本地Agent不意味着允许远端访问Agent。X11转发委托21章，不能只把DISPLAY设成远端IP。
+
+参考 [ssh2 官方API](https://github.com/mscdex/ssh2)，实现时锁定版本并逐项互通测试；库具备基础转发API不等于完整产品能力已实现。
 
 # 下一章节
 
