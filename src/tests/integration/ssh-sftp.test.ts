@@ -22,6 +22,19 @@ async function harness(writeDelay=0,directoryTracking=true,options:Parameters<ty
  return {server,root,db,profile,events,connections,terminals,files,transfers,async close(){await transfers.stop();terminals.stop();await connections.stop();db.close();await server.close();await rm(root,{recursive:true,force:true});}};
 }
 describe('real loopback SSH / SFTP',()=>{
+ it('isolates managed X11 transports from shared SSH views and closes only the released isolated lease',async()=>{
+  const h=await harness();
+  try{
+   const shared=await h.connections.acquire('a',h.profile.profileId);
+   const first=await h.connections.acquireIsolated('a',h.profile.profileId),second=await h.connections.acquireIsolated('a',h.profile.profileId);
+   expect(new Set([shared.connectionId,first.connectionId,second.connectionId]).size).toBe(3);
+   const reused=await h.connections.acquire('a',h.profile.profileId);expect(reused.connectionId).toBe(shared.connectionId);
+   h.connections.release('a',first.leaseId);expect(()=>h.connections.get('a',first.connectionId)).toThrow();
+   expect((await h.files.list('a',shared.connectionId,'/')).entries.some(entry=>entry.name==='hello.txt')).toBe(true);
+   expect((await h.files.list('a',second.connectionId,'/')).entries.some(entry=>entry.name==='hello.txt')).toBe(true);
+   expect(h.server.authCount).toBe(3);
+  }finally{await h.close();}
+ });
  it.each([{procReadlink:false},{procProbeDelayMs:2200}])('tracks cwd despite SFTP discovery restrictions or latency: %j',async options=>{
   const h=await harness(0,true,options);
   try{
@@ -104,7 +117,9 @@ describe('real loopback SSH / SFTP',()=>{
    await waitFor(()=>restored!.list('a').find(t=>t.taskId===zero.taskId)?.state==='succeeded');
    expect(h.server.files.get('/empty.txt')?.length).toBe(0);
   }finally{await restored?.stop();await h.close();}
- });
+ // Multiple real SFTP round trips, restart verification and Windows cleanup can
+ // exceed the suite's 20-second limit; each phase still has its own deadline.
+ },40000);
  it('shares authentication, keeps SFTP alive after terminal closes, and enforces stream ownership',async()=>{
   const h=await harness();
   try{

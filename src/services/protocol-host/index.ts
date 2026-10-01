@@ -11,6 +11,8 @@ import { VncService } from '../desktop/vnc';
 import { LpdService } from '../print/lpd';
 import { nativeCall } from '../native/host';
 import { X11Service } from '../x11/sessions';
+import { XServers } from '../x11/engine';
+import { XdmcpService,localInterfaces } from '../x11/xdmcp';
 import { Terminals } from '../terminal/terminals';
 import { Files } from '../file/files';
 import { Transfers } from '../file/transfers';
@@ -29,7 +31,9 @@ const connections=new Connections(store,challenges,emit,(owner:string,profile:Pr
 const terminals=new Terminals(connections,emit);
 const tunnels=new Tunnels(connections,emit);
 const vnc=new VncService(connections);
-const x11=new X11Service(connections);
+const xServers=new XServers(join(process.argv[2],'x11'));
+const x11=new X11Service(connections,xServers);
+const xdmcp=new XdmcpService(xServers);
 const lpd=new LpdService(join(process.argv[2],'print-spool'),async(job,path)=>{const result=await nativeCall({op:'print',path,printer:job.printer,mode:job.mode,jobId:job.jobId},60000);return result.osJobId;});
 const files=new Files(connections);
 const transfers=new Transfers(store,connections,emit);
@@ -41,10 +45,17 @@ async function dispatch(m:Message):Promise<unknown>{
     case 'print.stop':return lpd.stop();
     case 'print.submit':return lpd.print(schemas['print.submit'].parse(p).jobId);
     case 'print.cancel':return lpd.cancel(schemas['print.cancel'].parse(p).jobId);
-    case 'x11.status':return x11.status();
+    case 'x11.status':return x11.status(owner);
+    case 'x11.engine':return xServers.status();
+    case 'x11.engine.configure':return xServers.configure(z.object({path:z.string().min(1).max(32768)}).strict().parse(p).path);
     case 'x11.configure':{const v=z.object({display:z.number().int().min(0).max(99),authority:z.instanceof(Uint8Array)}).parse(p);return x11.configure(v.display,Buffer.from(v.authority));}
-    case 'x11.launch':{const v=schemas['x11.launch'].parse(p);return x11.launch(owner,v.profileId,v.command);}
+    case 'x11.launch':{const v=schemas['x11.launch'].parse(p);return x11.launch(owner,v.profileId,v.command,v.managed);}
     case 'x11.stop':return x11.close(owner,schemas['x11.stop'].parse(p).id);
+    case 'xdmcp.interfaces':return localInterfaces();
+    case 'xdmcp.query':{const v=schemas['xdmcp.query'].parse(p);return xdmcp.query(owner,v.host,v.localAddress,v.port);}
+    case 'xdmcp.open':return xdmcp.open(owner,schemas['xdmcp.open'].parse(p));
+    case 'xdmcp.list':return xdmcp.list(owner);
+    case 'xdmcp.close':return xdmcp.close(owner,schemas['xdmcp.close'].parse(p).id);
     case 'vnc.open':{const v=schemas['vnc.open'].parse(p);return vnc.open(owner,v.profileId,v.host,v.port);}
     case 'vnc.close':return vnc.close(owner,schemas['vnc.close'].parse(p).desktopId);
     case 'tunnel.list':return tunnels.list(owner);
@@ -87,14 +98,14 @@ async function dispatch(m:Message):Promise<unknown>{
       {id:'ssh',name:'SSH 终端',state:'available',reason:'密码 / 私钥 / Agent，主机指纹校验，多标签终端'},
       {id:'sftp',name:'SFTP 文件管理',state:'available',reason:'终端左侧文件栏、筛选、权限修改、上传下载、校验续传、UTF-8 小文件编辑'},
       {id:'tunnels',name:'SSH 端口转发 / SOCKS5',state:'available',reason:'本地 / 远程 / 动态 SOCKS5 TCP 转发，回环监听、目标白名单、独立租约、流量统计；跳板链待实现'},
-      {id:'x11',name:'SSH X11 转发',state:x11.status().configured?'experimental':'requires-setup',reason:'需要已启动的本机 X Server 与 Xauthority；支持 cookie 代理，XDMCP 与引擎自动管理未实现'},
+      {id:'x11',name:'X11 / XDMCP',state:x11.status().configured||(await xServers.status()).configured?'experimental':'requires-setup',reason:'VcXsrv 自动管理、独立进程/显示/cookie；SSH 图形应用和局域网 XDMCP 独立窗口；需明确启用网络监听'},
       {id:'desktop',name:'VNC 远程桌面',state:'available',reason:'工作台内嵌画面及输入，强制使用 SSH 加密通道，剪贴板默认禁用'},
       {id:'rdp',name:'RDP 原生窗口',state:'requires-setup',reason:'Windows 系统控件需在下方探测；受管理独立窗口，尚非内嵌桌面'},
       {id:'print',name:'LPD 打印',state:'available',reason:'单队列接收、持久暂存、手动提交 Windows RAW/UTF-8 文本打印；默认关闭监听'},
       {id:'local',name:'本地 / 串口 / Telnet / FTP',state:'unavailable',reason:'当前版本仅交付 SSH 与 SFTP'},
       {id:'extensions',name:'IDE / 插件 / AI / 企业服务',state:'unavailable',reason:'按设计文档列为后续扩展，不在当前版本伪装启用'}
     ];
-    case 'shutdown':await lpd.shutdown();vnc.stop();x11.stop();await transfers.stop();terminals.stop();tunnels.shutdown();challenges.cancelOwner(owner);await connections.stop();store.close();return null;
+    case 'shutdown':await lpd.shutdown();vnc.stop();await x11.stop();await xdmcp.stop();await xServers.stop();await transfers.stop();terminals.stop();tunnels.shutdown();challenges.cancelOwner(owner);await connections.stop();store.close();return null;
     default:throw new AppError('IPC001','未知方法。');
   }
 }

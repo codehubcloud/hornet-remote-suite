@@ -1,9 +1,41 @@
-import { it,expect } from 'vitest';
+import { it,expect,vi } from 'vitest';
+import { PassThrough } from 'node:stream';
 import { randomBytes } from 'node:crypto';
 import { rewriteSetup,authorityCookie } from '../../services/x11/proxy';
 import { proxyX11 } from '../../services/x11/proxy';
 import { createServer,createConnection,type Socket } from 'node:net';
 import { once } from 'node:events';
+function setupPacket(cookie:Buffer){
+ const packet=Buffer.alloc(48);packet[0]=0x6c;packet.writeUInt16LE(11,2);packet.writeUInt16LE(18,6);packet.writeUInt16LE(16,8);packet.write('MIT-MAGIC-COOKIE-1',12);cookie.copy(packet,32);return packet;
+}
+it('rejects invalid cookie sizes and non-ASCII authentication names without mutating the packet',()=>{
+ const fake=randomBytes(16),real=randomBytes(16),packet=setupPacket(fake),copy=Buffer.from(packet);
+ expect(()=>rewriteSetup(packet,fake,Buffer.alloc(15))).toThrow('长度');
+ expect(()=>rewriteSetup(packet,Buffer.alloc(15),real)).toThrow('长度');
+ expect(packet).toEqual(copy);
+ packet[12]|=0x80;
+ expect(()=>rewriteSetup(packet,fake,real)).toThrow('拒绝');
+});
+it('reports rejected cookies once and destroys the unauthenticated channel',()=>{
+ const channel=new PassThrough(),finished=vi.fn();
+ const stop=proxyX11(channel,randomBytes(16),randomBytes(16),6000,finished);
+ channel.write(setupPacket(randomBytes(16)));
+ expect(channel.destroyed).toBe(true);expect(finished).toHaveBeenCalledWith(expect.objectContaining({code:'X11_COOKIE_REJECTED'}));
+ stop();expect(finished).toHaveBeenCalledTimes(1);
+});
+it('closes a truncated handshake on EOF even when the transport allows half-open streams',async()=>{
+ const channel=new PassThrough({allowHalfOpen:true}),finished=vi.fn();
+ proxyX11(channel,randomBytes(16),randomBytes(16),6000,finished);
+ const closed=once(channel,'close');channel.end(Buffer.from([0x6c]));await closed;
+ expect(finished).toHaveBeenCalledOnce();expect(finished).toHaveBeenCalledWith(expect.objectContaining({code:'X11_FORWARD_DENIED'}));
+});
+it('expires incomplete handshakes and clears their deadline on explicit stop',async()=>{
+ vi.useFakeTimers();
+ const channel=new PassThrough(),finished=vi.fn();
+ const stop=proxyX11(channel,randomBytes(16),randomBytes(16),6000,finished);
+ try{await vi.advanceTimersByTimeAsync(10000);expect(channel.destroyed).toBe(true);expect(finished).toHaveBeenCalledOnce();stop();await vi.advanceTimersByTimeAsync(10000);expect(finished).toHaveBeenCalledOnce();}
+ finally{stop();vi.useRealTimers();}
+});
 for(const little of [true,false])it(`X11 validates and replaces cookies in ${little?'little':'big'} endian setup`,()=>{
  const fake=randomBytes(16),real=randomBytes(16),packet=Buffer.alloc(48);packet[0]=little?0x6c:0x42;
  const put=(n:number,at:number)=>little?packet.writeUInt16LE(n,at):packet.writeUInt16BE(n,at);

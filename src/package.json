@@ -14,6 +14,9 @@
     "check": "npm run typecheck && npm test && npm run build",
     "test:desktop": "node tools/smoke.mjs",
     "test:native": "node tools/native-smoke.mjs",
+    "test:x11-engine": "node tools/x11-engine-smoke.mjs",
+    "test:xdmcp": "node tools/xdmcp-smoke.mjs",
+    "test:x11-ui": "node tools/x11-ui-smoke.mjs",
     "test:startup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/startup-smoke.ps1"
   },
   "engines": {

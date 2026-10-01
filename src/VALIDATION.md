@@ -52,3 +52,24 @@
 目录跟随误判修复验证：类型检查、37 个单元/集成测试与生产构建通过。新增真实回环 SSH 场景覆盖 SFTP /proc 查询禁止但 SSH exec 可用、探测延迟 2200ms、跟踪 exec 拒绝时普通 Shell 可交互。回退查询能跳过登录横幅并跟随含空格目录，未创建额外交互 Shell。本次未在用户截图中的远端主机验证，也未重复执行 UI 桌面回归（渲染层未变更）。现有终端需重新打开以初始化跟踪。
 
 本机套件功能参考与统一菜单：逐个启动 Xshell、Xftp、Xlpd、Xmanager/Classic、Xconfig、Xstart 与 Passive；主界面观察记录见 docs/Xmanager_Power_Suite_8_Local_Reference.md，没有执行远端登录或打印互通测试。类型检查、47 个单元/集成用例、生产构建、完整桌面回归及 session-commands-smoke.mjs 专项桌面验证通过。新增验证快速地址/IPv6 解析与非法输入拒绝、保存并连接、已保存会话名称连接、菜单搜索/重命名/分屏、折叠恢复；已检查 session-commands.png。分屏保持两个 Shell 和单次 SSH 认证；原 SSH/SFTP、任务停靠、隧道、VNC 回归仍通过。
+
+X11 会话管理增量（2026-10-01，Windows x64、Node.js 24.13.1）：`npm run typecheck`、`npm test`（10 个文件、64 个用例）及 `npm run build` 通过。新增 17 个用例覆盖配置失败回滚、所有者隔离、状态快照、命令退出/信号失败、取消等待中的 SSH/exec、迟到资源回收、启动超时、SSH 断开、失败重试和记录上限、32 通道限制、服务停止，以及非法 cookie 长度、非 ASCII 认证名、握手 EOF 和超时。
+
+新增真实回环 SSH 集成验证 X11 请求、分片握手、伪 cookie 到本地 cookie 的替换、双向 TCP 数据、命令退出后已有通道继续收发、停止转发释放租约，以及原 SSH 连接仍能执行新命令。本地显示端使用 TCP 协议夹具，不是真实 X Server；尚未执行真实图形应用、OpenSSH/桌面环境互通及本轮 Electron UI 端到端回归。界面通过类型检查与生产构建；XDMCP、引擎管理和显示隔离仍未交付。保留原有 Vite 配置加载、前端包体积和 Node SQLite 实验性提示。
+
+### 受管理 X Server、XDMCP 与图形 UI（2026-10-01）
+
+本次结果更新上段的未交付状态。Windows x64、Node.js 24.13.1、Electron 44.4.5、官方 VcXsrv 21.1.16.1 环境下，类型检查、生产构建和 11 个文件中的 71 个单元/集成用例全部通过。新增覆盖独立 SSH 连接及租约释放、受管理显示故障回收、XDMCP 报文校验、来源检查、取消和显式启用条件。
+
+全量检查曾触发已有 SFTP 续传用例的 20 秒总超时；单独诊断时功能通过，耗时 19.3 秒。仅将该多阶段用例的总时限调整至 40 秒，保留每阶段 12 秒等待上限；之后完整 71 项回归通过，未修改文件传输实现。
+
+| 实际验证 | 结果 |
+|---|---|
+| `node tools/x11-engine-smoke.mjs` | 两个真实 VcXsrv 显示分别映射 xclock；交叉 cookie 被拒绝；停止其中一个不影响另一个；认证目录回收 |
+| `node tools/xdmcp-smoke.mjs` | VcXsrv 与本机 UDP 显示管理器夹具完成 Query/Request/Accept/Manage，真实 xclock 窗口映射成功 |
+| `node tools/x11-ui-smoke.mjs` | 实际 Electron 表单选择引擎、明确启用监听、两条独立 SSH X11 通道运行 xclock、独立停止、XDMCP 查询与桌面启动通过；带活动图形会话退出应用后，显示端口已关闭 |
+| `node tools/smoke.mjs` | 完整桌面回归通过：分组、终端分屏与目录跟随、文件侧栏、任务面板拖动、SSH/SFTP 认证复用、三种隧道、内嵌 VNC 像素与键盘输入、关闭隔离及 Renderer 沙箱 |
+
+已检查 `test-results/x11-managed-ui.png` 与 `test-results/xdmcp-ui.png`，会话状态、显示号、活动通道和停止操作可见。原生图形窗口独立于工作台；截图记录工作台管理界面，窗口映射另由 X11 查询验证。测试配置、引擎下载及截图均位于忽略目录，不提交生成产物。
+
+本轮使用真实 X Server、真实图形客户端及真实 SSH 传输，但 SSH 服务端和 XDMCP 显示管理器为本机协议夹具；尚未获得实际 Linux/OpenSSH/显示管理器目标，不能认定 Linux 桌面登录、跨机器连接或长时运行已验收。VcXsrv TCP 使用 IPv4 通配监听，必须明确启用；独立显示/cookie 隔离不等同于仅回环可达。引擎及网络边界见 [适配决策](../docs/ADR-X11-VcXsrv.md)。

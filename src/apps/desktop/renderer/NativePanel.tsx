@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useStore } from './store';
-import type { PrintStatus, X11Status, RdpConfig } from '../../../packages/contracts/native';
+import { X11Panel } from './X11Panel';
+import type { PrintStatus, RdpConfig } from '../../../packages/contracts/native';
 export function NativePanel(){
  const profiles=useStore(s=>s.profiles),fail=useStore(s=>s.fail);
  const [profileId,setProfile]=useState(''),[host,setHost]=useState('127.0.0.1'),[port,setPort]=useState(5900),[busy,setBusy]=useState(false);
- const [x,setX]=useState<X11Status>({configured:false,display:0,sessions:[]}),[display,setDisplay]=useState(0),[command,setCommand]=useState('xclock');
  const [rdp,setRdp]=useState<RdpConfig>({host:'',port:3389,username:'',domain:'',password:''}),[rdpReady,setRdpReady]=useState<boolean|null>(null),[rdpSessions,setRdpSessions]=useState<{id:string;state:string;reason?:number}[]>([]);
  const [print,setPrint]=useState<PrintStatus>({listening:false,jobs:[]}),[printers,setPrinters]=useState<string[]>([]),[printer,setPrinter]=useState(''),[queue,setQueue]=useState('hornet'),[printPort,setPrintPort]=useState(515),[mode,setMode]=useState<'text'|'raw'>('text');
  const [listen,setListen]=useState('127.0.0.1'),[sources,setSources]=useState('127.0.0.1');
- useEffect(()=>{let live=true;const refresh=()=>void Promise.all([window.hornet.print.status(),window.hornet.x11.status(),window.hornet.rdp.list()]).then(([p,x,r])=>{if(live){setPrint(p);setX(x);setRdpSessions(r);}}).catch(fail);refresh();const timer=setInterval(refresh,2000);return()=>{live=false;clearInterval(timer);};},[]);
+ useEffect(()=>{let live=true;const refresh=()=>void Promise.all([window.hornet.print.status(),window.hornet.rdp.list()]).then(([p,r])=>{if(live){setPrint(p);setRdpSessions(r);}}).catch(fail);refresh();const timer=setInterval(refresh,2000);return()=>{live=false;clearInterval(timer);};},[]);
  async function run(action:()=>Promise<unknown>){setBusy(true);try{await action();}catch(e){fail(e);}finally{setBusy(false);}}
  const selected=profileId||profiles[0]?.profileId||'';
  const profileSelect=<label>SSH 主机<select aria-label="图形 SSH 主机" value={selected} onChange={e=>setProfile(e.target.value)}>{!profiles.length&&<option value="">请先创建 SSH 主机</option>}{profiles.map(p=><option value={p.profileId} key={p.profileId}>{p.name}</option>)}</select></label>;
@@ -17,11 +17,7 @@ export function NativePanel(){
   <form className="tunnel-form" onSubmit={e=>{e.preventDefault();void run(async()=>{const desktop=await window.hornet.vnc.open(selected,host,port);const profile=profiles.find(p=>p.profileId===selected)!;useStore.getState().addView({id:crypto.randomUUID(),kind:'vnc',profile,desktop,connectionId:'',generation:1});});}}>
    {profileSelect}<label>VNC 目标<input aria-label="VNC 目标" required value={host} onChange={e=>setHost(e.target.value)}/></label><label>VNC 端口<input aria-label="VNC 端口" required type="number" min={1} max={65535} value={port} onChange={e=>setPort(Number(e.target.value))}/></label><button className="primary" disabled={busy||!selected}>打开 VNC 桌面</button>
   </form>
- </div><div className="native-section"><h3>SSH X11 · 本地原生 X 窗口</h3><p className="muted">需自行安装并启动启用 cookie 认证的本地 X Server。选择其 Xauthority 文件；此版本不启动或停止 X Server，不提供 XDMCP；仅允许一个转发会话，使用现有显示，不提供独立显示隔离。请保持访问控制开启。</p>
-  <div className="tunnel-form"><label>本地显示号<input type="number" min={0} max={99} value={display} onChange={e=>setDisplay(Number(e.target.value))}/></label><button disabled={busy} onClick={()=>void run(async()=>{const value=await window.hornet.x11.configure(display);if(value){setX(value);useStore.getState().setCapabilities(await window.hornet.capabilities());}})}>选择 Xauthority</button><span>{x.configured?'已配置显示 :'+x.display:'尚未配置 X Server 认证'}</span></div>
-  <form className="tunnel-form" onSubmit={e=>{e.preventDefault();void run(()=>window.hornet.x11.launch(selected,command));}}>{profileSelect}<label>远端启动命令<input required value={command} onChange={e=>setCommand(e.target.value)}/></label><button className="primary" disabled={busy||!selected||!x.configured}>执行命令并转发 X11</button></form>
-  {x.sessions.map(s=><p key={s.id}>{s.state} <button onClick={()=>void run(()=>window.hornet.x11.stop(s.id))}>停止 X11 会话</button></p>)}
- </div><div className="native-section"><h3>RDP · 受管理独立窗口（实验）</h3><p className="muted">使用 Windows RDP 控件，尚非内嵌标签。要求服务器身份验证并启用 NLA；剪贴板、驱动器和打印重定向关闭。密码只用于本次连接。</p>
+ </div><X11Panel/><div className="native-section"><h3>RDP · 受管理独立窗口（实验）</h3><p className="muted">使用 Windows RDP 控件，尚非内嵌标签。要求服务器身份验证并启用 NLA；剪贴板、驱动器和打印重定向关闭。密码只用于本次连接。</p>
   <button disabled={busy} onClick={()=>void run(async()=>{const result=await window.hornet.rdp.probe();setRdpReady(result.available);const store=useStore.getState();store.setCapabilities(store.capabilities.map(c=>c.id==='rdp'?{...c,state:result.available?'experimental':'requires-setup'}:c));})}>检测 RDP 引擎</button><span className="muted"> {rdpReady===null?'尚未探测':rdpReady?'系统控件可用':'系统控件不可用'}</span>
   <form className="tunnel-form" onSubmit={e=>{e.preventDefault();const input={...rdp};setRdp({...rdp,password:''});void run(()=>window.hornet.rdp.open(input));}}>
    <label>RDP 主机<input required value={rdp.host} onChange={e=>setRdp({...rdp,host:e.target.value})}/></label><label>RDP 端口<input required type="number" min={1} max={65535} value={rdp.port} onChange={e=>setRdp({...rdp,port:Number(e.target.value)})}/></label><label>RDP 用户<input required value={rdp.username} onChange={e=>setRdp({...rdp,username:e.target.value})}/></label><label>域<input value={rdp.domain} onChange={e=>setRdp({...rdp,domain:e.target.value})}/></label><label>RDP 密码<input type="password" autoComplete="off" value={rdp.password} onChange={e=>setRdp({...rdp,password:e.target.value})}/></label><button className="primary" disabled={busy||!rdpReady}>打开 RDP 窗口</button>

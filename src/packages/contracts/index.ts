@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { printConfigSchema, type PrintConfig, type PrintStatus, type RdpConfig, type X11Status } from './native';
+import { printConfigSchema, xServerOptionsSchema, xdmcpConfigSchema, type PrintConfig, type PrintStatus, type RdpConfig, type X11Status, type XServerOptions, type XServerEngine, type XdmcpConfig, type XdmcpSession, type XdmcpHost } from './native';
 
 const id = z.string().uuid();
 const text = z.string().min(1).max(255).refine(v => !/[\x00-\x1f\x7f]/.test(v), 'Contains control characters');
@@ -32,7 +32,13 @@ export const schemas = {
   'print.submit': z.object({jobId:id}).strict(),
   'print.cancel': z.object({jobId:id}).strict(),
   'x11.status': z.object({}).strict(),
-  'x11.launch': z.object({profileId:id,command:z.string().min(1).max(4096).refine(v=>!v.includes('\0'))}).strict(),
+  'x11.engine': z.object({}).strict(),
+  'x11.launch': z.object({profileId:id,command:z.string().min(1).max(4096).refine(v=>!v.includes('\0')),managed:xServerOptionsSchema.optional()}).strict(),
+  'xdmcp.interfaces': z.object({}).strict(),
+  'xdmcp.query': z.object({host:z.ipv4(),localAddress:z.ipv4(),port:z.number().int().min(1).max(65535)}).strict(),
+  'xdmcp.open': xdmcpConfigSchema,
+  'xdmcp.list': z.object({}).strict(),
+  'xdmcp.close': z.object({id}).strict(),
   'x11.stop': z.object({id}).strict(),
   'vnc.open': z.object({ profileId: id, host: text, port: z.number().int().min(1).max(65535) }).strict(),
   'vnc.close': z.object({ desktopId: id }).strict(),
@@ -100,7 +106,8 @@ export type HornetEvent =
 export interface Layout { profileIds: string[]; activeProfileId?: string }
 export interface HornetApi {
   print:{status():Promise<PrintStatus>;start(config:PrintConfig):Promise<PrintStatus>;stop():Promise<void>;submit(jobId:string):Promise<unknown>;cancel(jobId:string):Promise<void>;printers():Promise<string[]>};
-  x11:{status():Promise<X11Status>;configure(display:number):Promise<X11Status|null>;launch(profileId:string,command:string):Promise<{id:string}>;stop(id:string):Promise<void>};
+  x11:{status():Promise<X11Status>;engine():Promise<XServerEngine>;chooseEngine():Promise<XServerEngine|null>;configure(display:number):Promise<X11Status|null>;launch(profileId:string,command:string,managed?:XServerOptions):Promise<{id:string}>;stop(id:string):Promise<void>};
+  xdmcp:{interfaces():Promise<{name:string;address:string}[]>;query(host:string,localAddress:string,port:number):Promise<XdmcpHost>;open(config:XdmcpConfig):Promise<{id:string}>;list():Promise<XdmcpSession[]>;close(id:string):Promise<void>};
   rdp:{probe():Promise<{available:boolean;presentation:string}>;open(config:RdpConfig):Promise<{id:string}>;list():Promise<{id:string;state:string;reason?:number}[]>;close(id:string):Promise<void>};
   vnc: { open(profileId: string, host: string, port: number): Promise<{ desktopId: string; url: string; token: string }>; close(desktopId: string): Promise<void> };
   tunnel: { list(): Promise<TunnelSnapshot[]>; create(config: TunnelConfig): Promise<TunnelSnapshot>; stop(tunnelId: string): Promise<void> };

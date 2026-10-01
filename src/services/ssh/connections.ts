@@ -6,6 +6,7 @@ import { AppError } from '../../packages/core/errors';
 import { Challenges } from '../../packages/security/challenges';
 
 interface Connection {
+  isolated?:boolean;
   id:string; owner:string; profile:Profile; client:Client; generation:number;
   leases:Set<string>; sftp?:Promise<SFTPWrapper>; idle?:ReturnType<typeof setTimeout>;
 }
@@ -19,7 +20,7 @@ export class Connections {
   async acquire(owner:string,profileId:string):Promise<Lease> {
     if(this.stopped) throw new AppError('IPC006','服务正在停止。');
     const p=this.store.profile(profileId), key=this.key(owner,p);
-    let c=[...this.items.values()].find(v=>this.key(v.owner,v.profile)===key);
+    let c=[...this.items.values()].find(v=>!v.isolated&&this.key(v.owner,v.profile)===key);
     if(!c) {
       let pending=this.opening.get(key);
       if(!pending) {
@@ -30,6 +31,13 @@ export class Connections {
       c=await pending;
     }
     return this.retain(owner,c.id);
+  }
+  async acquireIsolated(owner:string,profileId:string):Promise<Lease>{
+    if(this.stopped)throw new AppError('IPC006','服务正在停止。');
+    if(this.items.size+this.opening.size>=32)throw new AppError('SSH004','连接数已达上限。');
+    const profile=this.store.profile(profileId),key=this.key(owner,profile)+':x11:'+randomUUID();
+    const pending=this.connect(owner,profile,true);this.opening.set(key,pending);
+    try{const connection=await pending;return this.retain(owner,connection.id);}finally{this.opening.delete(key);}
   }
   retain(owner:string,id:string):Lease {
     const c=this.get(owner,id);
@@ -46,7 +54,7 @@ export class Connections {
     if(!lease) return;
     if(lease.owner!==owner) throw new AppError('IPC005','无权释放此连接。');
     this.leases.delete(id); const c=this.items.get(lease.connectionId);
-    if(c) { c.leases.delete(id); if(c.leases.size===0) c.idle=setTimeout(()=>this.close(owner,c.id,c.generation),this.idleMs); }
+    if(c) { c.leases.delete(id); if(c.leases.size===0){if(c.isolated)this.close(owner,c.id,c.generation);else c.idle=setTimeout(()=>this.close(owner,c.id,c.generation),this.idleMs);} }
   }
   close(owner:string,id:string,generation:number) {
     const c=this.get(owner,id);
@@ -70,7 +78,7 @@ export class Connections {
     if(owner)this.challenges.cancelOwner(owner);
     for(const c of [...this.items.values()])if(!owner||c.owner===owner){this.drop(c);c.client.destroy();}
   }
-  private async connect(owner:string,p:Profile):Promise<Connection> {
+  private async connect(owner:string,p:Profile,isolated=false):Promise<Connection> {
     const id=randomUUID(), client=new Client();
     const state=(state:string)=>this.emit(owner,{type:'connection.state',connectionId:id,profileId:p.profileId,generation:1,state});
     state('authenticating');
@@ -83,7 +91,7 @@ export class Connections {
     state('connecting');
     return new Promise((resolve,reject)=>{
       let settled=false, rejectedTrust=false;
-      const c:Connection={id,owner,profile:p,client,generation:1,leases:new Set()};
+      const c:Connection={id,owner,profile:p,client,generation:1,leases:new Set(),isolated};
       const fail=(error:AppError)=>{if(!settled){settled=true;clearTimeout(deadline);client.destroy();state('failed');reject(error);}};
       const deadline=setTimeout(()=>fail(new AppError('SSH005','SSH 连接或认证超时。')),120000);
       client.on('error',(err:Error & {level?:string})=>{

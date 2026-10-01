@@ -23,6 +23,8 @@ public static class NativeHost {
         try {
             string line = Console.ReadLine(); if (line == null || line.Length > 65536) return 1;
             var input = json.Deserialize<Dictionary<string, object>>(line); string op = (string)input["op"];
+            if (op == "xserverProbe") { Output(XServerHost.Probe((string)input["executable"])); return 0; }
+            if (op == "xserver") { XServerHost.Run(input); return 0; }
             if (op == "printers") { var names = new List<string>(); foreach (string printer in PrinterSettings.InstalledPrinters) names.Add(printer); Output(new { printers = names }); return 0; }
             if (op == "print") {
                 string path = (string)input["path"], printer = (string)input["printer"], name = "Hornet " + (string)input["jobId"];

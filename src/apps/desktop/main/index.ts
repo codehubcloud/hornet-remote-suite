@@ -62,6 +62,10 @@ async function setupIpc(){
         case 'rdp.list':data=rdp.list();break;
         case 'rdp.close':rdp.close(z.object({id:z.string().uuid()}).strict().parse(m.payload).id);data=null;break;
         case 'print.printers':data=(await nativeCall({op:'printers'})).printers;break;
+        case 'x11.engine.choose':{
+          const selected=await dialog.showOpenDialog(window!,{title:'选择受管理的 VcXsrv 引擎',properties:['openFile'],filters:[{name:'VcXsrv',extensions:['exe']}]});
+          data=null;if(!selected.canceled&&selected.filePaths[0])data=await backend.call('x11.engine.configure',{path:selected.filePaths[0]});break;
+        }
         case 'x11.configure':{
           const p=z.object({display:z.number().int().min(0).max(99)}).strict().parse(m.payload);
           const selected=await dialog.showOpenDialog(window!,{title:'选择本地 X Server 的 Xauthority 文件',properties:['openFile']});data=null;

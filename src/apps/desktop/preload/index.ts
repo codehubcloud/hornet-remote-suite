@@ -10,7 +10,8 @@ async function call<T>(method:Method,payload:unknown={}):Promise<T>{
 async function local<T>(method:string,payload:unknown={}):Promise<T>{const result=await ipcRenderer.invoke('hornet:local',{method,payload}) as Result<T>;if(!result.ok)throw new Error(result.error.code+' · '+result.error.message);return result.data;}
 const api:HornetApi={
  print:{status:()=>call('print.status'),start:config=>call('print.start',config),stop:()=>call('print.stop'),submit:jobId=>call('print.submit',{jobId}),cancel:jobId=>call('print.cancel',{jobId}),printers:()=>local('print.printers')},
- x11:{status:()=>call('x11.status'),configure:display=>local('x11.configure',{display}),launch:(profileId,command)=>call('x11.launch',{profileId,command}),stop:id=>call('x11.stop',{id})},
+ x11:{status:()=>call('x11.status'),engine:()=>call('x11.engine'),chooseEngine:()=>local('x11.engine.choose'),configure:display=>local('x11.configure',{display}),launch:(profileId,command,managed)=>call('x11.launch',{profileId,command,managed}),stop:id=>call('x11.stop',{id})},
+ xdmcp:{interfaces:()=>call('xdmcp.interfaces'),query:(host,localAddress,port)=>call('xdmcp.query',{host,localAddress,port}),open:config=>call('xdmcp.open',config),list:()=>call('xdmcp.list'),close:id=>call('xdmcp.close',{id})},
  rdp:{probe:()=>local('rdp.probe'),open:config=>local('rdp.open',config),list:()=>local('rdp.list'),close:id=>local('rdp.close',{id})},
  vnc:{open:(profileId,host,port)=>call('vnc.open',{profileId,host,port}),close:desktopId=>call('vnc.close',{desktopId})},
  tunnel:{list:()=>call('tunnel.list'),create:config=>call('tunnel.create',config),stop:tunnelId=>call('tunnel.stop',{tunnelId})},
