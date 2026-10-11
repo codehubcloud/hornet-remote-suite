@@ -1,3 +1,4 @@
+import { dismissStartupSessions } from './session-dialog-helper.mjs';
 import { _electron as electron,expect } from '@playwright/test';
 import { mkdtemp,mkdir,rm } from 'node:fs/promises';
 import { join,resolve } from 'node:path';
@@ -22,10 +23,10 @@ let app;
 try{
  app=await electron.launch({args:['.'],env,timeout:30000});
  app.process().stderr.on('data',chunk=>process.stderr.write(chunk));
- const page=await app.firstWindow();
+ const page=await app.firstWindow();await dismissStartupSessions(page);
  page.setDefaultTimeout(15000);
  page.on('pageerror',error=>console.error('UI ERROR:',error.message));
- await expect(page.getByText('连接主机，专注工作。')).toBeVisible();
+ await expect(page.getByRole('region',{name:'快速开始',exact:true})).toBeVisible();
  await page.getByLabel('快速连接地址',{exact:true}).fill('ssh://demo@[::1]:2222');
  await page.locator('.quick-connect-bar').getByRole('button',{name:'连接',exact:true}).click();
  await expect(page.getByLabel('主机',{exact:true})).toHaveValue('::1');
@@ -34,7 +35,7 @@ try{
  await expect(page.getByRole('button',{name:'保存并连接',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'取消',exact:true}).click();
  await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:'编辑',exact:true}).click();
- await expect(page.getByRole('menuitem',{name:'查找终端内容',exact:true})).toBeDisabled();
+ await expect(page.getByRole('menuitem',{name:'查找…',exact:true})).toBeDisabled();
  await page.keyboard.press('Escape');
  const listBox=await page.locator('.host-list').boundingBox();
  await page.locator('.host-list').click({button:'right',position:{x:20,y:listBox.height-15}});
@@ -123,7 +124,7 @@ try{
  await page.getByLabel('端口',{exact:true}).fill(String(server.port));
  await page.getByLabel('用户名',{exact:true}).fill('tester');
  await page.getByRole('button',{name:'保存配置',exact:true}).click();
- await page.locator('.host').getByRole('button',{name:'终端',exact:true}).click();
+ await page.locator('.host .host-top strong').dblclick();
  await page.getByLabel('认证信息',{exact:true}).fill('test-password');
  await page.getByRole('button',{name:'继续连接',exact:true}).click();
  await page.getByRole('button',{name:'已核对，信任此主机',exact:true}).click();
@@ -136,7 +137,7 @@ try{
  await sidebar.getByLabel('筛选当前目录').fill('no-match');
  await expect(sidebar.getByText('hello.txt',{exact:false})).toHaveCount(0);
  await sidebar.getByLabel('筛选当前目录').fill('');
- await sidebar.getByRole('button',{name:'权限',exact:true}).click();
+ await sidebar.getByRole('row').filter({hasText:'hello.txt'}).getByRole('button',{name:'权限',exact:true}).click();
  await page.getByLabel('八进制权限',{exact:true}).fill('600');
  await page.getByRole('button',{name:'确认',exact:true}).click();
  await expect(page.locator('.modal-backdrop')).toHaveCount(0);
@@ -159,9 +160,9 @@ try{
  await expect(page.locator('.tabs')).toContainText('主终端');
  await page.getByRole('button',{name:'主机列表',exact:true}).click();
  await expect(page.locator('.host')).toContainText('Local integration');
- await page.locator('.host').getByRole('button',{name:'终端',exact:true}).click();
+ await page.locator('.host .host-top strong').dblclick();
  await expect(page.locator('.terminal-cell')).toHaveCount(2);
- await page.locator('.host').getByRole('button',{name:'终端',exact:true}).click();
+ await page.locator('.host .host-top strong').dblclick();
  await expect(page.locator('.terminal-cell')).toHaveCount(3);
  await page.getByRole('button',{name:'主机列表',exact:true}).click();
  const first=page.locator('.terminal-cell').nth(0),second=page.locator('.terminal-cell').nth(1);
@@ -263,6 +264,7 @@ try{
  await page.locator('.filebar').getByRole('button',{name:'刷新',exact:true}).click();
  await expect(page.getByRole('row').filter({hasText:'hello.txt'})).toBeVisible();
  await page.getByRole('button',{name:'◈ 工作台',exact:true}).click();
+ await page.getByRole('region',{name:'快速开始',exact:true}).getByRole('button',{name:'端口转发',exact:false}).click();
  await page.getByLabel('隧道目标端口',{exact:true}).fill(String(echo.address().port));
  for(const kind of ['local','remote','dynamic']){
   await page.getByLabel('转发类型',{exact:true}).selectOption(kind);
@@ -287,6 +289,7 @@ try{
   await row.getByRole('button',{name:'停止隧道',exact:true}).click();
   await expect(row).toContainText('已停止');
  }
+ await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:'工具',exact:true}).click();await page.getByRole('menuitem',{name:'远程桌面',exact:true}).click();
  await page.getByLabel('VNC 端口',{exact:true}).fill(String(vncServer.port));
  await page.getByRole('button',{name:'打开 VNC 桌面',exact:true}).click();
  await expect(page.getByText('VNC 已连接 · SSH 加密传输',{exact:true})).toBeVisible();

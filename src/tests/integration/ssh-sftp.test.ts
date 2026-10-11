@@ -1,6 +1,6 @@
 import { describe,it,expect } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp,writeFile,readFile,rm } from 'node:fs/promises';
+import { mkdtemp,writeFile,readFile,rm,mkdir } from 'node:fs/promises';
 import { join,resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { sshFixture } from '../fixtures/ssh-server';
@@ -9,6 +9,9 @@ import { Challenges } from '../../packages/security/challenges';
 import { Connections } from '../../services/ssh/connections';
 import { Terminals } from '../../services/terminal/terminals';
 import { Files } from '../../services/file/files';
+import { TreeTransfers,type TransferContext } from '../../services/file/tree-transfers';
+import { LocalFiles } from '../../services/file/local-files';
+import { PathGrants } from '../../packages/security/path-grants';
 import { Transfers } from '../../services/file/transfers';
 import type { HornetEvent } from '../../packages/contracts';
 async function waitFor(test:()=>boolean,timeout=12000){const end=Date.now()+timeout;while(!test()){if(Date.now()>end)throw new Error('Timed out waiting for condition');await new Promise(r=>setTimeout(r,15));}}
@@ -22,6 +25,39 @@ async function harness(writeDelay=0,directoryTracking=true,options:Parameters<ty
  return {server,root,db,profile,events,connections,terminals,files,transfers,async close(){await transfers.stop();terminals.stop();await connections.stop();db.close();await server.close();await rm(root,{recursive:true,force:true});}};
 }
 describe('real loopback SSH / SFTP',()=>{
+ it('recursively uploads and downloads folders, preserves empty directories and refuses changed sources',async()=>{
+  const h=await harness();
+  try{
+   const lease=await h.connections.acquire('a',h.profile.profileId),grants=new PathGrants(),local=new LocalFiles(grants);
+   const root=join(h.root,'local');await mkdir(join(root,'bundle','nested'),{recursive:true});await mkdir(join(root,'bundle','empty'));
+   await writeFile(join(root,'bundle','nested','中文.txt'),'nested payload');
+   const chosen=await local.choose('a',root);
+   const batch=new TreeTransfers(local,grants,{async call<T>(method:string,raw?:unknown,context?:TransferContext):Promise<T>{
+    const p=raw as {connectionId:string;path:string;root:string;direction:'upload'|'download';remotePath:string;idempotencyKey:string};
+    if(method==='file.tree')return await h.files.tree('a',p.connectionId,p.path) as T;
+    if(method==='file.tree.mkdir')return await h.files.treeMkdir('a',p.connectionId,p.root,p.path) as T;
+    if(method==='transfer.start')return await h.transfers.start('a',p.connectionId,p.direction,context!.localPath,context!.localParent,p.remotePath,p.idempotencyKey,context) as T;
+    throw new Error('unexpected method');
+   }});
+   const request={connectionId:lease.connectionId,rootId:chosen.rootId,localPath:'',remotePath:'/',direction:'upload' as const,names:['bundle']};
+   const preview=await batch.preview('a',request);expect(preview.files).toBe(1);expect(preview.directories).toBe(3);
+   const submitted=await batch.execute('a',preview.planId);expect(submitted.error).toBeUndefined();expect(submitted.taskIds).toHaveLength(1);
+   expect(await batch.execute('a',preview.planId)).toEqual(submitted);
+   await waitFor(()=>h.transfers.list('a').find(t=>t.taskId===submitted.taskIds[0])?.state==='succeeded');
+   expect(h.server.files.get('/bundle/nested/中文.txt')?.toString()).toBe('nested payload');expect(h.server.directories.has('/bundle/empty')).toBe(true);
+   const repeat=await batch.preview('a',request);expect(repeat.files).toBe(0);expect(repeat.conflicts).toBe(1);
+   await mkdir(join(root,'download'));
+   const download=await batch.preview('a',{...request,localPath:'download',direction:'download'});
+   const queued=await batch.execute('a',download.planId);expect(queued.error).toBeUndefined();
+   await waitFor(()=>h.transfers.list('a').find(t=>t.taskId===queued.taskIds[0])?.state==='succeeded');
+   expect(await readFile(join(root,'download','bundle','nested','中文.txt'),'utf8')).toBe('nested payload');
+   expect((await local.list('a',chosen.rootId,'download/bundle')).entries.some(e=>e.name==='empty'&&e.kind==='directory')).toBe(true);
+   await expect(h.files.treeMkdir('a',lease.connectionId,'/','../escape')).rejects.toThrow();
+   const changed=await h.transfers.start('a',lease.connectionId,'upload',join(root,'bundle','nested','中文.txt'),join(root,'bundle','nested'),'/changed.txt',randomUUID(),{localPath:'',localParent:'',remoteParent:'/',expectedSource:{size:999,modified:0}});
+   await waitFor(()=>h.transfers.list('a').find(t=>t.taskId===changed.taskId)?.state==='conflict');expect(h.server.files.has('/changed.txt')).toBe(false);
+  }finally{await h.close();}
+ },40000);
+
  it('isolates managed X11 transports from shared SSH views and closes only the released isolated lease',async()=>{
   const h=await harness();
   try{
@@ -87,7 +123,7 @@ describe('real loopback SSH / SFTP',()=>{
  it('changes remote permissions and rejects invalid modes and other owners',async()=>{
   const h=await harness();try{const lease=await h.connections.acquire('a',h.profile.profileId);
    await h.files.chmod('a',lease.connectionId,'/hello.txt',0o600);
-   expect((await h.files.list('a',lease.connectionId,'.')).entries[0].mode&0o777).toBe(0o600);
+   expect((await h.files.list('a',lease.connectionId,'.')).entries.find(e=>e.name==='hello.txt')!.mode&0o777).toBe(0o600);
    await expect(h.files.chmod('a',lease.connectionId,'/hello.txt',0o4777)).rejects.toThrow();
    await expect(h.files.chmod('b',lease.connectionId,'/hello.txt',0o777)).rejects.toThrow();
    await expect(h.files.chmod('a',lease.connectionId,'/missing',0o600)).rejects.toThrow();
@@ -130,7 +166,7 @@ describe('real loopback SSH / SFTP',()=>{
    h.terminals.write('a',terminal.terminalId,1,1,'hello\r');
    await waitFor(()=>h.events.some(e=>e.type==='terminal.data'&&Buffer.from(e.data).toString().includes('echo:')));
    h.terminals.close('a',terminal.terminalId);h.connections.release('a',a.leaseId);
-   expect((await h.files.list('a',b.connectionId,'.')).entries[0].name).toBe('hello.txt');
+   expect((await h.files.list('a',b.connectionId,'.')).entries.some(e=>e.name==='hello.txt')).toBe(true);
    expect((await h.files.read('a',b.connectionId,'/hello.txt')).content).toContain('世界');
    h.connections.release('a',b.leaseId);
    await waitFor(()=>!h.connections.hasProfile(h.profile.profileId));

@@ -1,10 +1,11 @@
+import { t as tr } from './i18n';
 import { useStore } from './store';
 import { formatBytes } from './FileView';
 const labels:Record<string,string>={queued:'排队',running:'传输中',verifying:'校验中',committing:'提交中',pausing:'正在暂停',paused:'已暂停',cancelling:'正在取消',cancelled:'已取消',succeeded:'已完成',failed:'失败',conflict:'冲突'};
 export function TaskList(){const s=useStore();return (   <div className="task-body">
-    {!s.tasks.length?<div className="no-tasks">暂无传输任务。上传和下载会在此显示进度。</div>:<div className="task-list">{s.tasks.map(t=><div className="task" key={t.taskId}><span className="task-direction">{t.direction==='upload'?'↑':'↓'}</span><div className="task-detail"><strong>{t.name}</strong><div className="progress"><i style={{width:(t.totalBytes?Math.min(100,t.transferredBytes/t.totalBytes*100):0)+'%'}}/></div><small>{t.error??formatBytes(t.transferredBytes)+' / '+formatBytes(t.totalBytes)}</small></div><span className={'task-state '+t.state}>{labels[t.state]}</span><div className="task-actions">
-     {['queued','running','verifying'].includes(t.state)&&<button onClick={()=>void window.hornet.task.pause(t.taskId,t.revision).catch(s.fail)}>暂停</button>}
-     {['paused','failed'].includes(t.state)&&<button onClick={()=>void window.hornet.task.resume(t.taskId,t.revision).catch(s.fail)}>恢复</button>}
-     {!['succeeded','committing','cancelled'].includes(t.state)&&<button onClick={()=>void window.hornet.task.cancel(t.taskId,t.revision).catch(s.fail)}>取消</button>}
+    {!s.tasks.length?<div className="no-tasks">{tr("暂无传输任务。上传和下载会在此显示进度。")}</div>:<div className="task-list">{s.tasks.map(t=><div className="task" key={t.taskId}><span className="task-direction">{t.direction==='upload'?'↑':'↓'}</span><div className="task-detail"><strong>{t.name}</strong><div className="progress"><i style={{width:(t.totalBytes?Math.min(100,t.transferredBytes/t.totalBytes*100):0)+'%'}}/></div><small>{t.error??formatBytes(t.transferredBytes)+' / '+formatBytes(t.totalBytes)}</small></div><span className={'task-state '+t.state}>{tr(labels[t.state])}</span><div className="task-actions">
+     {['queued','running','verifying'].includes(t.state)&&<button onClick={()=>void window.hornet.task.pause(t.taskId,t.revision).catch(s.fail)}>{tr("暂停")}</button>}
+     {['paused','failed'].includes(t.state)&&<button onClick={()=>void window.hornet.task.resume(t.taskId,t.revision).catch(s.fail)}>{tr("恢复")}</button>}
+     {!['succeeded','committing','cancelled'].includes(t.state)&&<button onClick={()=>void window.hornet.task.cancel(t.taskId,t.revision).catch(s.fail)}>{tr("取消")}</button>}
     </div></div>)}</div>}
    </div>);}

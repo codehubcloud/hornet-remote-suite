@@ -22,9 +22,9 @@ class Client {
  close(){this.socket.destroy();}
 }
 const config={bindHost:'127.0.0.1',port:0,queue:'hornet',printer:'fixture',mode:'text' as const,allowedSources:['127.0.0.1']};
-async function sendJob(port:number,dataFirst:boolean){
+async function sendJob(port:number,dataFirst:boolean,queue='hornet'){
  const client=new Client(port),body=Buffer.from('hello 世界\n'),control=Buffer.from('Hfixture\nPuser\nJexample\nfdfA001host\nUdfA001host\n');
- try{client.send(Buffer.from([2]));client.send('hornet\n');expect(await client.ack()).toBe(0);
+ try{client.send(Buffer.from([2]));client.send(queue+'\n');expect(await client.ack()).toBe(0);
   const parts=[{code:2,name:'cfA001host',body:control},{code:3,name:'dfA001host',body}];if(dataFirst)parts.reverse();
   for(const part of parts){client.send(Buffer.concat([Buffer.from([part.code]),Buffer.from(`${part.body.length} ${part.name}\n`)]));expect(await client.ack()).toBe(0);for(const byte of part.body)client.send(Buffer.from([byte]));client.send(Buffer.from([0]));expect(await client.ack()).toBe(0);}
  }finally{client.close();}return body;
@@ -64,4 +64,29 @@ it('VNC bridge requires correct Origin and single-use token, carries TCP over SS
   ws=new WebSocket(session.url,['binary',session.token],{origin:'app://hornet'});await once(ws,'open');const message=once(ws,'message');ws.send(Buffer.from('VNC transport'));expect(Buffer.from((await message)[0]).toString()).toBe('VNC transport');
   expect(await denied('app://hornet',session.token)).toBe(403);expect(()=>vnc.close('b',session.desktopId)).toThrow();const closed=once(ws,'close');vnc.close('a',session.desktopId);await closed;
  }finally{ws?.terminate();vnc.stop();await connections.stop();db.close();await ssh.close();for(const s of sockets)s.destroy();await new Promise<void>(r=>echo.close(()=>r()));await rm(root,{recursive:true,force:true});}
+});
+
+it('routes multiple LPD queues on one listener, persists mapping and keeps staged printer snapshots',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'hornet-multi-lpd-')),submitted:string[]=[];
+ const lpd=new LpdService(root,async job=>{submitted.push(job.printer);return 99;});
+ try{
+  lpd.saveQueue({queue:'finance',printer:'accounts-printer',mode:'raw',enabled:true});
+  const started=await lpd.start(config);
+  await sendJob(started.config!.port,false,'finance');
+  await sendJob(started.config!.port,true);
+  const jobs=lpd.status().jobs;
+  expect(jobs.map(j=>[j.queue,j.printer,j.owner,j.host])).toEqual([['finance','accounts-printer','user','fixture'],['hornet','fixture','user','fixture']]);
+  expect(()=>lpd.removeQueue('finance')).toThrow('待提交');
+  lpd.saveQueue({queue:'finance',printer:'new-printer',mode:'text',enabled:false});
+  const paused=new Client(started.config!.port);
+  try{paused.send('\x02finance\n');expect(await paused.ack()).toBe(1);}finally{paused.close();}
+  expect(lpd.status().jobs).toHaveLength(2);
+  await lpd.print(jobs[0].jobId);expect(submitted).toEqual(['accounts-printer']);
+  await lpd.stop();
+  const restored=new LpdService(root,async()=>undefined);
+  expect(restored.status().listening).toBe(false);
+  expect(restored.status().queues.find(q=>q.queue==='finance')).toEqual({queue:'finance',printer:'new-printer',mode:'text',enabled:false});
+  restored.removeQueue('finance');expect(restored.status().jobs[0].queue).toBe('finance');
+  await restored.shutdown();
+ }finally{await lpd.shutdown();await rm(root,{recursive:true,force:true});}
 });

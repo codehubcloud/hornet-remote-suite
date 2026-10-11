@@ -1,3 +1,9 @@
+import { FtpConnections } from '../ftp/connections';
+import { FtpFiles } from '../ftp/files';
+import { FtpTransfers } from '../ftp/transfers';
+import { DeviceTerminals } from '../terminal/devices';
+import { localShells,openLocal } from '../terminal/local';
+import { serialDevices,openSerial } from '../terminal/serial';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -13,22 +19,31 @@ import { nativeCall } from '../native/host';
 import { X11Service } from '../x11/sessions';
 import { XServers } from '../x11/engine';
 import { XdmcpService,localInterfaces } from '../x11/xdmcp';
+import { TelnetTerminals } from '../terminal/telnet';
 import { Terminals } from '../terminal/terminals';
 import { Files } from '../file/files';
+import type { TransferContext } from '../file/tree-transfers';
 import { Transfers } from '../file/transfers';
 interface Port { postMessage(data:unknown):void; on(event:'message',listener:(event:{data:Message})=>void):void }
-interface Message { type:string; owner:string; method:string; requestId:string; payload:unknown; context?:{localPath:string;localParent:string}; secret?:string }
+interface Message { type:string; owner:string; method:string; requestId:string; payload:unknown; context?:TransferContext; secret?:string }
 const port=(process as NodeJS.Process & {parentPort:Port}).parentPort;
 const store=new Storage(join(process.argv[2],'data','hornet.db'),join(__dirname,'schema.sql'));
 const emit=(owner:string,event:HornetEvent)=>port.postMessage({type:'event',owner,event});
 const vaultWait=new Map<string,(secret:string|undefined)=>void>();
 const challenges=new Challenges(emit);
-const connections=new Connections(store,challenges,emit,(owner:string,profile:Profile)=>new Promise(resolve=>{
+const cachedSecret=(owner:string,profile:Profile):Promise<string|undefined>=>new Promise(resolve=>{
   const requestId=randomUUID();const timer=setTimeout(()=>{vaultWait.delete(requestId);resolve(undefined);},5000);
   vaultWait.set(requestId,value=>{clearTimeout(timer);resolve(value);});
   port.postMessage({type:'vault.get',owner,profile,requestId});
-}));
+});
+const connections=new Connections(store,challenges,emit,cachedSecret);
+const ftp=new FtpConnections(store,challenges,emit,cachedSecret);
+const ftpFiles=new FtpFiles(ftp);
+const fileService=(id:string)=>ftp.has(id)?ftpFiles:files;
 const terminals=new Terminals(connections,emit);
+const telnet=new TelnetTerminals(emit);
+const devices=new DeviceTerminals(emit);
+const terminalService=(id:string)=>devices.has(id)?devices:telnet.has(id)?telnet:terminals;
 const tunnels=new Tunnels(connections,emit);
 const vnc=new VncService(connections);
 const xServers=new XServers(join(process.argv[2],'x11'));
@@ -36,10 +51,18 @@ const x11=new X11Service(connections,xServers);
 const xdmcp=new XdmcpService(xServers);
 const lpd=new LpdService(join(process.argv[2],'print-spool'),async(job,path)=>{const result=await nativeCall({op:'print',path,printer:job.printer,mode:job.mode,jobId:job.jobId},60000);return result.osJobId;});
 const files=new Files(connections);
-const transfers=new Transfers(store,connections,emit);
+const transfers=new Transfers(store,connections,emit,new FtpTransfers(ftp,emit));
 async function dispatch(m:Message):Promise<unknown>{
   const p=m.payload,owner=m.owner;
   switch(m.method){
+    case 'localTerminal.shells':return localShells();
+    case 'localTerminal.open':return openLocal(devices,owner,schemas['localTerminal.open'].parse(p));
+    case 'serialTerminal.list':return serialDevices();
+    case 'serialTerminal.open':return openSerial(devices,owner,schemas['serialTerminal.open'].parse(p));
+    case 'telnet.open':{const v=schemas['telnet.open'].parse(p);return telnet.open(owner,store.profile(v.profileId),v.cols,v.rows);}
+    case 'terminal.inspect':{const v=schemas['terminal.attach'].parse(p);return terminalService(v.terminalId).inspect(owner,v.terminalId);}
+    case 'print.queue.save':return lpd.saveQueue(schemas['print.queue.save'].parse(p));
+    case 'print.queue.remove':return lpd.removeQueue(schemas['print.queue.remove'].parse(p).queue);
     case 'print.status':return lpd.status();
     case 'print.start':return lpd.start(schemas['print.start'].parse(p));
     case 'print.stop':return lpd.stop();
@@ -62,32 +85,37 @@ async function dispatch(m:Message):Promise<unknown>{
     case 'tunnel.create':return tunnels.create(owner,schemas['tunnel.create'].parse(p));
     case 'tunnel.stop':return tunnels.stop(owner,schemas['tunnel.stop'].parse(p).tunnelId);
     case 'profile.list':return store.profiles();
-    case 'profile.save':{const v=schemas['profile.save'].parse(p);if(connections.hasProfile(v.profile.profileId))throw new AppError('PROFILE_BUSY','请先关闭正在使用此配置的连接，再修改认证或端点。');return store.saveProfile(v.profile,v.expectedRevision);}
-    case 'group.remove':{const v=schemas['group.remove'].parse(p);if(v.members.some(m=>connections.hasProfile(m.profileId)||transfers.hasProfile(m.profileId)))throw new AppError('PROFILE_BUSY','分组中有正在使用的连接或传输，请先关闭后再删除。');return store.removeGroup(v.path,v.members);}
-    case 'profile.delete':{const v=schemas['profile.delete'].parse(p);if(connections.hasProfile(v.profileId)||transfers.hasProfile(v.profileId))throw new AppError('PROFILE_BUSY','请先关闭此主机的连接和传输。');return store.deleteProfile(v.profileId,v.expectedRevision);}
+    case 'profile.save':{const v=schemas['profile.save'].parse(p);if(connections.hasProfile(v.profile.profileId)||ftp.hasProfile(v.profile.profileId)||telnet.hasProfile(v.profile.profileId))throw new AppError('PROFILE_BUSY','请先关闭正在使用此配置的连接，再修改认证或端点。');return store.saveProfile(v.profile,v.expectedRevision);}
+    case 'group.remove':{const v=schemas['group.remove'].parse(p);if(v.members.some(m=>connections.hasProfile(m.profileId)||ftp.hasProfile(m.profileId)||telnet.hasProfile(m.profileId)||transfers.hasProfile(m.profileId)))throw new AppError('PROFILE_BUSY','分组中有正在使用的连接或传输，请先关闭后再删除。');return store.removeGroup(v.path,v.members);}
+    case 'profile.delete':{const v=schemas['profile.delete'].parse(p);if(connections.hasProfile(v.profileId)||ftp.hasProfile(v.profileId)||telnet.hasProfile(v.profileId)||transfers.hasProfile(v.profileId))throw new AppError('PROFILE_BUSY','请先关闭此主机的连接和传输。');return store.deleteProfile(v.profileId,v.expectedRevision);}
     case 'profile.import':return store.importProfiles(z.array(profileSchema).max(1000).parse(p));
-    case 'connection.open':{const v=schemas['connection.open'].parse(p);return connections.acquire(owner,v.profileId);}
-    case 'connection.release':return connections.release(owner,schemas['connection.release'].parse(p).leaseId);
-    case 'connection.close':{const v=schemas['connection.close'].parse(p);return connections.close(owner,v.connectionId,v.generation);}
+    case 'connection.open':{const v=schemas['connection.open'].parse(p);if(store.profile(v.profileId).protocol==='ftp'){if(v.purpose!=='files')throw new AppError('CAPABILITY_UNAVAILABLE','FTP 不支持终端。');return ftp.acquire(owner,v.profileId);}return connections.acquire(owner,v.profileId);}
+    case 'connection.release':{const {leaseId}=schemas['connection.release'].parse(p);return (ftp.hasLease(leaseId)?ftp:connections).release(owner,leaseId);}
+    case 'connection.close':{const v=schemas['connection.close'].parse(p);return (ftp.has(v.connectionId)?ftp:connections).close(owner,v.connectionId,v.generation);}
     case 'auth.respond':{const v=schemas['auth.respond'].parse(p);return challenges.respond(owner,v.challengeId,v.response);}
     case 'auth.cancel':return challenges.cancel(owner,schemas['auth.cancel'].parse(p).challengeId);
     case 'auth.key':{const v=z.object({challengeId:z.string().uuid(),key:z.string().max(65536)}).parse(p);if(challenges.kind(owner,v.challengeId)!=='privateKey')throw new AppError('IPC005','私钥请求已失效。');return challenges.respond(owner,v.challengeId,v.key);}
     case 'trust.resolve':{const v=schemas['trust.resolve'].parse(p);return challenges.respond(owner,v.challengeId,v.decision,true);}
-    case 'terminal.cwd':{const v=schemas['terminal.cwd'].parse(p);return terminals.cwd(owner,v.terminalId);}
+    case 'terminal.encoding':{const v=schemas['terminal.encoding'].parse(p);return terminalService(v.terminalId).encoding(owner,v.terminalId,v.generation,v.encoding);}
+    case 'terminal.cwd':{const v=schemas['terminal.cwd'].parse(p);return terminalService(v.terminalId).cwd(owner,v.terminalId);}
     case 'terminal.create':{const v=schemas['terminal.create'].parse(p);return terminals.create(owner,v.connectionId,v.cols,v.rows,v.trackDirectory);}
-    case 'terminal.attach':return terminals.attach(owner,schemas['terminal.attach'].parse(p).terminalId);
-    case 'terminal.resize':{const v=schemas['terminal.resize'].parse(p);return terminals.resize(owner,v.terminalId,v.generation,v.cols,v.rows);}
-    case 'terminal.close':return terminals.close(owner,schemas['terminal.close'].parse(p).terminalId);
-    case 'terminal.write':{const v=terminalInputSchema.parse(p);return terminals.write(owner,v.terminalId,v.generation,v.seq,v.data);}
-    case 'terminal.ack':{const v=terminalAckSchema.parse(p);return terminals.ack(owner,v.terminalId,v.seq);}
-    case 'file.list':{const v=schemas['file.list'].parse(p);return files.list(owner,v.connectionId,v.path);}
-    case 'file.read':{const v=schemas['file.read'].parse(p);return files.read(owner,v.connectionId,v.path);}
-    case 'file.mkdir':{const v=schemas['file.mkdir'].parse(p);return files.mkdir(owner,v.connectionId,v.path);}
-    case 'file.rename':{const v=schemas['file.rename'].parse(p);return files.rename(owner,v.connectionId,v.path,v.target);}
-    case 'file.chmod':{const v=schemas['file.chmod'].parse(p);return files.chmod(owner,v.connectionId,v.path,v.mode);}
-    case 'file.remove':{const v=schemas['file.remove'].parse(p);return files.remove(owner,v.connectionId,v.path);}
-    case 'file.save':{const v=schemas['file.save'].parse(p);return files.save(owner,v.connectionId,v.path,v.content,v.expectedHash);}
-    case 'transfer.start':{const v=schemas['transfer.start'].parse(p);if(!m.context)throw new AppError('IPC005','缺少文件授权。');return transfers.start(owner,v.connectionId,v.direction,m.context.localPath,m.context.localParent,v.remotePath,v.idempotencyKey);}
+    case 'terminal.attach':{const v=schemas['terminal.attach'].parse(p);return terminalService(v.terminalId).attach(owner,v.terminalId);}
+    case 'terminal.resize':{const v=schemas['terminal.resize'].parse(p);return terminalService(v.terminalId).resize(owner,v.terminalId,v.generation,v.cols,v.rows);}
+    case 'terminal.close':{const v=schemas['terminal.close'].parse(p);return terminalService(v.terminalId).close(owner,v.terminalId);}
+    case 'terminal.send':
+    case 'terminal.write':{const v=terminalInputSchema.parse(p);return terminalService(v.terminalId).write(owner,v.terminalId,v.generation,v.seq,v.data);}
+    case 'terminal.ack':{const v=terminalAckSchema.parse(p);return terminalService(v.terminalId).ack(owner,v.terminalId,v.seq);}
+    case 'file.tree':{const v=schemas['file.list'].parse(p);return fileService(v.connectionId).tree(owner,v.connectionId,v.path);}
+    case 'file.tree.hash':{const v=z.object({connectionId:z.string().uuid(),root:z.string().min(1).max(4096),path:z.string().min(1).max(4096)}).strict().parse(p);return fileService(v.connectionId).treeHash(owner,v.connectionId,v.root,v.path);}
+    case 'file.tree.mkdir':{const v=z.object({connectionId:z.string().uuid(),root:z.string().min(1).max(4096),path:z.string().min(1).max(4096)}).strict().parse(p);return fileService(v.connectionId).treeMkdir(owner,v.connectionId,v.root,v.path);}
+    case 'file.list':{const v=schemas['file.list'].parse(p);return fileService(v.connectionId).list(owner,v.connectionId,v.path);}
+    case 'file.read':{const v=schemas['file.read'].parse(p);return fileService(v.connectionId).read(owner,v.connectionId,v.path);}
+    case 'file.mkdir':{const v=schemas['file.mkdir'].parse(p);return fileService(v.connectionId).mkdir(owner,v.connectionId,v.path);}
+    case 'file.rename':{const v=schemas['file.rename'].parse(p);return fileService(v.connectionId).rename(owner,v.connectionId,v.path,v.target);}
+    case 'file.chmod':{const v=schemas['file.chmod'].parse(p);return fileService(v.connectionId).chmod(owner,v.connectionId,v.path,v.mode);}
+    case 'file.remove':{const v=schemas['file.remove'].parse(p);return fileService(v.connectionId).remove(owner,v.connectionId,v.path);}
+    case 'file.save':{const v=schemas['file.save'].parse(p);return fileService(v.connectionId).save(owner,v.connectionId,v.path,v.content,v.expectedHash);}
+    case 'transfer.start':{const v=schemas['transfer.start'].parse(p);if(!m.context)throw new AppError('IPC005','缺少文件授权。');return transfers.start(owner,v.connectionId,v.direction,m.context.localPath,m.context.localParent,v.remotePath,v.idempotencyKey,m.context);}
     case 'task.list':return transfers.list(owner);
     case 'task.pause':{const v=schemas['task.pause'].parse(p);return transfers.pause(owner,v.taskId,v.expectedRevision);}
     case 'task.cancel':{const v=schemas['task.cancel'].parse(p);return transfers.cancel(owner,v.taskId,v.expectedRevision);}
@@ -95,17 +123,20 @@ async function dispatch(m:Message):Promise<unknown>{
     case 'layout.load':return store.layout();
     case 'layout.save':return store.saveLayout(schemas['layout.save'].parse(p));
     case 'capability.list':return [
-      {id:'ssh',name:'SSH 终端',state:'available',reason:'密码 / 私钥 / Agent，主机指纹校验，多标签终端'},
-      {id:'sftp',name:'SFTP 文件管理',state:'available',reason:'终端左侧文件栏、筛选、权限修改、上传下载、校验续传、UTF-8 小文件编辑'},
-      {id:'tunnels',name:'SSH 端口转发 / SOCKS5',state:'available',reason:'本地 / 远程 / 动态 SOCKS5 TCP 转发，回环监听、目标白名单、独立租约、流量统计；跳板链待实现'},
+      {id:'ssh',name:'SSH 终端',state:'available',reason:'密码 / 私钥 / Agent、跳板链、分屏、多编码、脚本步骤与录制回放'},
+      {id:'sftp',name:'SFTP 文件管理',state:'available',reason:'本地/远端双面板、双向同步、同名策略、SHA-256 覆盖校验、递归传输、续传、权限及 UTF-8 编辑'},
+      {id:'tunnels',name:'SSH 端口转发 / SOCKS5',state:'available',reason:'本地 / 远程 / 动态 SOCKS5 TCP 转发；最多四跳 SSH 链，逐跳认证与指纹校验、独立租约'},
       {id:'x11',name:'X11 / XDMCP',state:x11.status().configured||(await xServers.status()).configured?'experimental':'requires-setup',reason:'VcXsrv 自动管理、独立进程/显示/cookie；SSH 图形应用和局域网 XDMCP 独立窗口；需明确启用网络监听'},
       {id:'desktop',name:'VNC 远程桌面',state:'available',reason:'工作台内嵌画面及输入，强制使用 SSH 加密通道，剪贴板默认禁用'},
-      {id:'rdp',name:'RDP 原生窗口',state:'requires-setup',reason:'Windows 系统控件需在下方探测；受管理独立窗口，尚非内嵌桌面'},
-      {id:'print',name:'LPD 打印',state:'available',reason:'单队列接收、持久暂存、手动提交 Windows RAW/UTF-8 文本打印；默认关闭监听'},
-      {id:'local',name:'本地 / 串口 / Telnet / FTP',state:'unavailable',reason:'当前版本仅交付 SSH 与 SFTP'},
+      {id:'rdp',name:'RDP 原生窗口',state:'requires-setup',reason:'Windows 系统控件需在远程桌面工作区探测；受管理独立窗口，尚非内嵌桌面'},
+      {id:'print',name:'LPD 打印',state:'available',reason:'多队列接收、队列暂停与打印机映射、持久暂存、手动提交 Windows RAW/UTF-8 文本打印；默认关闭监听'},
+      {id:'telnet',name:'Telnet 终端',state:'available',reason:'独立 TCP 会话、窗口大小与终端类型协商、已有终端分屏；明文协议，不提供文件功能'},
+      {id:'local',name:'本地 PowerShell / CMD',state:localShells().length?'available':'unavailable',reason:'Windows ConPTY 交互终端、窗口尺寸、分屏和持续日志；文件菜单打开'},
+      {id:'serial',name:'串口终端',state:'requires-setup',reason:'COM 端口枚举、波特率/校验位/流控、多编码、脚本与日志；需要可用串口设备'},
+      {id:'ftp',name:'FTP / FTPS',state:'available',reason:'被动模式、显式/隐式 TLS、双面板目录管理、普通文件传输与 SHA-256 校验；不支持目录同步、在线编辑或权限修改'},
       {id:'extensions',name:'IDE / 插件 / AI / 企业服务',state:'unavailable',reason:'按设计文档列为后续扩展，不在当前版本伪装启用'}
     ];
-    case 'shutdown':await lpd.shutdown();vnc.stop();await x11.stop();await xdmcp.stop();await xServers.stop();await transfers.stop();terminals.stop();tunnels.shutdown();challenges.cancelOwner(owner);await connections.stop();store.close();return null;
+    case 'shutdown':await devices.stop();await lpd.shutdown();vnc.stop();await x11.stop();await xdmcp.stop();await xServers.stop();await transfers.stop();terminals.stop();telnet.stop();tunnels.shutdown();challenges.cancelOwner(owner);ftp.stop();await connections.stop();store.close();return null;
     default:throw new AppError('IPC001','未知方法。');
   }
 }

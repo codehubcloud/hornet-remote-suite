@@ -1,9 +1,11 @@
+import { hashFile } from './hash-file';
 import { createHash,randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import { Connections } from '../ssh/connections';
 import { AppError } from '../../packages/core/errors';
 import type { FilePage } from '../../packages/contracts';
 import type { SFTPWrapper,Stats } from 'ssh2';
+import { scanTree,treeName } from './tree';
 export function stat(sftp:SFTPWrapper,path:string):Promise<Stats>{return new Promise((resolve,reject)=>sftp.lstat(path,(e,s)=>e?reject(e):resolve(s)));}
 export function realpath(sftp:SFTPWrapper,path:string):Promise<string>{return new Promise((resolve,reject)=>sftp.realpath(path,(e,p)=>e?reject(e):resolve(p)));}
 export function unlink(sftp:SFTPWrapper,path:string):Promise<void>{return new Promise((resolve,reject)=>sftp.unlink(path,e=>e?reject(e):resolve()));}
@@ -11,6 +13,26 @@ export function rename(sftp:SFTPWrapper,from:string,to:string):Promise<void>{ret
 export function hashBuffer(data:Buffer|string){return createHash('sha256').update(data).digest('hex');}
 export class Files {
   constructor(private connections:Connections) {}
+  private async treeDirectory(owner:string,id:string,path:string){
+    const sftp=await this.connections.sftp(owner,id);
+    if(!posix.isAbsolute(path)||posix.normalize(path)!==path||await realpath(sftp,path)!==path||(await stat(sftp,path)).isSymbolicLink())throw new AppError('FILE_CONFLICT','远端目录已改变或包含符号链接，请重新预览。');
+    return sftp;
+  }
+  async tree(owner:string,id:string,path:string){
+    await this.treeDirectory(owner,id,path);
+    return scanTree(path,async relative=>{
+      const target=posix.join(path,relative);await this.treeDirectory(owner,id,target);
+      const page=await this.list(owner,id,target);
+      return {truncated:page.truncated,entries:page.entries.map(e=>({...e,path:e.name}))};
+    });
+  }
+  async treeHash(owner:string,id:string,root:string,path:string){for(const part of path.split('/'))treeName(part);const target=posix.join(root,path);await this.treeDirectory(owner,id,root);const sftp=await this.treeDirectory(owner,id,posix.dirname(target)),before=await stat(sftp,target);if(!before.isFile()||before.isSymbolicLink())throw new AppError('FILE_CONFLICT','源必须为普通文件。');const hash=await hashFile(sftp.createReadStream(target));const after=await stat(sftp,target);if(!after.isFile()||after.isSymbolicLink()||before.size!==after.size||before.mtime!==after.mtime)throw new AppError('FILE_CONFLICT','比较期间文件发生变化。');return {size:after.size,modified:after.mtime*1000,hash};}
+  async treeMkdir(owner:string,id:string,root:string,path:string){
+    const parts=path.split('/');for(const part of parts)treeName(part);
+    const target=posix.join(root,path);
+    await this.treeDirectory(owner,id,root);await this.treeDirectory(owner,id,posix.dirname(target));
+    await this.mkdir(owner,id,target);
+  }
   async list(owner:string,id:string,path:string):Promise<FilePage> {
     const sftp=await this.connections.sftp(owner,id), normalized=await realpath(sftp,path);
     const handle=await new Promise<Buffer>((resolve,reject)=>sftp.opendir(normalized,(e,h)=>e?reject(e):resolve(h)));
@@ -22,7 +44,7 @@ export class Files {
         list.push(...batch.filter(e=>e.filename!=='.'&&e.filename!=='..'));
       }
     } finally { await new Promise<void>(resolve=>sftp.close(handle,()=>resolve())); }
-    return {path:normalized,truncated:list.length>10000,entries:list.slice(0,10000).map(e=>({name:e.filename,path:posix.join(normalized,e.filename),kind:e.attrs.isDirectory()?'directory' as const:e.attrs.isSymbolicLink()?'link' as const:'file' as const,size:e.attrs.size,modified:e.attrs.mtime*1000,mode:e.attrs.mode})).sort((a,b)=>(a.kind==='directory'?0:1)-(b.kind==='directory'?0:1)||a.name.localeCompare(b.name))};
+    return {path:normalized,truncated:list.length>10000,entries:list.slice(0,10000).map(e=>({name:e.filename,path:posix.join(normalized,e.filename),kind:e.attrs.isDirectory()?'directory' as const:e.attrs.isSymbolicLink()?'link' as const:e.attrs.isFile()?'file' as const:'other' as const,size:e.attrs.size,modified:e.attrs.mtime*1000,mode:e.attrs.mode})).sort((a,b)=>(a.kind==='directory'?0:1)-(b.kind==='directory'?0:1)||a.name.localeCompare(b.name))};
   }
   async mkdir(owner:string,id:string,path:string){
     const sftp=await this.connections.sftp(owner,id);

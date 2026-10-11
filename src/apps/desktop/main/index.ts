@@ -1,10 +1,15 @@
-import { app,BrowserWindow,dialog,ipcMain,protocol,net,type IpcMainInvokeEvent,type IpcMainEvent } from 'electron';
+import { app,BrowserWindow,dialog,clipboard,ipcMain,protocol,net,type IpcMainInvokeEvent,type IpcMainEvent } from 'electron';
 import { join,basename,resolve,sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readFile,writeFile,stat } from 'node:fs/promises';
 import { z } from 'zod';
 import { envelopeSchema,schemas,profileSchema,terminalAckSchema,terminalInputSchema,type HornetEvent,type Profile,type TaskSnapshot } from '../../../packages/contracts';
 import { AppError,safeError } from '../../../packages/core/errors';
+import { TreeTransfers } from '../../../services/file/tree-transfers';
+import { treeRequestSchema } from '../../../packages/contracts/file-tree';
+import { readRecording } from '../../../services/terminal/recordings';
+import { TerminalLogs } from '../../../services/terminal/logs';
+import { LocalFiles } from '../../../services/file/local-files';
 import { PathGrants } from '../../../packages/security/path-grants';
 import { Vault } from './vault';
 import { Backend } from './backend';
@@ -15,9 +20,14 @@ protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,se
 if(process.env.HORNET_USER_DATA)app.setPath('userData',process.env.HORNET_USER_DATA);
 let window:BrowserWindow|undefined,backend:Backend,vault:Vault,quitting=false;
 const grants=new PathGrants();
+const localFiles=new LocalFiles(grants);
 const challenges=new Map<string,Extract<HornetEvent,{type:'challenge'}>>();
 const pendingPasswords=new Map<string,string>();
+const terminalSizes=new Map<string,{cols:number;rows:number}>();
+const logs=new TerminalLogs((_owner,log)=>emit({type:'terminal.log',log}));
 const emit=(event:HornetEvent)=>{
+  logs.observe('local-user',event);
+  if(event.type==='terminal.closed')terminalSizes.delete(event.terminalId);
   if(event.type==='challenge')challenges.set(event.challengeId,event);
   if(event.type==='challenge.closed')challenges.delete(event.challengeId);
   if(event.type==='connection.state'&&event.state==='ready'){
@@ -32,6 +42,7 @@ function authorize(event:IpcMainInvokeEvent|IpcMainEvent){
 }
 function responseError(e:unknown,requestId='local'){return {ok:false,requestId,error:e instanceof z.ZodError?{code:'IPC002',message:'请求参数无效。',retryable:false}:safeError(e)};}
 async function setupIpc(){
+  const treeTransfers=new TreeTransfers(localFiles,grants,backend);
   ipcMain.handle('hornet:request',async(event,raw:unknown)=>{
     let requestId='';
     try{
@@ -48,6 +59,7 @@ async function setupIpc(){
       let context:{localPath:string;localParent:string}|undefined;
       if(req.method==='transfer.start'){const p=schemas['transfer.start'].parse(parsed),g=await grants.get('local-user',p.pathGrantId,p.direction);context={localPath:g.path,localParent:g.parent};}
       const data=await backend.call(req.method,parsed,context,Math.min(120000,Math.max(1,req.deadlineMs-Date.now())));
+      if(req.method==='terminal.resize'){const p=schemas['terminal.resize'].parse(parsed);terminalSizes.set(p.terminalId,{cols:p.cols,rows:p.rows});logs.resize('local-user',p.terminalId,p.cols,p.rows);}
       if(req.method==='profile.delete')vault.remove(schemas['profile.delete'].parse(parsed).profileId);
       return {ok:true,requestId,data};
     }catch(e){return responseError(e,requestId);}
@@ -57,6 +69,37 @@ async function setupIpc(){
       authorize(event);const m=z.object({method:z.string(),payload:z.unknown()}).strict().parse(raw);
       let data:unknown;
       switch(m.method){
+        case 'terminalLogs.openRecording':{
+          const p=z.object({id:z.string().uuid().optional()}).strict().parse(m.payload??{});let path:string|undefined;
+          if(p.id){const log=logs.list('local-user').find(l=>l.id===p.id);if(!log||log.format!=='recording'||!['stopped','failed'].includes(log.state))throw new AppError('LOG_STATE','请先停止会话录制。');path=log.path;}
+          else {const result=await dialog.showOpenDialog(window!,{title:'回放录制文件',properties:['openFile'],filters:[{name:'Hornet 会话录制',extensions:['hrec']}]});if(!result.canceled)path=result.filePaths[0];}
+          data=path?await readRecording(path):null;break;
+        }
+        case 'terminalLogs.list':data=logs.list('local-user');break;
+        case 'terminalLogs.stop':data=await logs.stop('local-user',z.object({id:z.string().uuid()}).strict().parse(m.payload).id);break;
+        case 'terminalLogs.start':{
+          const p=z.object({terminalId:z.string().uuid(),format:z.enum(['text','raw','recording'])}).strict().parse(m.payload);
+          await backend.call('terminal.inspect',{terminalId:p.terminalId});
+          const selected=await dialog.showSaveDialog(window!,{title:p.format==='recording'?'开始会话录制（包含终端输出）':p.format==='text'?'开始持续文本日志（可能包含敏感输出）':'开始原始终端日志（包含控制序列）',defaultPath:'hornet-terminal-'+new Date().toISOString().replace(/[:.]/g,'-')+(p.format==='recording'?'.hrec':'.log'),filters:[{name:'终端日志',extensions:[p.format==='recording'?'hrec':'log']}]});
+          data=null;if(!selected.canceled&&selected.filePath){
+            await backend.call('terminal.inspect',{terminalId:p.terminalId});
+            const recording=await logs.start('local-user',p.terminalId,selected.filePath,p.format,terminalSizes.get(p.terminalId)?.cols,terminalSizes.get(p.terminalId)?.rows);
+            try{await backend.call('terminal.inspect',{terminalId:p.terminalId});data=recording;}catch(e){await logs.stop('local-user',recording.id);throw e;}
+          }break;
+        }
+        case 'treeTransfer.preview':data=await treeTransfers.preview('local-user',treeRequestSchema.parse(m.payload));break;
+        case 'treeTransfer.execute':data=await treeTransfers.execute('local-user',z.object({planId:z.string().uuid()}).strict().parse(m.payload).planId);break;
+        case 'treeTransfer.discard':treeTransfers.discard('local-user',z.object({planId:z.string().uuid()}).strict().parse(m.payload).planId);data=null;break;
+        case 'localFiles.choose':{
+          const selected=await dialog.showOpenDialog(window!,{title:'选择本地文件工作目录',properties:['openDirectory']});
+          data=selected.canceled?null:await localFiles.choose('local-user',selected.filePaths[0]);break;
+        }
+        case 'localFiles.list':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096)}).strict().parse(m.payload);data=await localFiles.list('local-user',p.rootId,p.path);break;}
+        case 'localFiles.mkdir':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),name:z.string().min(1).max(255)}).strict().parse(m.payload);data=await localFiles.mkdir('local-user',p.rootId,p.path,p.name);break;}
+        case 'localFiles.grant':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),direction:z.enum(['upload','download']),name:z.string().max(255).optional()}).strict().parse(m.payload);data=await localFiles.grant('local-user',p.rootId,p.path,p.direction,p.name);break;}
+        case 'localFiles.release':{const p=z.object({rootId:z.string().uuid()}).strict().parse(m.payload);localFiles.release('local-user',p.rootId);data=null;break;}
+        case 'clipboard.read':z.object({}).strict().parse(m.payload??{});data=clipboard.readText();if((data as string).length>131072)throw new AppError('FILE_LIMIT','Clipboard text exceeds 128 KiB.');break;
+        case 'clipboard.write':clipboard.writeText(z.object({text:z.string().max(131072)}).strict().parse(m.payload).text);data=null;break;
         case 'rdp.probe':data=await rdp.probe();break;
         case 'rdp.open':data=rdp.open(rdpConfigSchema.parse(m.payload));break;
         case 'rdp.list':data=rdp.list();break;
@@ -70,6 +113,13 @@ async function setupIpc(){
           const p=z.object({display:z.number().int().min(0).max(99)}).strict().parse(m.payload);
           const selected=await dialog.showOpenDialog(window!,{title:'选择本地 X Server 的 Xauthority 文件',properties:['openFile']});data=null;
           if(!selected.canceled&&selected.filePaths[0]){if((await stat(selected.filePaths[0])).size>65536)throw new Error('Xauthority 文件超过64KiB。');const authority=await readFile(selected.filePaths[0]);try{data=await backend.call('x11.configure',{...p,authority});}finally{authority.fill(0);}}break;
+        }
+        case 'terminal.exportText':{
+          const p=z.object({name:z.string().max(255),text:z.string().max(4194304)}).strict().parse(m.payload);
+          if(Buffer.byteLength(p.text)>8388608)throw new AppError('FILE_LIMIT','终端文本超过 8 MiB 导出上限。');
+          const name=p.name.replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g,'_').replace(/[. ]+$/,'')||'terminal';
+          const selected=await dialog.showSaveDialog(window!,{title:'导出终端文本',defaultPath:'hornet-'+name+'.txt',filters:[{name:'UTF-8 文本',extensions:['txt']}]});
+          data=false;if(!selected.canceled&&selected.filePath){await writeFile(selected.filePath,p.text,{encoding:'utf8',mode:0o600});data=true;}break;
         }
         case 'file.choose':{
           const p=z.object({direction:z.enum(['upload','download']),name:z.string().max(255).optional()}).strict().parse(m.payload);
@@ -123,7 +173,7 @@ async function bootstrap(){
     return net.fetch(pathToFileURL(file).toString());
   });
   vault=new Vault(join(app.getPath('userData'),'credentials','vault.json'));
-  backend=new Backend(vault,emit);await backend.start(app.getPath('userData'));await setupIpc();
+  backend=new Backend(vault,emit,()=>{void logs.stopAll('local-user').catch(()=>{});});await backend.start(app.getPath('userData'));await setupIpc();
   window=new BrowserWindow({title:'Hornet Remote Suite',width:1440,height:900,minWidth:1024,minHeight:720,backgroundColor:'#0c1220',show:process.env.HORNET_SMOKE!=='1',webPreferences:{preload:join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   window.removeMenu();window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   window.webContents.on('will-navigate',event=>event.preventDefault());
@@ -135,7 +185,7 @@ async function bootstrap(){
       const active=tasks.filter(t=>['running','queued','verifying','committing'].includes(t.state));
       const choice=await dialog.showMessageBox(window!,{type:'question',buttons:['退出','取消'],defaultId:1,cancelId:1,message:'退出 Hornet？',detail:active.length?'活动传输将暂停，重新启动后可校验恢复。终端、图形会话与 LPD 接收将关闭；系统已接收的打印可能继续。':'终端、图形会话与 LPD 接收将关闭，配置会保留；系统已接收的打印可能继续。'});
       if(choice.response!==0)return;
-      quitting=true;await backend.stop().catch(()=>{});window?.destroy();app.quit();
+      quitting=true;await backend.stop().catch(()=>{});await logs.stopAll('local-user');window?.destroy();app.quit();
     })();
   });
   await window.loadURL('app://hornet/index.html');

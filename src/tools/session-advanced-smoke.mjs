@@ -1,0 +1,45 @@
+import { _electron as electron,expect } from '@playwright/test';
+import { mkdtemp,mkdir,rm } from 'node:fs/promises';
+import { join,resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
+import { build } from 'esbuild';
+import { dismissStartupSessions } from './session-dialog-helper.mjs';
+await mkdir('test-results',{recursive:true});
+await build({entryPoints:['tests/fixtures/ssh-server.ts'],outfile:'test-results/advanced-fixture.cjs',bundle:true,platform:'node',format:'cjs',external:['ssh2']});
+const server=await createRequire(import.meta.url)(resolve('test-results/advanced-fixture.cjs')).sshFixture();
+const destination=await createRequire(import.meta.url)(resolve('test-results/advanced-fixture.cjs')).sshFixture();
+const data=await mkdtemp(join(tmpdir(),'hornet-advanced-')),recording=join(data,'session.hrec');
+const env={...process.env,HORNET_USER_DATA:data,HORNET_SMOKE:'1'};delete env.ELECTRON_RUN_AS_NODE;
+let app;
+try{
+ app=await electron.launch({args:['.'],env,timeout:30000});const page=await app.firstWindow();page.setDefaultTimeout(15000);await dismissStartupSessions(page);
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const menu=async(group,item)=>{await page.locator('.reference-menubar').getByRole('button',{name:group,exact:true}).click();await page.getByRole('menuitem',{name:item,exact:true}).click();};
+ const quick=async(address)=>{await page.getByLabel('快速连接地址',{exact:true}).fill(address);await page.locator('.quick-connect-bar').getByRole('button',{name:'连接',exact:true}).click();};
+ await quick('tester@127.0.0.1:'+server.port);await page.getByLabel('名称',{exact:true}).fill('Fixture');await page.getByRole('button',{name:'保存并连接',exact:true}).click();
+ await page.getByLabel('认证信息',{exact:true}).fill('test-password');await page.getByRole('button',{name:'继续连接',exact:true}).click();await page.getByRole('button',{name:'已核对，信任此主机',exact:true}).click();await expect(page.locator('.terminal-cell')).toHaveCount(1);
+ await quick('Fixture');await expect(page.locator('.terminal-cell')).toHaveCount(2);await quick('Fixture');await expect(page.locator('.terminal-cell')).toHaveCount(3);
+ await menu('工具','发送键输入到');const broadcast=page.getByRole('dialog',{name:'发送键输入到',exact:true});await broadcast.getByRole('checkbox').nth(0).check();await broadcast.getByRole('checkbox').nth(1).check();await broadcast.getByRole('button',{name:'开启广播',exact:true}).click();
+ await page.locator('.tabs .tab').nth(2).locator('button').first().click();const old=await page.locator('.terminal-cell.selected').getAttribute('data-terminal-id');
+ await page.locator('.terminal-cell.selected .xterm-helper-textarea').focus();await page.keyboard.type('BROADCAST_TARGETS');await page.keyboard.press('Enter');
+ await expect.poll(()=>server.shellInputs.find(([pid])=>pid===1001)?.[1]).toContain('BROADCAST_TARGETS');await expect.poll(()=>server.shellInputs.find(([pid])=>pid===1002)?.[1]).toContain('BROADCAST_TARGETS');expect(server.shellInputs.find(([pid])=>pid===1003)).toBeUndefined();
+ await menu('选项卡','重命名');await page.getByLabel('终端标题',{exact:true}).fill('Keep title');await page.getByRole('button',{name:'保存标题',exact:true}).click();await menu('选项卡','排列');await page.getByRole('menuitem',{name:'垂直分割',exact:true}).click();
+ await page.locator('.tabs .tab').nth(2).locator('button').first().click();await menu('文件','重新连接');await expect.poll(()=>server.shellCount).toBe(4);await expect(page.locator('.terminal-cell')).toHaveCount(3);await expect(page.locator('.tabs')).toContainText('Keep title');
+ await expect(page.locator('.broadcast-banner')).toHaveCount(0);await expect(page.locator('.terminal-cell.selected')).not.toHaveAttribute('data-terminal-id',old);expect(server.authCount).toBe(1);
+ await menu('选项卡','排列');await page.getByRole('menuitem',{name:'取消分屏',exact:true}).click();
+ await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},recording);
+ await menu('编辑','开始会话录制');await expect(page.getByRole('button',{name:'停止终端日志',exact:true})).toBeVisible();
+ await page.locator('.terminal-cell.selected .xterm-helper-textarea').focus();await page.waitForTimeout(250);await page.keyboard.insertText('REPLAY_ONLY');await page.keyboard.press('Enter');await expect(page.locator('.terminal-cell.selected')).toContainText('REPLAY_ONLY');
+ await page.getByRole('button',{name:'停止终端日志',exact:true}).click();await expect(page.getByRole('button',{name:'停止终端日志',exact:true})).toHaveCount(0);
+ const timeline=await page.evaluate(()=>window.hornet.terminalLogs.openRecording());expect(timeline.duration).toBeGreaterThanOrEqual(200);
+ const before=JSON.stringify(server.shellInputs);await menu('编辑','回放录制文件…');const replay=page.getByRole('dialog',{name:'日志回放',exact:true});await expect(replay).toBeVisible();await replay.getByLabel('回放速度',{exact:true}).selectOption('8');await replay.getByRole('button',{name:'播放',exact:true}).click();await expect(replay.locator('.recording-screen')).toContainText('REPLAY_ONLY');
+ await replay.getByRole('button',{name:'回到开头',exact:true}).click();await replay.getByLabel('回放进度',{exact:true}).focus();await page.keyboard.press('End');await expect(replay.locator('.recording-screen')).toContainText('REPLAY_ONLY');await page.screenshot({path:'test-results/recording-playback.png'});expect(JSON.stringify(server.shellInputs)).toBe(before);await replay.getByRole('button',{name:'关闭回放',exact:true}).click();
+ await menu('文件','重新连接所有');await expect.poll(()=>server.shellCount).toBe(7);await expect(page.locator('.terminal-cell')).toHaveCount(3);
+ await menu('窗口','除此之外全部关闭');await expect(page.locator('.terminal-cell')).toHaveCount(1);await expect(page.locator('.tabs')).toContainText('Keep title');await menu('窗口','全部关闭');await expect(page.locator('.terminal-cell')).toHaveCount(0);
+ await menu('文件','新建…');await page.getByLabel('名称',{exact:true}).fill('Routed');await page.getByLabel('主机',{exact:true}).fill('fixture.internal');await page.getByLabel('端口',{exact:true}).fill(String(destination.port));await page.getByLabel('用户名',{exact:true}).fill('tester');await page.getByRole('button',{name:'添加跳板',exact:true}).click();await expect(page.getByLabel('跳板 1',{exact:true})).toContainText('Fixture');await page.getByRole('button',{name:'保存配置',exact:true}).click();
+ const saved=await page.evaluate(()=>window.hornet.profiles.list());expect(saved.find(p=>p.name==='Routed').jumpProfileIds).toEqual([saved.find(p=>p.name==='Fixture').profileId]);
+ await quick('Routed');await page.getByLabel('认证信息',{exact:true}).fill('test-password');await page.getByRole('button',{name:'继续连接',exact:true}).click();await expect(page.locator('.challenge-info')).toContainText('tester@fixture.internal');await page.getByLabel('认证信息',{exact:true}).fill('test-password');await page.getByRole('button',{name:'继续连接',exact:true}).click();await page.getByRole('button',{name:'已核对，信任此主机',exact:true}).click();await expect.poll(()=>destination.shellCount).toBe(1);await expect(page.locator('.terminal-files')).toContainText('hello.txt');await menu('窗口','全部关闭');await expect(page.locator('.terminal-cell')).toHaveCount(0);
+ expect(errors).toEqual([]);console.log('Advanced sessions passed: scoped live broadcast, same-tab reconnect with shared SSH lease isolation, reconnect-all, timed offline recording/playback/seek batch tab close and SSH jump-host configuration/authentication/SFTP.');
+}catch(error){if(app)await (await app.firstWindow()).screenshot({path:'test-results/advanced-failure.png',timeout:5000}).catch(()=>{});throw error;}
+finally{if(app)await app.evaluate(({app})=>app.exit(0)).catch(()=>{});await server.close();await destination.close();await rm(data,{recursive:true,force:true,maxRetries:5,retryDelay:200});}

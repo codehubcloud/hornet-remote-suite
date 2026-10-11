@@ -1,3 +1,4 @@
+import { t as tr } from './i18n';
 import { useEffect,useRef,useState,type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from './store';
@@ -24,15 +25,15 @@ export function TerminalTitleMenu(){
  const canSplit=s.views.filter(v=>v.kind==='terminal').length>=2;
  const choose=(action:()=>void)=>{s.setTerminalMenu(null);action();};
  return <>
-  {menu&&view&&createPortal(<div ref={element} role="menu" aria-label="终端标题菜单" className="group-context-menu" style={{left:menu.x,top:menu.y}} onContextMenu={e=>e.preventDefault()} onKeyDown={e=>{const buttons=Array.from(element.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')??[]);if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[(index+(e.key==='ArrowDown'?1:buttons.length-1))%buttons.length]?.focus();}else if(e.key==='Tab')s.setTerminalMenu(null);}}>
+  {menu&&view&&createPortal(<div ref={element} role="menu" aria-label={tr("终端标题菜单")} className="group-context-menu" style={{left:menu.x,top:menu.y}} onContextMenu={e=>e.preventDefault()} onKeyDown={e=>{const buttons=Array.from(element.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')??[]);if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[(index+(e.key==='ArrowDown'?1:buttons.length-1))%buttons.length]?.focus();}else if(e.key==='Tab')s.setTerminalMenu(null);}}>
    <div className="group-context-title">{view.title??view.profile.name}</div>
-   <button role="menuitem" disabled={!canSplit} onClick={()=>choose(()=>s.tileTerminals('horizontal'))}>水平分割</button>
-   <button role="menuitem" disabled={!canSplit} onClick={()=>choose(()=>s.tileTerminals('vertical'))}>垂直分割</button>
-   {s.terminalLayout?.kind==='split'&&<button role="menuitem" onClick={()=>choose(()=>s.setTerminalLayout(null))}>取消分屏</button>}
-   <button role="menuitem" onClick={()=>choose(()=>{setError('');setRename({id:view.id,title:view.title??view.profile.name});})}>重命名终端</button>
+   <button role="menuitem" disabled={!canSplit} onClick={()=>choose(()=>s.tileTerminals('horizontal'))}>{tr("水平分割")}</button>
+   <button role="menuitem" disabled={!canSplit} onClick={()=>choose(()=>s.tileTerminals('vertical'))}>{tr("垂直分割")}</button>
+   {s.terminalLayout?.kind==='split'&&<button role="menuitem" onClick={()=>choose(()=>s.setTerminalLayout(null))}>{tr("取消分屏")}</button>}
+   <button role="menuitem" onClick={()=>choose(()=>{setError('');setRename({id:view.id,title:view.title??view.profile.name});})}>{tr("重命名终端")}</button>
   </div>,document.body)}
-  {rename&&<div className="modal-backdrop"><form className="modal" onSubmit={e=>{e.preventDefault();const title=rename.title.trim();if(!title||title.length>80||/[\x00-\x1f\x7f]/.test(title)){setError('请输入 1–80 个字符的标题，不包含控制字符。');return;}s.renameTerminal(rename.id,title);setRename(null);}}>
-   <h2>重命名终端</h2><label>终端标题<input autoFocus maxLength={80} required value={rename.title} onChange={e=>setRename({...rename,title:e.target.value})}/></label>{error&&<p role="alert" className="form-error">{error}</p>}<div className="modal-actions"><button type="button" onClick={()=>setRename(null)}>取消</button><button className="primary">保存标题</button></div>
+  {rename&&<div className="modal-backdrop"><form className="modal" onSubmit={e=>{e.preventDefault();const title=rename.title.trim();if(!title||title.length>80||/[\x00-\x1f\x7f]/.test(title)){setError(tr("请输入 1–80 个字符的标题，不包含控制字符。"));return;}s.renameTerminal(rename.id,title);setRename(null);}}>
+   <h2>{tr("重命名终端")}</h2><label>{tr("终端标题")}<input autoFocus maxLength={80} required value={rename.title} onChange={e=>setRename({...rename,title:e.target.value})}/></label>{error&&<p role="alert" className="form-error">{error}</p>}<div className="modal-actions"><button type="button" onClick={()=>setRename(null)}>{tr("取消")}</button><button className="primary">{tr("保存标题")}</button></div>
   </form></div>}
  </>;
 }

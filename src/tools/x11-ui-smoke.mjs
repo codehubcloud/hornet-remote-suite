@@ -1,3 +1,4 @@
+import { dismissStartupSessions } from './session-dialog-helper.mjs';
 import { _electron as electron,expect } from '@playwright/test';
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
@@ -13,17 +14,19 @@ const xdmcp=await require(resolve('test-results/xdmcp-fixture.cjs')).xdmcpFixtur
 const userData=await mkdtemp(join(tmpdir(),'hornet-x11-ui-')),env={...process.env,HORNET_USER_DATA:userData,HORNET_SMOKE:'1'};delete env.ELECTRON_RUN_AS_NODE;
 let app;
 try{
- app=await electron.launch({args:['.'],env,timeout:30000});const page=await app.firstWindow();page.setDefaultTimeout(20000);
+ app=await electron.launch({args:['.'],env,timeout:30000});const page=await app.firstWindow();await dismissStartupSessions(page);page.setDefaultTimeout(20000);
  await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:0,checkboxChecked:false});});
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.getByRole('button',{name:'新建连接',exact:true}).click();
  await page.getByLabel('名称',{exact:true}).fill('X11 fixture');
  await page.getByLabel('主机',{exact:true}).fill('127.0.0.1');await page.getByLabel('端口',{exact:true}).fill(String(ssh.port));await page.getByLabel('用户名',{exact:true}).fill('tester');
  await page.getByRole('button',{name:'保存配置',exact:true}).click();
+ await page.getByRole('region',{name:'快速开始',exact:true}).getByRole('button',{name:'X11 图形应用',exact:false}).click();await page.getByRole('button',{name:'显示设置',exact:true}).click();
  await page.getByRole('heading',{name:'X Server 引擎 · 独立显示'}).scrollIntoViewIfNeeded();
  await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},engine);
  await page.getByRole('button',{name:'选择 VcXsrv 引擎',exact:true}).click();
  await expect(page.getByLabel('X Server 引擎状态')).toContainText('已配置 VcXsrv');
+ await page.getByRole('button',{name:'图形应用',exact:true}).click();
  await expect(page.getByRole('button',{name:'执行命令并转发 X11'})).toBeDisabled();
  await page.getByLabel('允许 VcXsrv 网络监听', {exact:false}).check();
  await page.evaluate(()=>window.hornet.onEvent(event=>{if(event.type==='challenge'){if(event.kind==='trust')void window.hornet.auth.trust(event.challengeId,'accept');else if(event.kind==='password')void window.hornet.auth.respond(event.challengeId,'test-password',false);}}));
@@ -38,6 +41,7 @@ try{
  await sessions.getByRole('button',{name:'停止 X11 会话'}).first().click();await expect(sessions.locator('article')).toHaveCount(1);
  await expect.poll(()=>page.evaluate(async()=>(await window.hornet.x11.status()).sessions[0]?.activeChannels)).toBeGreaterThan(0);
  await sessions.getByRole('button',{name:'停止 X11 会话'}).click();await expect(sessions.locator('article')).toHaveCount(0);
+ await page.getByRole('button',{name:'XDMCP 桌面',exact:true}).click();
  await page.getByLabel('XDMCP 服务器',{exact:true}).fill('127.0.0.1');await page.getByLabel('XDMCP 本地接口',{exact:true}).selectOption('127.0.0.1');await page.getByLabel('XDMCP UDP 端口',{exact:true}).fill(String(xdmcp.port));
  await page.getByRole('button',{name:'查询 XDMCP',exact:true}).click();await expect(page.getByText(/服务器可接受请求 · Hornet fixture/)).toBeVisible();
  await expect(page.getByRole('button',{name:'打开 XDMCP 桌面'})).toBeDisabled();
@@ -46,6 +50,7 @@ try{
  await expect.poll(()=>xdmcp.managed,{timeout:20000}).toBe(true);
  await desktops.scrollIntoViewIfNeeded();await page.screenshot({path:'test-results/xdmcp-ui.png'});
  await desktops.getByRole('button',{name:'停止 XDMCP 会话'}).click();await expect(desktops.locator('article')).toHaveCount(0);
+ await page.getByRole('button',{name:'图形应用',exact:true}).click();
  await page.getByRole('button',{name:'执行命令并转发 X11'}).click();
  await expect.poll(()=>page.evaluate(async()=>(await window.hornet.x11.status()).sessions[0]?.activeChannels),{timeout:30000}).toBeGreaterThan(0);
  const display=await page.evaluate(async()=>(await window.hornet.x11.status()).sessions[0].display);

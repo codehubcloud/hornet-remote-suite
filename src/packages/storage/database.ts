@@ -32,20 +32,26 @@ export class Storage {
   profiles(): Profile[] {
     return (this.db.prepare('SELECT c.*, h.group_path, k.kind FROM connection_profile c JOIN host_profile h ON c.host_id=h.id JOIN credential_profile k ON k.id=c.credential_id ORDER BY c.name').all() as Record<string,unknown>[]).map(row => {
       const endpoint = JSON.parse(String(row.endpoint_json)) as {host:string;port:number};
-      return profileSchema.parse({profileId:row.id,name:row.name,...endpoint,username:row.username,group:row.group_path,authType:row.kind,revision:row.revision});
+      const options=JSON.parse(String(row.options_json)) as {description?:string;jumpProfileIds?:string[];encoding?:string;ftpSecurity?:string};
+      return profileSchema.parse({...(row.protocol==='ftp'?{ftpSecurity:options.ftpSecurity??'none'}:{}),...(options.encoding?{encoding:options.encoding}:{}),...(options.jumpProfileIds?.length?{jumpProfileIds:options.jumpProfileIds}:{}),...(options.description?{description:options.description}:{}),updatedAt:row.updated_at,...(row.protocol==='telnet'||row.protocol==='ftp'?{protocol:row.protocol}:{}),profileId:row.id,name:row.name,...endpoint,username:row.username,group:row.group_path,authType:row.kind,revision:row.revision});
     });
   }
   profile(id: string):Profile { const p=this.profiles().find(p=>p.profileId===id); if(!p) throw new AppError('PROFILE_MISSING','连接配置不存在。'); return p; }
-  saveProfile(profile:Profile, expectedRevision:number):Profile { return this.transaction(()=>this.saveInner(profile,expectedRevision)); }
+  saveProfile(profile:Profile, expectedRevision:number):Profile { return this.transaction(()=>{const saved=this.saveInner(profile,expectedRevision);this.validateRoutes();return saved;}); }
+  private validateRoutes(){
+    const profiles=this.profiles(),byId=new Map(profiles.map(p=>[p.profileId,p]));
+    for(const p of profiles)for(const id of p.jumpProfileIds??[]){const hop=byId.get(id);if(!hop||(hop.protocol??'ssh')!=='ssh'||hop.jumpProfileIds?.length)throw new AppError('PROFILE_ROUTE','跳板必须是已保存的直连 SSH 配置；请按顺序列出全部跳板。');}
+  }
   private saveInner(input:Profile,expected:number):Profile {
     const p=profileSchema.parse(input);
     const existing=this.db.prepare('SELECT revision FROM connection_profile WHERE id=?').get(p.profileId) as {revision:number}|undefined;
     if((existing?.revision??0)!==expected) throw new AppError('PROFILE_CONFLICT','配置已被修改，请刷新后重试。');
-    const revision=expected+1;
+    const revision=expected+1,updatedAt=Date.now();
     this.db.prepare('INSERT INTO host_profile(id,name,group_path) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,group_path=excluded.group_path,revision=revision+1').run(p.profileId,p.name,p.group);
     this.db.prepare('INSERT INTO credential_profile(id,name,kind) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,kind=excluded.kind,revision=revision+1').run(p.profileId,p.name,p.authType);
-    this.db.prepare('INSERT INTO connection_profile(id,host_id,credential_id,name,protocol,endpoint_json,username,revision,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,endpoint_json=excluded.endpoint_json,username=excluded.username,revision=excluded.revision,identity_revision=identity_revision+1,updated_at=excluded.updated_at').run(p.profileId,p.profileId,p.profileId,p.name,'ssh',JSON.stringify({host:p.host,port:p.port}),p.username,revision,Date.now());
-    return {...p,revision};
+    this.db.prepare(`INSERT INTO connection_profile(id,host_id,credential_id,name,protocol,endpoint_json,username,revision,updated_at,options_json) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,protocol=excluded.protocol,endpoint_json=excluded.endpoint_json,username=excluded.username,revision=excluded.revision,identity_revision=identity_revision+1,updated_at=excluded.updated_at,options_json=json_set(connection_profile.options_json,'$.ftpSecurity',json_extract(excluded.options_json,'$.ftpSecurity'),'$.encoding',json_extract(excluded.options_json,'$.encoding'),'$.description',json_extract(excluded.options_json,'$.description'),'$.jumpProfileIds',json_extract(excluded.options_json,'$.jumpProfileIds'))`).run(p.profileId,p.profileId,p.profileId,p.name,p.protocol??'ssh',JSON.stringify({host:p.host,port:p.port}),p.username,revision,updatedAt,JSON.stringify({ftpSecurity:p.ftpSecurity,encoding:p.encoding??'utf8',description:p.description??'',jumpProfileIds:p.jumpProfileIds??[]}));
+    const {protocol,description,jumpProfileIds,...fields}=p;
+    return {...fields,encoding:p.encoding??'utf8',...(protocol==='telnet'||protocol==='ftp'?{protocol}:{}),...(description?{description}:{}),...(jumpProfileIds?.length?{jumpProfileIds}:{}),revision,updatedAt};
   }
   removeGroup(path:string,members:{profileId:string;revision:number}[]) {
     const normalize=(value:string)=>value.split('/').map(s=>s.trim()).filter(Boolean).join('/')||'默认分组';
@@ -55,6 +61,7 @@ export class Storage {
       const affected=this.profiles().filter(p=>{const group=normalize(p.group);return group===target||group.startsWith(target+'/');});
       const expected=new Map(members.map(p=>[p.profileId,p.revision]));
       if(expected.size!==members.length||affected.length!==members.length||affected.some(p=>expected.get(p.profileId)!==p.revision))throw new AppError('PROFILE_CONFLICT','分组中的连接已变化，请刷新后重试。');
+      if(this.profiles().some(p=>!expected.has(p.profileId)&&p.jumpProfileIds?.some(id=>expected.has(id))))throw new AppError('PROFILE_ROUTE','分组中的跳板仍被其他连接引用。');
       for(const p of affected){
         this.db.prepare('DELETE FROM connection_profile WHERE id=?').run(p.profileId);
         this.db.prepare('DELETE FROM host_profile WHERE id=?').run(p.profileId);
@@ -64,13 +71,18 @@ export class Storage {
   }
   deleteProfile(id:string,revision:number) {
     this.transaction(()=>{
+      if(this.profiles().some(p=>p.jumpProfileIds?.includes(id)))throw new AppError('PROFILE_ROUTE','此跳板仍被其他连接引用，请先修改跳板链。');
       const changed=this.db.prepare('DELETE FROM connection_profile WHERE id=? AND revision=?').run(id,revision);
       if(Number(changed.changes)!==1) throw new AppError('PROFILE_CONFLICT','配置已修改或被任务引用，无法删除。');
       this.db.prepare('DELETE FROM host_profile WHERE id=?').run(id);
       this.db.prepare('DELETE FROM credential_profile WHERE id=?').run(id);
     });
   }
-  importProfiles(profiles:Profile[]) { return this.transaction(()=>profiles.map(p=>this.saveInner({...p,profileId:randomUUID(),revision:0},0)).length); }
+  importProfiles(profiles:Profile[]) { return this.transaction(()=>{
+    const ids=new Map(profiles.map(p=>[p.profileId,randomUUID()]));if(ids.size!==profiles.length)throw new AppError('PROFILE_ROUTE','导入配置包含重复标识。');
+    for(const p of profiles){const jumpProfileIds=p.jumpProfileIds?.map(id=>{const mapped=ids.get(id);if(!mapped)throw new AppError('PROFILE_ROUTE','导入包缺少跳板配置。');return mapped;});this.saveInner({...p,profileId:ids.get(p.profileId)!,jumpProfileIds,revision:0},0);}
+    this.validateRoutes();return profiles.length;
+  }); }
   trust(host:string,port:number):string[] {
     return (this.db.prepare('SELECT fingerprint FROM known_host WHERE host=? AND port=? AND trust_scope=?').all(host,port,'local') as {fingerprint:string}[]).map(r=>r.fingerprint);
   }

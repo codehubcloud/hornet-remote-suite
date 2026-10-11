@@ -677,3 +677,12 @@ TunnelService统一管理local、remote、dynamic转发。默认监听loopback�
 - 主题
 - 录制
 - Shell恢复
+
+
+### 2026-10-11 显式跳板链实现补充
+
+Profile.jumpProfileIds 保存最多四个有序跳板引用；引用目标必须是已保存的直连 SSH 配置，禁止重复、自身、Telnet 和嵌套隐式链。存储层在事务中校验全图；删除跳板/分组时检查外部引用，导入完整配置包时统一重建引用，失败整批回滚。数据使用已有 options_json，不改变基础数据库校验和。
+
+Connections 通过上一跳 Client.forwardOut 创建到下一跳 host:port 的通道，并交给下一跳 Client.connect 的 sock；每跳独立执行原有密码/私钥/Agent/交互认证和 host:port 主机密钥校验。中间连接使用隔离租约，由下游持有，目标关闭时逐级释放；不影响其他独立连接。为链预留连接配额，异步打开期间保护被引用配置，整链 110 秒截止及单次转发 30 秒截止，取消信号传递至认证 challenge、连接和转发通道，失败/超时关闭认证窗口并释放资源。
+
+验证：jump-chain.test.ts 使用两级跳板和只能由跳板解析的夹具主机名，检查三次认证/指纹、SFTP、目标复用、上游回收、认证失败、目标指纹变化和超时取消；session-advanced-smoke.mjs 验证真实表单配置及逐跳认证。上游代理、高级认证扩展和真实服务器互通矩阵仍待补齐。

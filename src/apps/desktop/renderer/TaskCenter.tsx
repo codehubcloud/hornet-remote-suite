@@ -1,3 +1,4 @@
+import { t as tr } from './i18n';
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from './store';
@@ -18,7 +19,7 @@ function restore():Layout {
  }catch{}
  return fit(defaults);
 }
-export function TaskCenter({activeId}:{activeId:string}) {
+export function TaskCenter({activeId,quiet=false}:{activeId:string;quiet?:boolean}) {
  const [layout,setLayout]=useState(restore),[slot,setSlot]=useState<HTMLElement|null>(null),[target,setTarget]=useState<Dock|null>(null);
  const current=useRef(layout);current.current=layout;
  const panel=useRef<HTMLElement>(null);
@@ -60,19 +61,20 @@ export function TaskCenter({activeId}:{activeId:string}) {
   gesture.current={kind,x:e.clientX,y:e.clientY,layout:initial,original,floating:original.dock==='floating'};
   e.preventDefault();
  }
+ if(quiet&&!tasks.length)return null;
  const floating=layout.dock==='floating';
- const content=<section ref={panel} aria-label="任务中心" data-dock={layout.dock} className={'tasks dockable-tasks'+(floating?' floating-tasks':'')+(layout.collapsed?' tasks-collapsed':'')}
+ const content=<section ref={panel} aria-label={tr("任务中心")} data-dock={layout.dock} className={'tasks dockable-tasks'+(floating?' floating-tasks':'')+(layout.collapsed?' tasks-collapsed':'')}
   style={{height:layout.collapsed?30:layout.height,...(floating?{left:layout.x,top:layout.y,width:layout.width}: {})}}>
-  {!floating&&!layout.collapsed&&<div className="task-height-grip" role="separator" aria-label="调整任务中心高度" aria-orientation="horizontal" aria-valuenow={layout.height} tabIndex={0} onPointerDown={e=>begin(e,'resize')} onKeyDown={e=>{if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();setLayout(s=>fit({...s,height:s.height+(e.key==='ArrowUp'?20:-20)}));}}}/>}
+  {!floating&&!layout.collapsed&&<div className="task-height-grip" role="separator" aria-label={tr("调整任务中心高度")} aria-orientation="horizontal" aria-valuenow={layout.height} tabIndex={0} onPointerDown={e=>begin(e,'resize')} onKeyDown={e=>{if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();setLayout(s=>fit({...s,height:s.height+(e.key==='ArrowUp'?20:-20)}));}}}/>}
   <div className="task-heading">
-   <button className="task-drag" title="拖动任务中心；拖到文件栏下半部或工作区底部可停靠" aria-label="拖动任务中心" onPointerDown={e=>begin(e,'move')}>⠿ <strong>任务中心</strong> <span>{active}</span></button>
-   <button aria-label="刷新任务" title="刷新任务" onClick={()=>void window.hornet.task.list().then(useStore.getState().setTasks).catch(useStore.getState().fail)}>↻</button>
-   <select aria-label="任务中心位置" value={layout.dock} onChange={e=>setLayout(s=>fit({...s,dock:e.target.value as Dock}))}><option value="left">左侧</option><option value="bottom">底部</option><option value="floating">浮动</option></select>
-   <button aria-label={layout.collapsed?'展开任务中心':'折叠任务中心'} aria-expanded={!layout.collapsed} onClick={()=>setLayout(s=>fit({...s,collapsed:!s.collapsed}))}>{layout.collapsed?'＋':'−'}</button>
+   <button className="task-drag" title={tr("拖动任务中心；拖到文件栏下半部或工作区底部可停靠")} aria-label={tr("拖动任务中心")} onPointerDown={e=>begin(e,'move')}>⠿ <strong>{tr("任务中心")}</strong> <span>{active}</span></button>
+   <button aria-label={tr("刷新任务")} title={tr("刷新任务")} onClick={()=>void window.hornet.task.list().then(useStore.getState().setTasks).catch(useStore.getState().fail)}>↻</button>
+   <select aria-label={tr("任务中心位置")} value={layout.dock} onChange={e=>setLayout(s=>fit({...s,dock:e.target.value as Dock}))}><option value="left">{tr("左侧")}</option><option value="bottom">{tr("底部")}</option><option value="floating">{tr("浮动")}</option></select>
+   <button aria-label={layout.collapsed?tr("展开任务中心"):tr("折叠任务中心")} aria-expanded={!layout.collapsed} onClick={()=>setLayout(s=>fit({...s,collapsed:!s.collapsed}))}>{layout.collapsed?'＋':'−'}</button>
   </div>
   {!layout.collapsed&&<TaskList/>}
-  {target&&<div className="task-drop-hint">松开停靠到{target==='left'?'文件列表下方':'工作区底部'} · Esc 取消</div>}
-  {floating&&!layout.collapsed&&<div className="task-size-grip" role="separator" aria-label="调整浮动任务中心大小" tabIndex={0} onPointerDown={e=>begin(e,'resize')} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();setLayout(s=>fit({...s,width:s.width+(e.key==='ArrowRight'?20:e.key==='ArrowLeft'?-20:0),height:s.height+(e.key==='ArrowDown'?20:e.key==='ArrowUp'?-20:0)}));}}}/>}
+  {target&&<div className="task-drop-hint">{tr("松开停靠到")}{target==='left'?tr("文件列表下方"):tr("工作区底部")}{tr("· Esc 取消")}</div>}
+  {floating&&!layout.collapsed&&<div className="task-size-grip" role="separator" aria-label={tr("调整浮动任务中心大小")} tabIndex={0} onPointerDown={e=>begin(e,'resize')} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();setLayout(s=>fit({...s,width:s.width+(e.key==='ArrowRight'?20:e.key==='ArrowLeft'?-20:0),height:s.height+(e.key==='ArrowDown'?20:e.key==='ArrowUp'?-20:0)}));}}}/>}
  </section>;
  return floating?createPortal(content,document.body):layout.dock==='left'&&slot?createPortal(content,slot):content;
 }

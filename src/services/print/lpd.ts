@@ -2,7 +2,7 @@ import { createServer, type Server, type Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, readdirSync, unlinkSync, openSync, fsyncSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
-import { printConfigSchema, type PrintConfig, type PrintJob } from '../../packages/contracts/native';
+import { printConfigSchema, printQueueSchema, type PrintQueue, type PrintConfig, type PrintJob } from '../../packages/contracts/native';
 import { AppError } from '../../packages/core/errors';
 
 class Reader {
@@ -14,6 +14,7 @@ class Reader {
 }
 export class LpdService {
   private server?: Server; private sockets = new Set<Socket>(); private jobs: PrintJob[] = []; private config?: PrintConfig;
+  private queues:PrintQueue[]=[];private receiving=new Map<string,number>();
   private reserved = 0; private stopped = false; private submitting = false;
   constructor(private root: string, private submit: (job: PrintJob, path: string) => Promise<number|undefined>) {
     mkdirSync(root,{recursive:true,mode:0o700});
@@ -21,14 +22,18 @@ export class LpdService {
     for(const job of this.jobs)if(job.state==='submitting'){job.state='unknown';job.error='上次提交结果不确定，请在系统打印队列核实；不会自动重打。';}
     // Only generated, unreferenced spool objects may be removed after interrupted receive.
     for(const name of readdirSync(root))if(/^[a-f0-9-]{36}\.control$/.test(name)||(/^[a-f0-9-]{36}\.spool$/.test(name)&&!this.jobs.some(j=>name===j.jobId+'.spool'&&j.state!=='cancelled')))unlinkSync(join(root,name));
+    if(existsSync(join(root,'queues.json')))this.queues=printQueueSchema.array().max(32).parse(JSON.parse(readFileSync(join(root,'queues.json'),'utf8')));
     this.save();
   }
   private save() { const path=join(this.root,'jobs.json');writeFileSync(path+'.tmp',JSON.stringify(this.jobs),{mode:0o600});const fd=openSync(path+'.tmp','r+');try{fsyncSync(fd);}finally{closeSync(fd);}renameSync(path+'.tmp',path); }
-  status() { return { listening: !!this.server?.listening, config: this.config, jobs: this.jobs.map(j=>({...j})) }; }
+  private saveQueues(next:PrintQueue[]){const path=join(this.root,'queues.json');writeFileSync(path+'.tmp',JSON.stringify(next),{mode:0o600});const fd=openSync(path+'.tmp','r+');try{fsyncSync(fd);}finally{closeSync(fd);}renameSync(path+'.tmp',path);this.queues=next;}
+  saveQueue(input:PrintQueue){const queue=printQueueSchema.parse(input),next=[...this.queues.filter(q=>q.queue!==queue.queue),queue];if(next.length>32)throw new Error('最多可配置 32 个打印队列。');this.saveQueues(next);return this.status();}
+  removeQueue(name:string){if(this.receiving.get(name)||this.jobs.some(j=>j.queue===name&&['held','submitting'].includes(j.state)))throw new Error('请先处理该队列正在接收或待提交的作业。');if(this.server&&this.config?.queue===name)throw new Error('请先停止监听再删除启动队列。');this.saveQueues(this.queues.filter(q=>q.queue!==name));return this.status();}
+  status() { return { queues:this.queues.map(q=>({...q})),listening: !!this.server?.listening, config: this.config, jobs: this.jobs.map(j=>({...j})) }; }
   async start(input: PrintConfig) {
     if(this.stopped)throw new Error('打印服务已停止。');
     if(this.server)throw new Error('请先停止当前 LPD 监听。');
-    const config=printConfigSchema.parse(input);this.config=config;
+    const config=printConfigSchema.parse(input);this.saveQueue({queue:config.queue,printer:config.printer,mode:config.mode,enabled:true});this.config=config;
     const server=this.server=createServer(socket=>{
       const source=(socket.remoteAddress??'').replace(/^::ffff:/,'');
       if(this.sockets.size>=4||!config.allowedSources.includes(source)){socket.destroy();return;}
@@ -41,12 +46,15 @@ export class LpdService {
   }
   async stop() { const server=this.server;this.server=undefined;for(const socket of this.sockets)socket.destroy();if(server)await new Promise<void>(r=>server.close(()=>r())); }
   private async receive(socket: Socket, source: string, config: PrintConfig) {
-    const reader=new Reader(socket),jobId=randomUUID(),path=join(this.root,jobId+'.spool');let committed=false,allocation=0;
+    const reader=new Reader(socket),jobId=randomUUID(),path=join(this.root,jobId+'.spool');let committed=false,allocation=0,receivingQueue:string|undefined;
     try {
       const first=await reader.line(),queue=first.subarray(1).toString('ascii').trim().split(/\s+/)[0];
-      if(queue!==config.queue)throw new Error('未知队列。');
+      const target=this.queues.find(q=>q.queue===queue);if(!target)throw new Error('未知队列。');
+      const queueConfig={...target};
       if(first[0]===3||first[0]===4){socket.end(this.jobs.filter(j=>j.queue===queue).map(j=>`${j.jobId} ${j.state} ${j.bytes} bytes\n`).join('')||'no entries\n');return;}
       if(first[0]!==2)throw new Error('不支持远程删除或自动打印命令。');
+      if(!queueConfig.enabled)throw new Error('队列已暂停接收。');
+      receivingQueue=queue;this.receiving.set(queue,(this.receiving.get(queue)??0)+1);
       socket.write(Buffer.from([0]));
       let control: Buffer|undefined, dataName:string|undefined, dataBytes=0;
       for(let part=0;part<2;part++){
@@ -67,13 +75,14 @@ export class LpdService {
           const lines=control.toString('utf8').split('\n');
           const references=lines.filter(l=>/^[a-z]/.test(l));
           if(references.length!==1||!['f','l'].includes(references[0][0])||references[0].slice(1)!==dataName)throw new Error('仅支持单个 f/l 数据文件，引用不匹配。');
-          const job:PrintJob={jobId,queue,printer:config.printer,mode:config.mode,source,name:(lines.find(l=>l.startsWith('J'))?.slice(1)??dataName).replace(/[\x00-\x1f\x7f]/g,'').slice(0,128),bytes:dataBytes,state:'held',createdAt:Date.now()};
+          const job:PrintJob={jobId,queue,printer:queueConfig.printer,mode:queueConfig.mode,source,owner:(lines.find(l=>l.startsWith('P'))?.slice(1)??'').replace(/[\x00-\x1f\x7f]/g,'').slice(0,128),host:(lines.find(l=>l.startsWith('H'))?.slice(1)??'').replace(/[\x00-\x1f\x7f]/g,'').slice(0,128),name:(lines.find(l=>l.startsWith('J'))?.slice(1)??dataName).replace(/[\x00-\x1f\x7f]/g,'').slice(0,128),bytes:dataBytes,state:'held',createdAt:Date.now()};
           this.jobs.push(job);try{this.save();}catch(e){this.jobs.pop();throw e;}committed=true;
         }
         socket.write(Buffer.from([0]));
       }
       socket.end();
     }finally{
+      if(receivingQueue){const count=(this.receiving.get(receivingQueue)??1)-1;if(count)this.receiving.set(receivingQueue,count);else this.receiving.delete(receivingQueue);}
       this.reserved-=allocation;
       if(!committed&&existsSync(path))unlinkSync(path);
       const controlPath=join(this.root,jobId+'.control');if(existsSync(controlPath))unlinkSync(controlPath);

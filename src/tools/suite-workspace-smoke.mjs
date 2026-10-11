@@ -1,0 +1,82 @@
+import { dismissStartupSessions } from './session-dialog-helper.mjs';
+import { _electron as electron,expect } from '@playwright/test';
+import { mkdtemp,rm,mkdir,writeFile,readFile } from 'node:fs/promises';
+import { join,resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
+import { createConnection } from 'node:net';
+import { build } from 'esbuild';
+await mkdir('test-results',{recursive:true});
+await build({entryPoints:['tests/fixtures/ssh-server.ts'],outfile:'test-results/suite-fixture.cjs',bundle:true,platform:'node',format:'cjs',external:['ssh2']});
+const server=await createRequire(import.meta.url)(resolve('test-results/suite-fixture.cjs')).sshFixture();
+const data=await mkdtemp(join(tmpdir(),'hornet-suite-')),local=join(data,'local');await mkdir(local);await writeFile(join(local,'upload.txt'),'local upload payload');
+const env={...process.env,HORNET_USER_DATA:data,HORNET_SMOKE:'1'};delete env.ELECTRON_RUN_AS_NODE;
+async function sendPrint(port){
+ const socket=createConnection({host:'127.0.0.1',port});socket.setTimeout(10000,()=>socket.destroy(new Error('LPD timeout')));
+ const iterator=socket[Symbol.asyncIterator]();let buffer=Buffer.alloc(0);
+ const ack=async()=>{while(!buffer.length){const next=await iterator.next();if(next.done)throw new Error('LPD closed');buffer=Buffer.concat([buffer,next.value]);}const byte=buffer[0];buffer=buffer.subarray(1);if(byte!==0)throw new Error('LPD rejected test job');};
+ try{socket.write('\x02reports\n');await ack();for(const [code,name,body] of [[2,'cfA001test',Buffer.from('Hlocal-test\nPtester\nJDesktop fixture\nfdfA001test\n')],[3,'dfA001test',Buffer.from('hello print')]]){socket.write(Buffer.concat([Buffer.from([code]),Buffer.from(body.length+' '+name+'\n')]));await ack();socket.write(Buffer.concat([body,Buffer.from([0])]));await ack();}}finally{socket.destroy();}
+}
+let app;
+try{
+ app=await electron.launch({args:['.'],env,timeout:30000});const page=await app.firstWindow();await dismissStartupSessions(page);page.setDefaultTimeout(15000);
+ const menu=async(group,item)=>{await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:group,exact:true}).click();await page.getByRole('menuitem',{name:item,exact:true}).click();};
+ await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},local);
+ await page.getByLabel('快速连接地址',{exact:true}).fill('tester@127.0.0.1:'+server.port);await page.locator('.quick-connect-bar').getByRole('button',{name:'连接',exact:true}).click();
+ await page.getByLabel('名称',{exact:true}).fill('Suite fixture');await page.getByRole('button',{name:'保存并连接',exact:true}).click();
+ await page.getByLabel('认证信息',{exact:true}).fill('test-password');await page.getByRole('button',{name:'继续连接',exact:true}).click();await page.getByRole('button',{name:'已核对，信任此主机',exact:true}).click();
+ await expect(page.locator('.terminal-host')).toBeVisible();await page.getByRole('button',{name:'打开文件',exact:true}).click();
+ const left=page.getByRole('region',{name:'本地文件',exact:true}),right=page.getByRole('region',{name:'远端文件',exact:true});
+ await left.getByRole('button',{name:'选择本地目录',exact:true}).click();await expect(left.getByText('upload.txt',{exact:true})).toBeVisible();
+ await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:'命令',exact:true}).click();await expect(page.getByRole('menuitem',{name:'向左传输',exact:true})).toBeDisabled();await page.keyboard.press('Escape');
+ await left.getByLabel('选择本地文件 upload.txt',{exact:true}).check();await menu('命令','向右传输');
+ await expect.poll(()=>server.files.get('/upload.txt')?.toString()).toBe('local upload payload');
+ await expect(right.getByLabel('选择远端文件 upload.txt',{exact:true})).toBeVisible();
+ await right.getByLabel('选择远端文件 hello.txt',{exact:true}).check();await menu('命令','向左传输');
+ await expect.poll(async()=>{try{return await readFile(join(local,'hello.txt'),'utf8');}catch{return '';}}).toBe('hello 世界\n');
+ await expect(left.getByText('hello.txt',{exact:true})).toBeVisible();
+ await right.getByRole('row').filter({hasText:'hello.txt'}).getByRole('button',{name:'下载',exact:true}).click();await expect(page.getByRole('alert')).toContainText('已存在');await page.getByRole('alert').getByRole('button',{name:'关闭',exact:true}).click();
+ await left.getByRole('button',{name:'新建本地目录',exact:true}).click();await page.getByLabel('目录名称',{exact:true}).fill('new folder');await page.getByRole('button',{name:'创建目录',exact:true}).click();
+ await left.getByRole('button',{name:'▰ new folder',exact:true}).click();await expect(left.getByLabel('本地相对路径',{exact:true})).toHaveValue('new folder');await left.getByRole('button',{name:'上级',exact:true}).click();
+ 
+ await mkdir(join(local,'project','深层'),{recursive:true});await mkdir(join(local,'project','empty'));await writeFile(join(local,'project','深层','中文.txt'),'recursive fixture');
+ await left.getByRole('button',{name:'刷新本地',exact:true}).click();await left.getByLabel('选择本地文件 project',{exact:true}).check();await left.getByRole('button',{name:'上传所选（1）→',exact:true}).click();
+ const preview=page.getByRole('dialog',{name:'目录传输预览',exact:true});await expect(preview).toBeVisible();await expect(preview).toContainText('project/深层/中文.txt');
+ await page.screenshot({path:'test-results/directory-transfer-preview.png'});await preview.getByRole('button',{name:'执行补齐传输',exact:true}).click();
+ await expect.poll(()=>server.files.get('/project/深层/中文.txt')?.toString()).toBe('recursive fixture');
+ await expect.poll(()=>server.directories.has('/project/empty')).toBe(true);
+ await expect(right.getByLabel('选择远端文件 project',{exact:true})).toBeVisible();
+ await left.getByRole('button',{name:'▰ new folder',exact:true}).click();
+ await right.getByRole('row').filter({hasText:'project'}).getByRole('button',{name:'下载目录',exact:true}).click();await expect(preview).toContainText('project/深层/中文.txt');
+ await preview.getByRole('button',{name:'执行补齐传输',exact:true}).click();
+ await expect.poll(async()=>{try{return await readFile(join(local,'new folder','project','深层','中文.txt'),'utf8');}catch{return '';}}).toBe('recursive fixture');
+ await left.getByRole('button',{name:'上级',exact:true}).click();
+ await page.getByRole('button',{name:'比较并补齐远端 →',exact:true}).click();await expect(preview).toContainText('目标文件已存在');await preview.getByRole('button',{name:'关闭预览',exact:true}).click();
+ await page.screenshot({path:'test-results/file-workspace.png'});
+ if(server.authCount!==1)throw new Error('File transfers did not reuse SSH authentication');
+ await page.locator('.tabs').getByRole('button',{name:'关闭 Suite fixture',exact:true}).first().click();await page.locator('.tabs').getByRole('button',{name:'关闭 Suite fixture',exact:true}).click();
+ await page.getByRole('button',{name:'◈ 工作台',exact:true}).click();
+ await page.getByRole('region',{name:'快速开始',exact:true}).getByRole('button',{name:'打印中心',exact:false}).click();
+ const print=page.getByRole('region',{name:'LPD 打印中心',exact:true});
+ await menu('文件','新建队列');
+ await print.getByLabel('打印队列名',{exact:true}).fill('reports');await print.getByLabel('队列打印机',{exact:true}).fill('Fixture printer');await print.getByRole('button',{name:'保存打印队列',exact:true}).click();
+ await expect(print.getByRole('button',{name:'编辑队列 reports',exact:true})).toBeVisible();
+ await print.getByRole('button',{name:'新建打印队列',exact:true}).click();await print.getByLabel('打印队列名',{exact:true}).fill('logs');await print.getByLabel('队列打印机',{exact:true}).fill('Log printer');await print.getByRole('button',{name:'保存打印队列',exact:true}).click();
+ await expect(print.getByRole('button',{name:'编辑队列 logs',exact:true})).toBeVisible();await print.getByRole('group',{name:'打印队列筛选'}).getByRole('button',{name:'logs（0）',exact:true}).click();await menu('队列','启用 / 暂停');await expect(print.getByRole('button',{name:'恢复接收 logs',exact:true})).toBeVisible();
+ await print.getByLabel('LPD 端口',{exact:true}).fill('0');await print.getByRole('button',{name:'启动 LPD 接收',exact:true}).click();await expect(print.getByLabel('LPD 监听状态',{exact:true})).toContainText('监听 127.0.0.1:');
+ await expect(print.getByLabel('LPD 启动队列',{exact:true})).toHaveValue('reports');
+ const status=await page.evaluate(()=>window.hornet.print.status());
+ await page.locator('.tabs').getByRole('button',{name:'关闭 打印中心',exact:true}).click();await expect.poll(()=>page.evaluate(async()=>(await window.hornet.print.status()).listening)).toBe(true);
+ await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:'工具',exact:true}).click();await page.getByRole('menuitem',{name:'打印中心',exact:true}).click();await print.getByRole('button',{name:'队列与监听设置',exact:true}).click();
+ await sendPrint(status.config.port);
+ await expect(print.getByRole('row').filter({hasText:'Desktop fixture'})).toContainText('tester');await print.getByRole('row').filter({hasText:'Desktop fixture'}).getByRole('button',{name:'取消任务',exact:true}).click();await expect(print.getByRole('row').filter({hasText:'Desktop fixture'})).toContainText('已取消');
+ await print.getByRole('button',{name:'停止接收',exact:true}).click();await expect(print.getByLabel('LPD 监听状态',{exact:true})).toHaveText('LPD 未监听');
+ await print.scrollIntoViewIfNeeded();await page.screenshot({path:'test-results/print-center.png'});
+ await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:'工具',exact:true}).click();await page.getByRole('menuitem',{name:'X11 图形应用',exact:true}).click();
+ await page.getByLabel('X11 预设名称',{exact:true}).fill('Graphical tools');await page.getByLabel('X11 启动命令',{exact:true}).fill('xterm -ls');await page.getByLabel('X11 DPI',{exact:true}).fill('120');await page.getByRole('button',{name:'保存启动预设',exact:true}).click();
+ await page.reload();await page.getByRole('region',{name:'快速开始',exact:true}).getByRole('button',{name:'打印中心',exact:false}).click();await print.getByRole('button',{name:'队列与监听设置',exact:true}).click();await expect(print.getByRole('button',{name:'恢复接收 logs',exact:true})).toBeVisible();
+ await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:'工具',exact:true}).click();await page.getByRole('menuitem',{name:'X11 图形应用',exact:true}).click();
+ await page.getByLabel('X11 启动预设',{exact:true}).selectOption({label:'Graphical tools'});await expect(page.getByLabel('X11 启动命令',{exact:true})).toHaveValue('xterm -ls');await expect(page.getByLabel('X11 DPI',{exact:true})).toHaveValue('120');await expect(page.getByRole('button',{name:'执行命令并转发 X11',exact:true})).toBeDisabled();
+ console.log('Suite workspace smoke passed: local/remote upload/download, recursive folders/empty dirs/Unicode, comparison conflicts, queue routing/cancel/persistence, X11 preset restore.');
+}catch(error){if(app)await (await app.firstWindow()).screenshot({path:'test-results/suite-failure.png'}).catch(()=>{});throw error;}
+finally{if(app)await app.evaluate(({app})=>app.exit(0));await server.close();await rm(data,{recursive:true,force:true,maxRetries:5,retryDelay:200});}

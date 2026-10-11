@@ -1,3 +1,4 @@
+import { dismissStartupSessions } from './session-dialog-helper.mjs';
 import { _electron as electron,expect } from '@playwright/test';
 import { mkdtemp,rm,mkdir } from 'node:fs/promises';
 import { join,resolve } from 'node:path';
@@ -11,7 +12,7 @@ const data=await mkdtemp(join(tmpdir(),'hornet-commands-'));
 const env={...process.env,HORNET_USER_DATA:data,HORNET_SMOKE:'1'};delete env.ELECTRON_RUN_AS_NODE;
 let app;
 try{
- app=await electron.launch({args:['.'],env,timeout:30000});const page=await app.firstWindow();page.setDefaultTimeout(15000);
+ app=await electron.launch({args:['.'],env,timeout:30000});const page=await app.firstWindow();await dismissStartupSessions(page);page.setDefaultTimeout(15000);
  const menu=async(group,item)=>{await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:group,exact:true}).click();await page.getByRole('menuitem',{name:item,exact:true}).click();};
  await page.getByLabel('快速连接地址',{exact:true}).fill('tester@127.0.0.1:'+server.port);
  await page.locator('.quick-connect-bar').getByRole('button',{name:'连接',exact:true}).click();
