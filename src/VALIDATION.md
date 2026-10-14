@@ -224,3 +224,9 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 实际 0.0.2 打包 EXE 在独立 LF / CRLF 历史数据库中启动成功，保留连接并完成 SSH/SFTP、Windows 原生辅助程序和 ConPTY 检查。原打包目录遇到文件占用，因此在隔离 patch-check 目录构建验证；没有终止用户应用。
 - 注入未知数据库摘要验证：拒绝启动并向主进程报告“数据库版本不兼容”；不再只显示“后台服务退出”，也不会打印完整压缩后台代码。
 - 发布工作流对五个平台增加 LF/CRLF 历史数据库升级验证；补丁版本为 0.0.2，保持 0.0.1 的历史发布不变。
+
+### 0.0.2 发布验收
+
+- 私有 Actions [38541491008](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38541491008) 的完整检查、五个平台构建、各平台 LF/CRLF 历史数据库启动与连接保留测试、publish 均成功。
+- [v0.0.2](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.2) 已公开并设置为 latest；八个附件齐全，七个安装包摘要与公开 SHA256SUMS / GitHub asset digest 一致。
+- 更新公开 README 与 0.0.1 发布说明，明确使用 0.0.2 覆盖升级且无需删除数据库。源码标签 v0.0.2 保持在修复提交 42916e1；本段验收文档独立提交，不修改已发布标签或安装包。
