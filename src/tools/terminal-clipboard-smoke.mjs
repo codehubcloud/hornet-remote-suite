@@ -42,7 +42,10 @@ try{
   // Flush the clipped pane's layout before measuring its glyph coordinates.
   await cell.locator('.terminal-host').click({position:{x:150,y:50}});
   const text=cell.locator('.xterm-rows').getByText('fixture ready',{exact:true}).first();await expect(text).toBeVisible();
-  const box=await text.boundingBox();if(!box)throw new Error('Fixture text is not visible');
+  let box,previous;
+  // Fitting a split replaces xterm's text spans; wait for the new span and its
+  // geometry instead of using a node that disappears between two RPC calls.
+  await expect.poll(async()=>{const current=await text.evaluate(node=>{if(!node.isConnected)return null;const rect=node.getBoundingClientRect();return {x:rect.x,y:rect.y,width:rect.width,height:rect.height};});if(!current||!current.width||!current.height){previous=undefined;return false;}const key=JSON.stringify(current),stable=key===previous;previous=key;box=current;return stable;},{intervals:[20,40,80,100]}).toBe(true);
   // xterm's screen receives mouse events; its text spans are pointer-events:none.
   await page.mouse.dblclick(box.x+4,box.y+4);
  };
