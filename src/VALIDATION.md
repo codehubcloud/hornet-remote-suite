@@ -241,3 +241,10 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 发布工作流新增各平台实际打包程序的剪贴板/右键回归；版本 0.0.3。
 
 - 云端首轮 verify、Windows、Linux x64/arm64 全部通过；两个 macOS 的失败点为分屏 fit 替换文本节点，导致跨两次 RPC 的 boundingBox 为 null。验收改为在同一次 renderer 调用读取连接节点的矩形，并等待两次一致后发送真实鼠标双击；原有复制/粘贴与选区断言不变。本机打包回归通过，重新触发云端验收。
+
+### 0.0.3 发布验收
+
+- 私有 Actions [38553972863](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38553972863) 全部成功：完整检查、Windows x64、macOS x64/arm64、Linux x64/arm64 与 publish。每个平台实际打包程序均通过历史数据库升级与剪贴板/终端右键菜单验收。
+- [v0.0.3](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.3) 已公开并设为 latest，七个安装包与 SHA256SUMS 齐全；逐一核对校验文件与 GitHub asset SHA-256 digest 一致。
+- Windows 安装包 SHA-256：`e7648fac6fd7ac0ff30bcdc34c63b7c24f0eb499e72e537d04ce9992703ac2c9`。
+- API 确认源码仓库仍为 private，公开 Git 树仅 README.md。源码发布标签 v0.0.3 保持在构建提交 0f6986b，验收文档独立提交；没有修改用户实际安装目录、数据库、远端连接或系统剪贴板。
