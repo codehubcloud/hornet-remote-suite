@@ -1,6 +1,6 @@
 import { describe,it,expect } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp,writeFile,readFile,rm,mkdir } from 'node:fs/promises';
+import { mkdtemp,writeFile,readFile,rm,mkdir,realpath } from 'node:fs/promises';
 import { join,resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { sshFixture } from '../fixtures/ssh-server';
@@ -16,7 +16,7 @@ import { Transfers } from '../../services/file/transfers';
 import type { HornetEvent } from '../../packages/contracts';
 async function waitFor(test:()=>boolean,timeout=12000){const end=Date.now()+timeout;while(!test()){if(Date.now()>end)throw new Error('Timed out waiting for condition');await new Promise(r=>setTimeout(r,15));}}
 async function harness(writeDelay=0,directoryTracking=true,options:Parameters<typeof sshFixture>[0]={}){
- const server=await sshFixture({writeDelay,directoryTracking,...options}),root=await mkdtemp(join(tmpdir(),'hornet-it-'));
+ const server=await sshFixture({writeDelay,directoryTracking,...options}),root=await realpath(await mkdtemp(join(tmpdir(),'hornet-it-')));
  const db=new Storage(join(root,'test.db'),resolve('packages/storage/schema.sql'));
  const profile=db.saveProfile({profileId:randomUUID(),name:'fixture',host:'127.0.0.1',port:server.port,username:'tester',authType:'password',group:'test',revision:0},0);
  const events:HornetEvent[]=[];

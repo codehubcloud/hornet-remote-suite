@@ -1,11 +1,11 @@
 import { it,expect } from 'vitest';
-import { mkdtemp,mkdir,writeFile,rm,symlink } from 'node:fs/promises';
+import { mkdtemp,mkdir,writeFile,rm,symlink,realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { LocalFiles } from '../../services/file/local-files';
 import { PathGrants } from '../../packages/security/path-grants';
 it('browses an approved root, creates children and grants files without escaping or overwriting',async()=>{
- const root=await mkdtemp(join(tmpdir(),'hornet-local-')),grants=new PathGrants(),files=new LocalFiles(grants);
+ const root=await realpath(await mkdtemp(join(tmpdir(),'hornet-local-'))),grants=new PathGrants(),files=new LocalFiles(grants);
  try{
   await writeFile(join(root,'中文.txt'),'hello');await mkdir(join(root,'child'));
   const directory=await files.choose('a',root);

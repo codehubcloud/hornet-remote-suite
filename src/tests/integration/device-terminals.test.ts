@@ -6,7 +6,7 @@ import { openSerial } from '../../services/terminal/serial';
 import { openLocal } from '../../services/terminal/local';
 import type { SerialTerminalConfig } from '../../packages/contracts/device-terminal';
 import type { HornetEvent } from '../../packages/contracts';
-import { mkdtemp,rm } from 'node:fs/promises';
+import { mkdtemp,rm,realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 async function wait(test:()=>boolean){const until=Date.now()+12000;while(!test()){if(Date.now()>until)throw new Error('Device terminal timeout');await new Promise(r=>setTimeout(r,20));}}
@@ -26,7 +26,7 @@ it('opens a serial stream with the mock hardware binding, converts input and rel
  }finally{await terminals.stop();MockBinding.reset();}
 });
 it.skipIf(process.platform!=='win32')('runs real ConPTY shells, reports dimensions and preserves independent lifecycle',async()=>{
- const directory=await mkdtemp(join(tmpdir(),'hornet-local-')),events:HornetEvent[]=[];
+ const directory=await realpath(await mkdtemp(join(tmpdir(),'hornet-local-'))),events:HornetEvent[]=[];
  const terminals=new DeviceTerminals((_owner,e)=>{events.push(e);if(e.type==='terminal.data')queueMicrotask(()=>{try{terminals.ack('a',e.terminalId,e.seq);}catch{}});});
  const output=(id:string)=>Buffer.concat(events.filter((e):e is Extract<HornetEvent,{type:'terminal.data'}>=>e.type==='terminal.data'&&e.terminalId===id).map(e=>Buffer.from(e.data))).toString();
  try{

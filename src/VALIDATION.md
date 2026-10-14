@@ -201,3 +201,6 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 私有仓库新增版本标签/手动发布工作流，五个本机架构 runner；公开 release 仅接收七个精确安装包与 SHA256SUMS，全部上传后公开草稿。
 - 公开仓库只初始化下载 README；RELEASE_TOKEN 通过 GitHub API 加密保存为私有仓库 Actions secret，没有写入源码或日志。
 - 首版无商业签名/Apple 公证，Windows 专用适配器支持范围已写入公开说明；ASAR 不作为源码加密。跨平台云端构建结果另行核验。
+
+- 云端 Windows 首轮检查暴露测试 fixture 的 8.3 短路径差异：RUNNER~1 与 runneradmin。三个测试文件的临时根目录改用 realpath；文件授权与传输目录身份检查保持不变。针对性 16 项测试和 typecheck 再次通过。
+- 本机 Windows NSIS 安装包已生成：Hornet-Remote-Suite-0.0.1-windows-x64.exe（104214841 字节）。
