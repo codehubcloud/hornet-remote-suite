@@ -204,3 +204,5 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 
 - 云端 Windows 首轮检查暴露测试 fixture 的 8.3 短路径差异：RUNNER~1 与 runneradmin。三个测试文件的临时根目录改用 realpath；文件授权与传输目录身份检查保持不变。针对性 16 项测试和 typecheck 再次通过。
 - 本机 Windows NSIS 安装包已生成：Hornet-Remote-Suite-0.0.1-windows-x64.exe（104214841 字节）。
+
+- 云端完整检查已通过（148 项现有测试 + 发布校验）。首轮跨平台打包识别并修正 macOS Electron.app 分发根路径、DEB 必需 homepage 元数据；发布白名单按 Linux 目标实际架构名称使用 x86_64.AppImage / amd64.deb。

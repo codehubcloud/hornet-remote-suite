@@ -13,7 +13,8 @@ export function expectedAssets(version) {
   return [
     `Hornet-Remote-Suite-${version}-windows-x64.exe`,
     ...['x64', 'arm64'].map(arch => `Hornet-Remote-Suite-${version}-macos-${arch}.dmg`),
-    ...['x64', 'arm64'].flatMap(arch => ['AppImage', 'deb'].map(ext => `Hornet-Remote-Suite-${version}-linux-${arch}.${ext}`)),
+    ...['x86_64', 'arm64'].map(arch => `Hornet-Remote-Suite-${version}-linux-${arch}.AppImage`),
+    ...['amd64', 'arm64'].map(arch => `Hornet-Remote-Suite-${version}-linux-${arch}.deb`),
   ].sort();
 }
 export async function checksumAssets(directory, version) {

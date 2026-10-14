@@ -2,7 +2,7 @@ module.exports = {
   appId: 'com.codehubcloud.hornetremotesuite',
   productName: 'Hornet Remote Suite',
   // npm ci already installed the matching, checksum-verified Electron runtime.
-  electronDist: () => require('node:path').dirname(require('electron')),
+  electronDist: () => require('node:path').join(require('node:path').dirname(require.resolve('electron/package.json')), 'dist'),
   copyright: 'Copyright © 2026 codehubcloud',
   directories: { output: 'release' },
   artifactName: 'Hornet-Remote-Suite-${version}-${os}-${arch}.${ext}',
