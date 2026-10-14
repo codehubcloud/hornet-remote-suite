@@ -12,7 +12,9 @@ export class Storage {
     this.db = new DatabaseSync(path);
     this.db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
     const version = this.db.prepare('PRAGMA user_version').get() as {user_version:number};
-    const schema = readFileSync(schemaFile,'utf8');
+    // Git checkouts and installed packages may differ only in line endings.
+    // Schema identity must not depend on the operating system that built it.
+    const schema = readFileSync(schemaFile,'utf8').replace(/\r\n/g,'\n');
     const checksum = createHash('sha256').update(schema).digest('hex');
     if (version.user_version === 0) {
       this.db.exec('PRAGMA journal_mode=WAL;');
@@ -21,8 +23,16 @@ export class Storage {
         this.db.prepare('INSERT INTO schema_migration VALUES (1,?,?)').run(checksum,Date.now());
         this.db.exec('PRAGMA user_version=1;');
       });
-    } else if (version.user_version !== 1 || (this.db.prepare('SELECT checksum FROM schema_migration WHERE version=1').get() as {checksum:string})?.checksum !== checksum) {
-      this.db.close(); throw new AppError('DATA_VERSION','数据库版本不兼容，已停止写入。');
+    } else {
+      if (version.user_version !== 1) { this.db.close(); throw new AppError('DATA_VERSION','数据库版本不兼容，已停止写入。'); }
+      const stored=(this.db.prepare('SELECT checksum FROM schema_migration WHERE version=1').get() as {checksum:string}|undefined)?.checksum;
+      const legacyWindowsChecksum=createHash('sha256').update(schema.replace(/\n/g,'\r\n')).digest('hex');
+      if (stored !== checksum && stored !== legacyWindowsChecksum) {
+        this.db.close(); throw new AppError('DATA_VERSION','数据库版本不兼容，已停止写入。');
+      }
+      // Only migrate the proven CRLF equivalent, without rebuilding tables or
+      // discarding profiles. Unknown schema checksums remain an error.
+      if (stored !== checksum) this.transaction(()=>{this.db.prepare('UPDATE schema_migration SET checksum=? WHERE version=1 AND checksum=?').run(checksum,stored);});
     }
   }
   transaction<T>(action:()=>T):T {

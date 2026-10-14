@@ -36,3 +36,7 @@ npm run test:package
 [Electron Builder](https://www.electron.build/v26/docs/configuration/)、
 [GitHub token 权限](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions)、
 [GitHub 托管构建机](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。
+
+## 0.0.2 升级验收
+
+数据库结构文件必须按 LF 打包。Storage 只接受当前内容对应的 LF / CRLF 两种历史校验值，并将历史 CRLF 值规范为 LF；不接受其他校验值，不删除或重建已有配置。每个平台的打包程序验收分别注入已有 LF 和 CRLF 数据库，并检查已有连接保持不变。

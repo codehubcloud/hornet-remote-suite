@@ -322,3 +322,7 @@ SSH/Telnet 会话属性可保存字符编码，导入导出保留；串口对话
 ## 二进制安装包发布
 
 版本从 `0.0.1` 开始。安装包发布到 [公开 release 仓库](https://github.com/codehubcloud/hornet-remote-suite-release/releases)，项目源码保留在私有仓库。支持 Windows x64 EXE、macOS x64/arm64 DMG、Linux x64/arm64 AppImage/DEB。构建与发布方法见 [RELEASING.md](RELEASING.md)。
+
+### 0.0.2 启动兼容性修复
+
+修复 Windows 安装版读取已有 LF 数据库时误判版本不兼容的问题。结构文件统一 LF，兼容历史 CRLF 校验值，原有连接和配置保留。启动错误通过后台消息显示具体原因。

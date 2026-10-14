@@ -1,12 +1,35 @@
 import { describe,it,expect } from 'vitest';
-import { randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
+import { randomUUID,createHash } from 'node:crypto';
+import { mkdtemp,readFile,writeFile,rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join,resolve } from 'node:path';
 import { Storage } from '../../packages/storage/database';
 import { profileSchema,schemas } from '../../packages/contracts';
 import { Connections } from '../../services/ssh/connections';
 import { Challenges } from '../../packages/security/challenges';
 const profile=()=>({profileId:randomUUID(),name:'server',host:'localhost',port:22,username:'tester',group:'test',authType:'password' as const,revision:0});
 describe('persistent model and untrusted input',()=>{
+ it('opens LF/CRLF schema variants and migrates only legacy line-ending checksums without losing profiles',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'hornet-schema-'));
+  const schema=(await readFile('packages/storage/schema.sql','utf8')).replace(/\r\n/g,'\n');
+  const canonical=createHash('sha256').update(schema).digest('hex');
+  const windows=createHash('sha256').update(schema.replace(/\n/g,'\r\n')).digest('hex');
+  try{
+   for(const eol of ['lf','crlf']) for(const oldChecksum of [canonical,windows]){
+    const schemaPath=join(directory,'schema-'+eol+'.sql'),dbPath=join(directory,eol+'-'+oldChecksum+'.db');
+    await writeFile(schemaPath,eol==='lf'?schema:schema.replace(/\n/g,'\r\n'));
+    let db=new Storage(dbPath,schemaPath);
+    const saved=db.saveProfile(profile(),0);
+    db.db.prepare('UPDATE schema_migration SET checksum=? WHERE version=1').run(oldChecksum);db.close();
+    db=new Storage(dbPath,schemaPath);
+    expect(db.profile(saved.profileId)).toEqual(saved);
+    expect(db.db.prepare('SELECT checksum FROM schema_migration WHERE version=1').get()!.checksum).toBe(canonical);
+    expect(db.db.prepare('PRAGMA user_version').get()!.user_version).toBe(1);
+    db.db.prepare('UPDATE schema_migration SET checksum=? WHERE version=1').run('0'.repeat(64));db.close();
+    expect(()=>new Storage(dbPath,schemaPath)).toThrow('数据库版本不兼容');
+   }
+  }finally{await rm(directory,{recursive:true,force:true});}
+ });
  it('validates jump references, prevents dangling routes and remaps imported chains atomically',()=>{
   const db=new Storage(':memory:',resolve('packages/storage/schema.sql'));
   try{

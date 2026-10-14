@@ -16,7 +16,8 @@ export class Backend {
       this.child=utilityProcess.fork(join(hostDirectory,'host.cjs'),[userData],{serviceName:'Hornet Protocol Host',stdio:'pipe'});
       const timeout=setTimeout(()=>{this.child.kill();reject(new Error('后台服务启动超时'));},15000);
       this.child.once('exit',()=>{this.stopped();clearTimeout(timeout);clearInterval(this.watchdog);reject(new Error('后台服务退出'));for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new AppError('IPC004','后台服务已退出，请重启应用。'));}this.pending.clear();this.emit({type:'service.error',message:'连接服务已停止，请重启应用。'});});
-      this.child.on('message',(m:{type:string;event?:HornetEvent;requestId:string;result?:Result<unknown>;profile?:Profile})=>{
+      this.child.on('message',(m:{type:string;event?:HornetEvent;requestId:string;result?:Result<unknown>;profile?:Profile;error?:{code:string;message:string;retryable:boolean}})=>{
+        if(m.type==='startup.failed'&&m.error){clearTimeout(timeout);reject(new AppError(m.error.code,m.error.message,m.error.retryable));return;}
         if(m.type==='ready'){clearTimeout(timeout);resolve();}
         if(m.type==='heartbeat')this.beat=Date.now();
         if(m.type==='event'&&m.event)this.emit(m.event);

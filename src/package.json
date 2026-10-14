@@ -1,6 +1,6 @@
 {
   "name": "hornet-remote-suite",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Unified remote workstation",
   "main": "dist/main.cjs",

@@ -27,6 +27,7 @@ import { Transfers } from '../file/transfers';
 interface Port { postMessage(data:unknown):void; on(event:'message',listener:(event:{data:Message})=>void):void }
 interface Message { type:string; owner:string; method:string; requestId:string; payload:unknown; context?:TransferContext; secret?:string }
 const port=(process as NodeJS.Process & {parentPort:Port}).parentPort;
+function startHost(){
 const store=new Storage(join(process.argv[2],'data','hornet.db'),join(__dirname,'schema.sql'));
 const emit=(owner:string,event:HornetEvent)=>port.postMessage({type:'event',owner,event});
 const vaultWait=new Map<string,(secret:string|undefined)=>void>();
@@ -147,3 +148,10 @@ port.on('message',({data:m})=>{
 });
 port.postMessage({type:'ready',version:1});
 setInterval(()=>port.postMessage({type:'heartbeat'}),5000).unref();
+}
+try{startHost();}catch(error){
+  // Deliver a safe startup error before exiting, rather than losing its cause
+  // to a generic "backend exited" message or dumping the bundled source.
+  port.postMessage({type:'startup.failed',error:safeError(error)});
+  setTimeout(()=>process.exit(1),50);
+}

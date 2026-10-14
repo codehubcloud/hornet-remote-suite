@@ -214,3 +214,13 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - [公开 v0.0.1](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.1) 已正式发布：七个安装包与 SHA256SUMS；draft=false。
 - 已从公开下载地址读取 SHA256SUMS，逐一核对七个安装包与 GitHub asset SHA-256 digest 一致。公开 Git 仓库树只有 README.md；源码仓库 API 确认 private=true。
 - 源码发布标签 v0.0.1 保留在构建提交 79d87a5；本段验收记录作为后续文档提交，不移动已发布版本标签。
+
+## 2026-10-14：0.0.2 安装版启动修复
+
+- 在实际已安装 0.0.1 中复现：空数据库启动正常；已有 LF 校验值数据库导致后台退出。读取安装目录 schema.sql 为 CRLF，其摘要为 584cdfbb32a6226af5ae6aea53c5de66eb2c465b128bc5fd939de4720caf9d18；用户数据库只读取迁移元数据，摘要为 LF 对应的 b10a4a5cbfa2942482edd781889e74940a5de803f43c3ec4f27fbc7d8e122a12。没有删除或修改用户数据库。
+- Storage 规范 SQL 换行，仅接受准确对应的 LF/CRLF 摘要；规范历史 CRLF 迁移记录，保持表结构和配置；新增四种文件/历史摘要组合、配置保留和未知摘要拒绝回归。
+- build 输出统一 LF，并增加 schema.sql 的 Git LF 属性。后台初始化捕获错误并发送安全启动原因，主进程在退出前接收具体原因。
+- npm run check 通过：typecheck、locales、28 个测试文件 / 149 项测试、build；2 项发布校验通过。
+- 实际 0.0.2 打包 EXE 在独立 LF / CRLF 历史数据库中启动成功，保留连接并完成 SSH/SFTP、Windows 原生辅助程序和 ConPTY 检查。原打包目录遇到文件占用，因此在隔离 patch-check 目录构建验证；没有终止用户应用。
+- 注入未知数据库摘要验证：拒绝启动并向主进程报告“数据库版本不兼容”；不再只显示“后台服务退出”，也不会打印完整压缩后台代码。
+- 发布工作流对五个平台增加 LF/CRLF 历史数据库升级验证；补丁版本为 0.0.2，保持 0.0.1 的历史发布不变。

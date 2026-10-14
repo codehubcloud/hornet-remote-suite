@@ -1,0 +1,2 @@
+# Persisted schema identity must be identical on Windows, macOS and Linux.
+src/packages/storage/schema.sql text eol=lf
