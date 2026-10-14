@@ -206,3 +206,11 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 本机 Windows NSIS 安装包已生成：Hornet-Remote-Suite-0.0.1-windows-x64.exe（104214841 字节）。
 
 - 云端完整检查已通过（148 项现有测试 + 发布校验）。首轮跨平台打包识别并修正 macOS Electron.app 分发根路径、DEB 必需 homepage 元数据；发布白名单按 Linux 目标实际架构名称使用 x86_64.AppImage / amd64.deb。
+
+### 0.0.1 正式发布结果
+
+- 私有 Actions [38531383165](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38531383165) 全部成功：verify、Windows x64、macOS x64/arm64、Linux x64/arm64 与 publish。
+- 五个平台均通过目标 Electron 原生适配器加载、首方包内容白名单检查、实际打包程序的独立存储及回环 SSH/SFTP 验收；Windows 另通过原生辅助程序及 ConPTY 验收。
+- [公开 v0.0.1](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.1) 已正式发布：七个安装包与 SHA256SUMS；draft=false。
+- 已从公开下载地址读取 SHA256SUMS，逐一核对七个安装包与 GitHub asset SHA-256 digest 一致。公开 Git 仓库树只有 README.md；源码仓库 API 确认 private=true。
+- 源码发布标签 v0.0.1 保留在构建提交 79d87a5；本段验收记录作为后续文档提交，不移动已发布版本标签。
