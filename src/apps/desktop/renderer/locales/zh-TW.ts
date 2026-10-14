@@ -1,5 +1,6 @@
 // Traditional Chinese application copy; user data is never converted.
 export const traditionalChinese:Record<string,string> = {
+    "终端内容菜单": "終端機內容功能表",
 "GitHub 浅色":"GitHub 淺色",
 "GitHub 深色":"GitHub 深色",
 "VS Code 浅色":"VS Code 淺色",

@@ -98,8 +98,8 @@ async function setupIpc(){
         case 'localFiles.mkdir':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),name:z.string().min(1).max(255)}).strict().parse(m.payload);data=await localFiles.mkdir('local-user',p.rootId,p.path,p.name);break;}
         case 'localFiles.grant':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),direction:z.enum(['upload','download']),name:z.string().max(255).optional()}).strict().parse(m.payload);data=await localFiles.grant('local-user',p.rootId,p.path,p.direction,p.name);break;}
         case 'localFiles.release':{const p=z.object({rootId:z.string().uuid()}).strict().parse(m.payload);localFiles.release('local-user',p.rootId);data=null;break;}
-        case 'clipboard.read':z.object({}).strict().parse(m.payload??{});data=clipboard.readText();if((data as string).length>131072)throw new AppError('FILE_LIMIT','Clipboard text exceeds 128 KiB.');break;
-        case 'clipboard.write':clipboard.writeText(z.object({text:z.string().max(131072)}).strict().parse(m.payload).text);data=null;break;
+        case 'clipboard.read':z.object({}).strict().parse(m.payload??{});data=await clipboard.readText();if((data as string).length>131072)throw new AppError('FILE_LIMIT','Clipboard text exceeds 128 KiB.');break;
+        case 'clipboard.write':await clipboard.writeText(z.object({text:z.string().max(131072)}).strict().parse(m.payload).text);data=null;break;
         case 'rdp.probe':data=await rdp.probe();break;
         case 'rdp.open':data=rdp.open(rdpConfigSchema.parse(m.payload));break;
         case 'rdp.list':data=rdp.list();break;

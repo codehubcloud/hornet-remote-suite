@@ -8,8 +8,13 @@ async function call<T>(method:Method,payload:unknown={}):Promise<T>{
   if(!result.ok)throw new Error(result.error.code+' · '+result.error.message);return result.data;
 }
 async function local<T>(method:string,payload:unknown={}):Promise<T>{const result=await ipcRenderer.invoke('hornet:local',{method,payload}) as Result<T>;if(!result.ok)throw new Error(result.error.code+' · '+result.error.message);return result.data;}
+let clipboardSequence:Promise<unknown>=Promise.resolve();
+function clipboardCall<T>(method:string,payload:unknown={}):Promise<T>{
+ const request=clipboardSequence.then(()=>local<T>(method,payload));
+ clipboardSequence=request.catch(()=>{});return request;
+}
 const api:HornetApi={
- clipboard:{read:()=>local('clipboard.read'),write:text=>local('clipboard.write',{text})},
+ clipboard:{read:()=>clipboardCall('clipboard.read'),write:text=>clipboardCall('clipboard.write',{text})},
  localTerminal:{shells:()=>call('localTerminal.shells'),open:config=>call('localTerminal.open',config)},
  serialTerminal:{list:()=>call('serialTerminal.list'),open:config=>call('serialTerminal.open',config)},
  terminalLogs:{openRecording:id=>local('terminalLogs.openRecording',{id}),start:(terminalId,format)=>local('terminalLogs.start',{terminalId,format}),stop:id=>local('terminalLogs.stop',{id}),list:()=>local('terminalLogs.list')},

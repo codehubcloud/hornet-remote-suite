@@ -8,7 +8,7 @@ on:
       version:
         description: 'Version matching src/package.json, without v'
         required: true
-        default: '0.0.2'
+        default: '0.0.3'
 
 permissions:
   contents: read
@@ -107,6 +107,12 @@ jobs:
         env:
           HORNET_SMOKE_SCHEMA_EOL: crlf
         run: xvfb-run -a npm run test:package
+      - name: Test terminal clipboard and context menu in the packaged app
+        if: runner.os != 'Linux'
+        run: npm run test:clipboard:package
+      - name: Test terminal clipboard and context menu on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:clipboard:package
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: installers-${{ matrix.platform }}-${{ matrix.arch }}

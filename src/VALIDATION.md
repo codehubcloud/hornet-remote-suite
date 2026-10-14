@@ -230,3 +230,12 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 私有 Actions [38541491008](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38541491008) 的完整检查、五个平台构建、各平台 LF/CRLF 历史数据库启动与连接保留测试、publish 均成功。
 - [v0.0.2](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.2) 已公开并设置为 latest；八个附件齐全，七个安装包摘要与公开 SHA256SUMS / GitHub asset digest 一致。
 - 更新公开 README 与 0.0.1 发布说明，明确使用 0.0.2 覆盖升级且无需删除数据库。源码标签 v0.0.2 保持在修复提交 42916e1；本段验收文档独立提交，不修改已发布标签或安装包。
+
+## 2026-10-14：0.0.3 终端剪贴板与内容菜单
+
+- 根因：Electron 44 readText/writeText 返回 Promise；旧主进程未 await readText，将 Promise 放入 IPC 返回值导致 structured-clone 错误；旧测试同步替身掩盖了问题。现已 await 两个接口并在 preload 串行排队。
+- 内容菜单包含复制、粘贴、全选、清屏及搜索；右键按下保存选区快照，正确激活对应分屏；支持键盘菜单、焦点恢复、无选区/关闭会话禁用及多行确认。八种语言名称与主题样式已配套。
+- `npm run check` 通过：typecheck、locales、28 文件 / 149 测试及 build；2 项 release 校验通过。`test:clipboard` 与 `test:appearance` 通过。
+- Windows 真实打包 EXE 的 `test:clipboard:package` 通过：异步读写、连续请求顺序、鼠标选字、编辑菜单、右键菜单、双分屏目标、键盘菜单/快捷键、多行取消、超长拒绝、写入失败恢复和已关闭终端保护。真实系统剪贴板及用户既有主机不参与测试。
+- 隐藏打包窗口曾延后分屏 fit（37 行到 17 行），让测试选区在右键时被清掉。验收关闭隐藏窗口的后台节流，并在测量字符位置前完成布局；保留原有功能断言。查看 terminal-context-menu.png，菜单文字、快捷键与布局正常。
+- 发布工作流新增各平台实际打包程序的剪贴板/右键回归；版本 0.0.3。

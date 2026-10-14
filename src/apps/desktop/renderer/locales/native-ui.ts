@@ -1,6 +1,7 @@
 // Reviewed interface copy. Detailed protocol help falls back to the English catalog.
 // Columns: Japanese, Korean, German, French, Spanish. Keep user data out of this table.
 export const nativeUi:Record<string,readonly [string,string,string,string,string]>={
+ '终端内容菜单':['端末のコンテキストメニュー','터미널 상황별 메뉴','Terminal-Kontextmenü','Menu contextuel du terminal','Menú contextual del terminal'],
  'GitHub 浅色':['GitHub ライト','GitHub 밝게','GitHub Hell','GitHub clair','GitHub claro'],
  'GitHub 深色':['GitHub ダーク','GitHub 어둡게','GitHub Dunkel','GitHub sombre','GitHub oscuro'],
  'VS Code 浅色':['VS Code ライト','VS Code 밝게','VS Code Hell','VS Code clair','VS Code claro'],

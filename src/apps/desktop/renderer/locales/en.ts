@@ -1,5 +1,6 @@
 // Application copy only. Never translate user names, paths or terminal output.
 export const english:Record<string,string> = {
+  "终端内容菜单": "Terminal context menu",
 "GitHub 浅色":"GitHub Light",
 "GitHub 深色":"GitHub Dark",
 "VS Code 浅色":"VS Code Light Modern",

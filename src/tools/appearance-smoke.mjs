@@ -47,7 +47,7 @@ try{
  const terminal=page.locator('.terminal-cell.selected'),id=await terminal.getAttribute('data-terminal-id');await expect(terminal).toBeVisible();
  await terminal.locator('.xterm-helper-textarea').focus();await page.keyboard.type('echo THEME_^ALIVE');await page.keyboard.press('Enter');await expect(terminal).toContainText('THEME_ALIVE');
  // Stub Electron's clipboard to avoid touching the user's OS clipboard.
- await app.evaluate(({clipboard})=>{let value='echo CLIP_^READY';clipboard.readText=()=>value;clipboard.writeText=text=>{value=text;};});
+ await app.evaluate(({clipboard})=>{let value='echo CLIP_^READY';clipboard.readText=async()=>value;clipboard.writeText=async text=>{value=text;};});
  await menu('Edit','Paste');await terminal.locator('.xterm-helper-textarea').focus();await page.keyboard.press('Enter');await expect(terminal).toContainText('CLIP_READY');
  const localeCases=[
   ['zh-TW','語言與主題','檔案','新建…'],['ja','言語とテーマ','ファイル','新規…'],

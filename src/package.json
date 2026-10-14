@@ -1,6 +1,6 @@
 {
   "name": "hornet-remote-suite",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "description": "Unified remote workstation",
   "main": "dist/main.cjs",
@@ -33,7 +33,9 @@
     "package": "npm run build:release && electron-builder --config electron-builder.cjs --publish never",
     "package:dir": "npm run build:release && electron-builder --config electron-builder.cjs --dir --publish never",
     "test:package": "node tools/package-smoke.mjs",
-    "test:release": "node --test tests/release/*.test.mjs"
+    "test:release": "node --test tests/release/*.test.mjs",
+    "test:clipboard": "node tools/terminal-clipboard-smoke.mjs",
+    "test:clipboard:package": "node tools/terminal-clipboard-smoke.mjs --packaged"
   },
   "engines": {
     "node": ">=24 <25"
