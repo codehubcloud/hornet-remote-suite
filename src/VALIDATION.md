@@ -169,3 +169,23 @@ test:terminal-automation 已通过，实际 Electron 界面保存 GBK 配置、�
 npm run test:file-sync 通过实际 Electron 操作：双向预览的逐项方向、关闭预览无写入、改变策略重新比较、两向覆盖、相同内容跳过、时间接近保留冲突、保留双方生成不同副本并保留两侧原名。首轮测试脚本误用了不存在的 tasks.list，改为实际 task.list 后完整通过；不属于产品路径失败。已查看 file-sync-preview.png，表格、策略选择与执行按钮正常。npm run test:suite-ui 通过原本地/远端传输、递归目录、空目录/中文名、冲突预览、打印队列接收取消/持久化、X11 预设恢复。全部使用临时授权目录和回环服务，不访问用户主机、不提交实体打印。
 
 覆盖前进行 SHA-256/元数据复核并原子替换；文件系统及 SFTP 未提供条件式 rename，因此不能保证外部写入者在最后复核与提交之间不发生竞争。当前服务对同一目标任务串行调度。目录批次不是事务，已有任务/目录不回滚，.part 可能保留。没有删除传播、同步基线、定时同步、逐文件策略；FTP/FTPS、高级图形/打印、RDP 内嵌仍待完成。构建保留既有大块体积提示。
+
+
+## 2026-10-14 更多语言与主题
+
+最终 npm run check 通过：28 个文件 / 148 项单元与集成测试、类型检查、语言目录检查及生产构建。新增语言/主题组合偏好恢复与系统跟随、非法字段单独恢复、原偏好兼容、八种菜单语言、英文回退、日期 locale、完整繁体目录、全部词典占位符及终端配色 schema 检查。语言资源完全本地，五种新增非中文语言各 267 条常用 UI 文案；详细帮助仍回退英文，不宣称完整翻译。
+
+生成繁体目录时最初使用 Windows 转换 API 的非终止缓冲区导致末尾多余字符，菜单固定预期测试发现后已修正为显式包含字符串终止符并按返回长度读取。初次完整检查还发现已有 FTP 配置保存会给 SSH options_json 加入 ftpSecurity:null，已修正为仅 FTP 保存此字段、其他协议移除此字段，存储回归及最终完整检查通过。
+
+npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单、十一套不同界面背景色和系统深浅跟随；运行中的 CMD 终端逐一应用新增八套终端配色并检查实际绘制背景，terminalId 和输出不变且继续输入。语言快捷键可达、中文用户连接名不变、剪贴板测试、打印上下文、旧偏好及新增法语/Nord 重启恢复通过。最初终端颜色断言选择了旧 viewport/透明 screen 容器，改为当前 xterm-scrollable-element 实际背景节点后完整通过；截图可见 Dracula 终端颜色本已正确。
+
+已查看 appearance-nord.png 及失败阶段的终端截图：设置页选择框、提示、按钮和终端内容正常。截图与测试均使用临时用户目录，未连接用户真实主机。构建仍报告既有大块体积提示。根目录运行的一次单测生成 node_modules/.vite 缓存；自动审批拒绝清理该缓存（blocked by policy），未重试或绕过，保留该非源码文件。
+
+
+## 2026-10-14 GitHub / VS Code / Visual Studio 配色
+
+增加七个界面与终端主题：GitHub Light/Dark、VS Code Light/Dark Modern、Visual Studio Light/Dark/Blue。所有新增终端方案包含 ANSI 16 色；三个系列的标签补齐八种语言，五种非中文语言的本地 UI 目录增至 274 条。VS Code Modern 背景及强调色参考官方内置主题源文件：https://github.com/microsoft/vscode/blob/main/extensions/theme-defaults/themes/dark_modern.json 与 light_modern.json。本软件按现有控件适配这些配色，未导入扩展或第三方样式脚本。
+
+类型检查、语言目录检查、13 项 appearance 单测及最终生产构建通过。npm run test:appearance 通过：18 个固定界面方案颜色组合不同，新增七个方案的背景色及 color-scheme 符合预期；Visual Studio Blue 深蓝菜单栏实际渲染。七套新增终端配色逐一在运行中 CMD 热更新并校验背景，原 terminalId 与输出保留，后续输入成功。八种语言菜单、系统跟随及新增 Visual Studio Blue / 法语重启恢复均通过。浅色方案允许背景同为白色，以正文、面板和主按钮的联合颜色区别，而非人为改变参考背景。
+
+已查看 appearance-visual-studio-blue.png 和 appearance-github-dark.png，选择框、焦点、正文与按钮显示正常；测试使用独立临时用户目录。构建保留既有包体积提示。

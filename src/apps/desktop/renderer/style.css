@@ -123,6 +123,13 @@
 :root[data-theme=light] .sessions-dialog button:disabled{color:#8a8a8a;opacity:.65}
 
 .profile-dialog{max-height:calc(100vh - 32px);overflow:auto}
+.appearance-dialog{width:min(620px,94vw)}
+.appearance-dialog>label{min-width:0}
+.appearance-dialog>label>select{width:100%;min-width:0}
+.appearance-dialog .muted{line-height:1.6;overflow-wrap:anywhere}
+:root:lang(ja){font-family:"Segoe UI","Yu Gothic UI","Meiryo",sans-serif}
+:root:lang(ko){font-family:"Segoe UI","Malgun Gothic",sans-serif}
+:root:lang(zh-TW){font-family:"Segoe UI","Microsoft JhengHei",sans-serif}
 :root[data-theme=light] .sessions-dialog :focus-visible{outline-color:#0078d7}
 
 .broadcast-banner{display:flex;gap:12px;align-items:center;padding:6px 10px;background:var(--c-443124);color:var(--c-ffd0b0);border-bottom:1px solid var(--c-725035)}.broadcast-banner span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.broadcast-banner button{padding:2px 8px}.broadcast-dialog{max-height:85vh;overflow:auto}.broadcast-targets{max-height:40vh;overflow:auto}.broadcast-targets small{opacity:.65}

@@ -1,12 +1,16 @@
 import { create } from 'zustand';
-export const languages = [{id:'zh-CN',name:'简体中文'}, {id:'en',name:'English'}] as const;
-export const themes = ['light','dark','solarized','contrast','system'] as const;
+export const languages = [
+ {id:'zh-CN',name:'简体中文'}, {id:'zh-TW',name:'繁體中文'}, {id:'en',name:'English'},
+ {id:'ja',name:'日本語'}, {id:'ko',name:'한국어'}, {id:'de',name:'Deutsch'},
+ {id:'fr',name:'Français'}, {id:'es',name:'Español'},
+] as const;
+export const themes = ['light','dark','github-light','github-dark','vscode-light','vscode-dark','visual-studio-light','visual-studio-dark','visual-studio-blue','solarized','solarized-light','dracula','nord','gruvbox','one-dark','rose-pine','coffee','contrast','system'] as const;
 export type Language = typeof languages[number]['id'];
 export type Theme = typeof themes[number];
 export type Appearance = {language:Language;theme:Theme};
 export const appearanceKey='hornet.appearance.v1';
 export function readAppearance(raw:string|null):Appearance {
- try {const v=JSON.parse(raw??'null');if(v&&languages.some(l=>l.id===v.language)&&themes.includes(v.theme))return {language:v.language,theme:v.theme};}catch{}
+ try {const v=JSON.parse(raw??'null');if(v&&typeof v==='object'&&!Array.isArray(v))return {language:languages.some(l=>l.id===v.language)?v.language:'zh-CN',theme:themes.includes(v.theme)?v.theme:'light'};}catch{}
  return {language:'zh-CN',theme:'light'};
 }
 function initial(){try{return readAppearance(localStorage.getItem(appearanceKey));}catch{return readAppearance(null);}}
