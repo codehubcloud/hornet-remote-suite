@@ -189,3 +189,15 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 类型检查、语言目录检查、13 项 appearance 单测及最终生产构建通过。npm run test:appearance 通过：18 个固定界面方案颜色组合不同，新增七个方案的背景色及 color-scheme 符合预期；Visual Studio Blue 深蓝菜单栏实际渲染。七套新增终端配色逐一在运行中 CMD 热更新并校验背景，原 terminalId 与输出保留，后续输入成功。八种语言菜单、系统跟随及新增 Visual Studio Blue / 法语重启恢复均通过。浅色方案允许背景同为白色，以正文、面板和主按钮的联合颜色区别，而非人为改变参考背景。
 
 已查看 appearance-visual-studio-blue.png 和 appearance-github-dark.png，选择框、焦点、正文与按钮显示正常；测试使用独立临时用户目录。构建保留既有包体积提示。
+
+## 2026-10-14：0.0.1 二进制发布
+
+- `npm run check` 通过：类型、语言目录、28 个测试文件 / 148 项测试及构建。
+- `npm run test:release` 通过：稳定版本输入校验、完整七安装包集合、校验文件生成、额外源码归档及空文件拒绝。
+- Windows `npm run package:dir` 通过；afterPack 检查首方运行文件白名单、源码及 source map 排除、后台与原生辅助程序解包位置。
+- `npm run test:package` 使用真实打包 EXE、独立临时数据与回环 SSH fixture；验证沙箱 preload、SQLite、utility process、SSH/SFTP、原生 RDP 探测及 ConPTY 打开关闭。测试不连接用户已有主机或进行实体打印。
+- 初次 Electron 原生重建因本机没有 Python 失败；适配器使用 Node-API，改为目标 Electron 加载验证，依赖包预构建/本机生成内容随包解包。
+- 隐藏打包窗口截图曾超时；验收脚本保留功能断言，去掉截图依赖，并在清理时绕过交互退出确认。
+- 私有仓库新增版本标签/手动发布工作流，五个本机架构 runner；公开 release 仅接收七个精确安装包与 SHA256SUMS，全部上传后公开草稿。
+- 公开仓库只初始化下载 README；RELEASE_TOKEN 通过 GitHub API 加密保存为私有仓库 Actions secret，没有写入源码或日志。
+- 首版无商业签名/Apple 公证，Windows 专用适配器支持范围已写入公开说明；ASAR 不作为源码加密。跨平台云端构建结果另行核验。

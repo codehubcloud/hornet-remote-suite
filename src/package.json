@@ -1,6 +1,6 @@
 {
   "name": "hornet-remote-suite",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Unified remote workstation",
   "main": "dist/main.cjs",
@@ -28,7 +28,12 @@
     "test:sessions-ui": "node tools/sessions-dialog-smoke.mjs",
     "test:session-advanced": "node tools/session-advanced-smoke.mjs",
     "test:terminal-automation": "node tools/terminal-automation-smoke.mjs",
-    "test:file-sync": "node tools/file-sync-smoke.mjs"
+    "test:file-sync": "node tools/file-sync-smoke.mjs",
+    "build:release": "node tools/build.mjs --release",
+    "package": "npm run build:release && electron-builder --config electron-builder.cjs --publish never",
+    "package:dir": "npm run build:release && electron-builder --config electron-builder.cjs --dir --publish never",
+    "test:package": "node tools/package-smoke.mjs",
+    "test:release": "node --test tests/release/*.test.mjs"
   },
   "engines": {
     "node": ">=24 <25"
@@ -57,9 +62,15 @@
     "@types/ssh2": "1.15.6",
     "@types/ws": "8.18.1",
     "electron": "44.4.5",
+    "electron-builder": "26.15.3",
     "esbuild": "0.28.2",
     "typescript": "7.0.2",
     "vite": "8.3.0",
     "vitest": "5.0.1"
-  }
+  },
+  "author": {
+    "name": "codehubcloud",
+    "email": "codehubcloud@users.noreply.github.com"
+  },
+  "license": "UNLICENSED"
 }

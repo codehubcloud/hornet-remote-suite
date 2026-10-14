@@ -1,3 +1,4 @@
+import packageMetadata from '../package.json' with { type: 'json' };
 import { dismissStartupSessions } from './session-dialog-helper.mjs';
 import { _electron as electron,expect } from '@playwright/test';
 import { mkdtemp,rm,mkdir } from 'node:fs/promises';
@@ -76,7 +77,7 @@ try{
  await page.keyboard.press('Alt+d');await expect(page.getByLabel('快速连接地址',{exact:true})).toBeFocused();
  await page.keyboard.press('Control+Shift+F4');await expect(page.locator('.terminal-cell')).toHaveCount(0);
  await page.getByRole('button',{name:'折叠工具栏',exact:true}).click();await page.keyboard.press('Alt+f');await expect(page.getByRole('menuitem',{name:'新建…',exact:true})).toBeVisible();await page.keyboard.press('Escape');
- await menu('帮助','关于 Hornet');await expect(page.getByRole('dialog',{name:'关于 Hornet',exact:true})).toContainText('0.1.0');await page.getByRole('dialog',{name:'关于 Hornet',exact:true}).getByRole('button',{name:'关闭',exact:true}).click();
+ await menu('帮助','关于 Hornet');await expect(page.getByRole('dialog',{name:'关于 Hornet',exact:true})).toContainText(packageMetadata.version);await page.getByRole('dialog',{name:'关于 Hornet',exact:true}).getByRole('button',{name:'关闭',exact:true}).click();
  await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme','dark');await expect(page.locator('html')).toHaveAttribute('lang','zh-CN');
  await page.getByRole('button',{name:'语言与主题',exact:true}).click();await page.locator('.appearance-dialog select').first().selectOption('fr');await page.locator('.appearance-dialog select').nth(1).selectOption('visual-studio-blue');await page.locator('.appearance-dialog .modal-actions button').click();
  await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme','visual-studio-blue');await expect(page.locator('html')).toHaveAttribute('lang','fr');

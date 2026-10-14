@@ -1,4 +1,4 @@
-import { utilityProcess,type UtilityProcess } from 'electron';
+import { app,utilityProcess,type UtilityProcess } from 'electron';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { HornetEvent,Profile,Result } from '../../../packages/contracts';
@@ -12,7 +12,8 @@ export class Backend {
   constructor(private vault:Vault,private emit:(event:HornetEvent)=>void,private stopped:()=>void=()=>{}) {}
   async start(userData:string){
     await new Promise<void>((resolve,reject)=>{
-      this.child=utilityProcess.fork(join(__dirname,'host.cjs'),[userData],{serviceName:'Hornet Protocol Host',stdio:'pipe'});
+      const hostDirectory=app.isPackaged?__dirname.replace(/app\.asar(?=[\\/])/,'app.asar.unpacked'):__dirname;
+      this.child=utilityProcess.fork(join(hostDirectory,'host.cjs'),[userData],{serviceName:'Hornet Protocol Host',stdio:'pipe'});
       const timeout=setTimeout(()=>{this.child.kill();reject(new Error('后台服务启动超时'));},15000);
       this.child.once('exit',()=>{this.stopped();clearTimeout(timeout);clearInterval(this.watchdog);reject(new Error('后台服务退出'));for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new AppError('IPC004','后台服务已退出，请重启应用。'));}this.pending.clear();this.emit({type:'service.error',message:'连接服务已停止，请重启应用。'});});
       this.child.on('message',(m:{type:string;event?:HornetEvent;requestId:string;result?:Result<unknown>;profile?:Profile})=>{

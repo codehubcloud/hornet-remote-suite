@@ -129,7 +129,7 @@ export function SessionCommands({recent,toggleHosts,hostsVisible,openTool,toolTa
   {device&&<DeviceTerminalDialog kind={device} close={()=>setDevice(null)}/>}
   {logPanel&&<TerminalLogPanel close={()=>setLogPanel(false)}/>}
   {settings&&<TerminalSettings close={()=>setSettings(false)}/>}
-  {about&&<div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-label={tr('关于 Hornet')}><h2>Hornet Remote Suite</h2><p>0.1.0 · {tr('开发版')}</p><p>{tr('统一远程工作台')}</p><p className="muted">{tr('功能支持范围请查看“功能支持情况”。')}</p><div className="modal-actions"><button onClick={()=>{setAbout(false);openTool('tool:capabilities');}}>{tr('功能支持情况')}</button><button onClick={()=>setAbout(false)}>{tr('关闭')}</button></div></section></div>}
+  {about&&<div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-label={tr('关于 Hornet')}><h2>Hornet Remote Suite</h2><p>{__APP_VERSION__} · {tr('开发版')}</p><p>{tr('统一远程工作台')}</p><p className="muted">{tr('功能支持范围请查看“功能支持情况”。')}</p><div className="modal-actions"><button onClick={()=>{setAbout(false);openTool('tool:capabilities');}}>{tr('功能支持情况')}</button><button onClick={()=>setAbout(false)}>{tr('关闭')}</button></div></section></div>}
   {help&&<div className="modal-backdrop"><div className="modal" role="dialog" aria-label={tr("快速连接使用说明")}><h2>{tr("快速连接")}</h2><p>{tr("输入已保存的会话名称可直接连接。输入主机、user@host:port 或 ssh://user@host:port、telnet://host:port 会打开预填的连接配置，补充认证设置后保存并连接。IPv6 使用 [地址]:端口。")}</p><p>{tr("Alt+D：聚焦快速连接。Ctrl+Shift+F：搜索终端。右键终端标题：重命名或排列已有终端。")}</p><button onClick={()=>setHelp(false)}>{tr("关闭说明")}</button></div></div>}
  </div>;
 }

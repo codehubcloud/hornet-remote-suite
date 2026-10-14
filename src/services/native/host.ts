@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-export const nativePath = () => join(__dirname, 'NativeHost.exe');
+export const nativePath = () => join(__dirname.replace(/app\.asar(?=[\\/])/,'app.asar.unpacked'), 'NativeHost.exe');
 export function nativeCall(input: object, timeout = 15000): Promise<any> {
   return new Promise((resolve, reject) => {
     if (process.platform !== 'win32' || !existsSync(nativePath())) { reject(new Error('Windows 原生辅助程序不可用。')); return; }

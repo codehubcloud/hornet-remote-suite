@@ -1,0 +1,132 @@
+name: Build and publish binary installers
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version matching src/package.json, without v (first release: 0.0.1)'
+        required: true
+        default: '0.0.1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: binary-release-${{ github.event.inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    defaults:
+      run:
+        working-directory: src
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.21.0'
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+      - name: Validate private source and release version
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ github.event.inputs.version || github.ref_name }}
+          SOURCE_PRIVATE: ${{ github.event.repository.private }}
+        run: node tools/check-release-version.mjs
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test:release
+
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: win
+            arch: x64
+          - runner: macos-15-intel
+            platform: mac
+            arch: x64
+          - runner: macos-15
+            platform: mac
+            arch: arm64
+          - runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: src
+        shell: bash
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.21.0'
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+      - name: Linux packaging and headless UI dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools libfuse2 libgtk-3-0 libnss3 libasound2-dev xvfb
+      - run: npm ci
+      - run: npm run build:release
+      - name: Build installers without automatic publishing
+        run: npx --no-install electron-builder --config electron-builder.cjs --${{ matrix.platform }} --${{ matrix.arch }} --publish never
+      - name: Test actual packaged application
+        if: runner.os != 'Linux'
+        run: npm run test:package
+      - name: Test actual packaged application on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:package
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: installers-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            src/release/*.exe
+            src/release/*.dmg
+            src/release/*.AppImage
+            src/release/*.deb
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish:
+    needs: [verify, build]
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.21.0'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: src/release-assets
+      - name: Publish verified binaries to the public release repository
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+        run: node tools/publish-release.mjs release-assets

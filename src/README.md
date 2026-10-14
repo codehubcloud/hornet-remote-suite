@@ -318,3 +318,7 @@ SSH/Telnet 会话属性可保存字符编码，导入导出保留；串口对话
 界面主题提供经典浅色、深色、GitHub 深色/浅色、VS Code 深色/浅色、Visual Studio 深色/浅色/蓝色、Solarized 深色/浅色、Dracula、Nord、Gruvbox、One Dark、Rosé Pine、暖色浅色、高对比度，以及跟随系统。终端独立提供 Hornet 深色、浅色、GitHub 深色/浅色、VS Code 深色/浅色、Visual Studio 深色/浅色/蓝色、Solarized 深色/浅色、Dracula、Nord、Gruvbox、One Dark、Rosé Pine、暖色浅色和高对比度；部分方案包含完整 16 色 ANSI 调色板。切换界面语言或配色不重建会话，设置即时保存；终端设置在“应用设置”后保存。旧偏好键和既有主题 ID 保持兼容，界面偏好部分无效时只恢复无效字段。
 
 验证：npm run test:locales 校验翻译键、占位符、繁体目录完整性；npm run test:appearance 覆盖八种语言菜单、十八套不同界面配色、系统跟随、终端实时配色、会话连续性和重启恢复。
+
+## 二进制安装包发布
+
+版本从 `0.0.1` 开始。安装包发布到 [公开 release 仓库](https://github.com/codehubcloud/hornet-remote-suite-release/releases)，项目源码保留在私有仓库。支持 Windows x64 EXE、macOS x64/arm64 DMG、Linux x64/arm64 AppImage/DEB。构建与发布方法见 [RELEASING.md](RELEASING.md)。

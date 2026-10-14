@@ -1,11 +1,13 @@
 import { build } from 'esbuild';
 import { build as viteBuild } from 'vite';
-import { mkdir, copyFile } from 'node:fs/promises';
+import { mkdir, copyFile, readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
+const release = process.argv.includes('--release');
+const { version } = JSON.parse(await readFile('package.json', 'utf8'));
 await mkdir('dist', { recursive: true });
 if(process.platform==='win32')execFileSync(join(process.env.WINDIR,'Microsoft.NET','Framework64','v4.0.30319','csc.exe'),['/nologo','/target:exe','/out:'+resolve('dist/NativeHost.exe'),'/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll','/reference:Microsoft.CSharp.dll',resolve('services/native/NativeHost.cs'),resolve('services/native/XServerHost.cs')],{stdio:'inherit',windowsHide:true});
-await build({ entryPoints: { main: 'apps/desktop/main/index.ts', preload: 'apps/desktop/preload/index.ts', host: 'services/protocol-host/index.ts' }, outdir: 'dist', outExtension: { '.js': '.cjs' }, bundle: true, platform: 'node', format: 'cjs', target: 'node22', sourcemap: true, external: ['electron', 'ssh2', 'node-pty', 'serialport'] });
-await viteBuild({ root: 'apps/desktop/renderer', base: './', build: { outDir: '../../../dist/renderer', emptyOutDir: true } });
+await build({ entryPoints: { main: 'apps/desktop/main/index.ts', preload: 'apps/desktop/preload/index.ts', host: 'services/protocol-host/index.ts' }, outdir: 'dist', outExtension: { '.js': '.cjs' }, bundle: true, platform: 'node', format: 'cjs', target: 'node22', sourcemap: !release, minify: release, external: ['electron', 'ssh2', 'node-pty', 'serialport'] });
+await viteBuild({ root: 'apps/desktop/renderer', base: './', define: { __APP_VERSION__: JSON.stringify(version) }, build: { outDir: '../../../dist/renderer', emptyOutDir: true, sourcemap: false } });
 await copyFile('packages/storage/schema.sql', 'dist/schema.sql');
 console.log('Built desktop, sandboxed preload and protocol host.');
