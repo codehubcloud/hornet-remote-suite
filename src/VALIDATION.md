@@ -276,3 +276,11 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 开发程序与真实 0.0.5 Windows 解包 EXE 的 test:shutdown 均通过：在隔离测试进程中拦截 UtilityProcess 调用，让普通请求和 shutdown 永远无回应；第一次关闭能立即确认并取消；第二次关闭前故意使 renderer 无限循环，仍以 exit code 0 退出，且原协议后台 PID 不再存活。观察退出约 5.9 秒（含轮询间隔）。故障注入只在测试驱动中，不给正式应用增加故障开关。
 - 首次测试程序已经正常退出，但测试驱动在退出后重新调用 Playwright app.process() 获取已释放的对象而失败；改为启动时保留子进程对象，再观察退出码，原功能断言不变。后续开发和打包测试均通过。
 - Windows 真实 0.0.5 EXE 的既有 test:package 同样通过：历史 LF 数据保留、后台、SSH/SFTP、原生探测及 ConPTY。新故障验收加入所有平台发布门禁；云端发布结果另行记录。
+
+### 0.0.5 发布验收
+
+- 私有 Actions [38715049900](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38715049900) 最终完整检查、Windows x64、macOS x64/arm64、Linux x64/arm64 及 publish 全部成功；各平台均验证后台不回请求及 renderer 故意卡住后仍可退出，主程序退出码 0 且协议后台 PID 消失。
+- 初轮 Linux ARM64 在已有启动验收中等待会话窗口 5 秒超时，之后测试清理主动退出，产生 loadURL ERR_FAILED；尚未进入新的退出测试。保留相同提交与全部断言，仅重跑失败任务，LF/CRLF 启动、剪贴板、传输及退出验收均通过；没有移动版本标签或跳过失败平台。
+- [v0.0.5](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.5) 已公开并设为 latest；七个安装包与 SHA256SUMS 齐全，校验文件七行与 GitHub asset digest 逐项一致。
+- Windows 安装包 SHA-256：`6cbf92837cffb6e8ce9021cd70d6a77681e1fe1bb81e5c7ed1aa098750832dfd`。
+- 源码仍为 private，公开仓库 Git 树仅 README.md。源码 v0.0.5 保持在构建提交 02fd125；发布验收与下载说明单独提交，不修改已发布包或标签。没有升级用户实际安装目录，本机检测到的原目录版本仍为 0.0.3，需由用户覆盖安装新版后使用。
