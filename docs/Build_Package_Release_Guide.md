@@ -95,6 +95,7 @@ try {
 }
 npm.cmd run test:clipboard:package
 npm.cmd run test:transfer-reliability:package
+npm.cmd run test:shutdown:package
 ```
 
 `package` 先执行 `build:release`，再使用 electron-builder 构建 NSIS EXE；`--publish never` 禁止打包工具自行发布。只想检查解包后的应用时，使用 `npm.cmd run package:dir`，不会生成安装程序。
@@ -128,6 +129,7 @@ npm run test:package
 HORNET_SMOKE_SCHEMA_EOL=crlf npm run test:package
 npm run test:clipboard:package
 npm run test:transfer-reliability:package
+npm run test:shutdown:package
 ```
 
 Linux 安装工作流列出的系统依赖后，用 Xvfb 执行验收：
@@ -137,6 +139,7 @@ xvfb-run -a npm run test:package
 HORNET_SMOKE_SCHEMA_EOL=crlf xvfb-run -a npm run test:package
 xvfb-run -a npm run test:clipboard:package
 xvfb-run -a npm run test:transfer-reliability:package
+xvfb-run -a npm run test:shutdown:package
 ```
 
 macOS 解包目录为 `release/mac/` 或 `release/mac-arm64/`，Linux 为 `release/linux-unpacked/` 或 `release/linux-arm64-unpacked/`。测试脚本按本机架构选择程序；使用自定义输出目录时，将 `HORNET_PACKAGED_EXECUTABLE` 设置为实际可执行文件的绝对路径。
@@ -148,6 +151,8 @@ macOS 解包目录为 `release/mac/` 或 `release/mac-arm64/`，Linux 为 `relea
 `test:clipboard:package` 在真实打包程序中验证异步剪贴板 IPC、连续复制/粘贴顺序、鼠标选区、右键内容菜单、分屏目标、键盘操作、多行取消、长度限制、写入失败恢复和已关闭会话保护。它使用异步剪贴板替身，不读写用户真实系统剪贴板。
 
 `test:transfer-reliability:package` 验证远端完整 SHA-256、上传校验零回读、单次下载、任务校验进度、计算哈希期间 X11 状态查询仍可响应及电源事件处理。心跳超时、模拟长时间休眠、SFTP 错误处理和远端命令不支持时的回退另由单元/集成测试覆盖；不以这些夹具结果代替真实 GB 级文件性能基准。
+
+`test:shutdown:package` 在独立测试进程中阻断后台请求和 shutdown 的传递，并故意卡住测试 renderer，确认关闭提示无需等后台、取消保留应用、确认退出后清理等待有限且后台进程被结束。不在用户实际应用中注入故障；发布流程在每个平台执行此验收。
 
 这些测试使用临时数据和本机回环服务，不连接用户保存的远端主机。它们不能替代安装/卸载、真实远端协议、串口硬件、实体打印机或签名/公证验收；必要的人工安装验收应另行记录。
 
@@ -217,7 +222,7 @@ flowchart TD
 | 阶段 | 当前行为 |
 | --- | --- |
 | verify | Windows runner；检查私有仓库及版本，执行 npm ci、check、test:release；超时 20 分钟 |
-| build | 五个独立目标，各自 npm ci、正式构建、原生模块检查、安装包审计、LF/CRLF 升级测试、剪贴板测试、传输可靠性测试；每任务超时 30 分钟 |
+| build | 五个独立目标，各自 npm ci、正式构建、原生模块检查、安装包审计、LF/CRLF 升级测试、剪贴板测试、传输可靠性及无响应退出测试；每任务超时 30 分钟 |
 | artifact | 只收集根输出目录中的 EXE、DMG、AppImage、DEB；私有 Actions 内保留 7 天 |
 | publish | 需要 verify 和全部 build 成功；合并安装包附件，调用 publish-release.mjs；超时 15 分钟 |
 

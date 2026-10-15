@@ -28,5 +28,5 @@ export class RdpService {
     child.stdin.write(JSON.stringify({...input,op:'rdp'})+'\n');return {id};
   }
   close(id:string){const session=this.sessions.get(id);if(!session)return;session.child.stdin.end('close\n');const timer=setTimeout(()=>session.child.kill(),2000);timer.unref();session.child.once('exit',()=>clearTimeout(timer));this.sessions.delete(id);}
-  stop(){for(const id of this.sessions.keys())this.close(id);}
+  stop(force=false){for(const id of this.sessions.keys()){if(force){this.sessions.get(id)?.child.kill();this.sessions.delete(id);}else this.close(id);}}
 }

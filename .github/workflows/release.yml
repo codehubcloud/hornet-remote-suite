@@ -8,7 +8,7 @@ on:
       version:
         description: 'Version matching src/package.json, without v'
         required: true
-        default: '0.0.4'
+        default: '0.0.5'
 
 permissions:
   contents: read
@@ -119,6 +119,12 @@ jobs:
       - name: Test transfer verification and backend responsiveness on Linux
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:transfer-reliability:package
+      - name: Test exit with a nonresponsive backend
+        if: runner.os != 'Linux'
+        run: npm run test:shutdown:package
+      - name: Test exit with a nonresponsive backend on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:shutdown:package
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: installers-${{ matrix.platform }}-${{ matrix.arch }}

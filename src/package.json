@@ -1,6 +1,6 @@
 {
   "name": "hornet-remote-suite",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "description": "Unified remote workstation",
   "main": "dist/main.cjs",
@@ -37,7 +37,9 @@
     "test:clipboard": "node tools/terminal-clipboard-smoke.mjs",
     "test:clipboard:package": "node tools/terminal-clipboard-smoke.mjs --packaged",
     "test:transfer-reliability": "node tools/transfer-reliability-smoke.mjs",
-    "test:transfer-reliability:package": "node tools/transfer-reliability-smoke.mjs --packaged"
+    "test:transfer-reliability:package": "node tools/transfer-reliability-smoke.mjs --packaged",
+    "test:shutdown": "node tools/shutdown-smoke.mjs",
+    "test:shutdown:package": "node tools/shutdown-smoke.mjs --packaged"
   },
   "engines": {
     "node": ">=24 <25"

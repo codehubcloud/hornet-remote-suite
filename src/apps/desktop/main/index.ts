@@ -13,12 +13,14 @@ import { LocalFiles } from '../../../services/file/local-files';
 import { PathGrants } from '../../../packages/security/path-grants';
 import { Vault } from './vault';
 import { Backend } from './backend';
+import { ExitController } from './exit-controller';
 import { RdpService, nativeCall } from '../../../services/native/host';
 import { rdpConfigSchema } from '../../../packages/contracts/native';
 const rdp=new RdpService();
 protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);
 if(process.env.HORNET_USER_DATA)app.setPath('userData',process.env.HORNET_USER_DATA);
-let window:BrowserWindow|undefined,backend:Backend,vault:Vault,quitting=false;
+let window:BrowserWindow|undefined,backend:Backend,vault:Vault;
+const taskCache=new Map<string,TaskSnapshot>();
 const grants=new PathGrants();
 const localFiles=new LocalFiles(grants);
 const challenges=new Map<string,Extract<HornetEvent,{type:'challenge'}>>();
@@ -26,6 +28,7 @@ const pendingPasswords=new Map<string,string>();
 const terminalSizes=new Map<string,{cols:number;rows:number}>();
 const logs=new TerminalLogs((_owner,log)=>emit({type:'terminal.log',log}));
 const emit=(event:HornetEvent)=>{
+  if(event.type==='task.state')taskCache.set(event.task.taskId,event.task);
   logs.observe('local-user',event);
   if(event.type==='terminal.closed')terminalSizes.delete(event.terminalId);
   if(event.type==='challenge')challenges.set(event.challengeId,event);
@@ -59,6 +62,7 @@ async function setupIpc(){
       let context:{localPath:string;localParent:string}|undefined;
       if(req.method==='transfer.start'){const p=schemas['transfer.start'].parse(parsed),g=await grants.get('local-user',p.pathGrantId,p.direction);context={localPath:g.path,localParent:g.parent};}
       const data=await backend.call(req.method,parsed,context,Math.min(120000,Math.max(1,req.deadlineMs-Date.now())));
+      if(req.method==='task.list')for(const task of data as TaskSnapshot[])taskCache.set(task.taskId,task);
       if(req.method==='terminal.resize'){const p=schemas['terminal.resize'].parse(parsed);terminalSizes.set(p.terminalId,{cols:p.cols,rows:p.rows});logs.resize('local-user',p.terminalId,p.cols,p.rows);}
       if(req.method==='profile.delete')vault.remove(schemas['profile.delete'].parse(parsed).profileId);
       return {ok:true,requestId,data};
@@ -178,15 +182,17 @@ async function bootstrap(){
   window.removeMenu();window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_webContents,_permission,callback)=>callback(false));
+  const exit=new ExitController(async()=>{
+      // Use already-received task events. Never wait for IPC to show Exit.
+      const active=[...taskCache.values()].filter(t=>['running','queued','verifying','committing','pausing','cancelling'].includes(t.state));
+      const choice=await dialog.showMessageBox(window!,{type:'question',buttons:['退出','取消'],defaultId:1,cancelId:1,message:'退出 Hornet？',detail:(active.length?'将尝试暂停活动传输；异常提交需在重启后核对目标文件。':'连接和配置会保留。')+'后台无响应时最多等待 5 秒后退出。终端、图形会话与 LPD 接收将关闭；系统已接收的打印可能继续。'});
+      return choice.response===0;
+  },()=>Promise.allSettled([backend.stop(),logs.stopAll('local-user')]),()=>{
+      try{backend.forceStop();rdp.stop(true);grants.clear('local-user');pendingPasswords.clear();}
+      finally{try{window?.destroy();}finally{app.exit(0);}}
+  });
   window.on('close',event=>{
-    if(quitting)return;event.preventDefault();
-    void (async()=>{
-      const tasks=await backend.call<TaskSnapshot[]>('task.list').catch(()=>[]);
-      const active=tasks.filter(t=>['running','queued','verifying','committing'].includes(t.state));
-      const choice=await dialog.showMessageBox(window!,{type:'question',buttons:['退出','取消'],defaultId:1,cancelId:1,message:'退出 Hornet？',detail:active.length?'活动传输将暂停，重新启动后可校验恢复。终端、图形会话与 LPD 接收将关闭；系统已接收的打印可能继续。':'终端、图形会话与 LPD 接收将关闭，配置会保留；系统已接收的打印可能继续。'});
-      if(choice.response!==0)return;
-      quitting=true;await backend.stop().catch(()=>{});await logs.stopAll('local-user');window?.destroy();app.quit();
-    })();
+    event.preventDefault();void exit.request().catch(()=>{});
   });
   await window.loadURL('app://hornet/index.html');
   if(process.env.HORNET_SMOKE!=='1')showWindow();

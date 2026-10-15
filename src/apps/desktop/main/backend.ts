@@ -9,11 +9,11 @@ import { Vault } from './vault';
 export class Backend {
   private child!:UtilityProcess;
   private pending=new Map<string,{resolve:(data:unknown)=>void;reject:(e:Error)=>void;deadline:number}>();
-  private health=new Liveness();private watchdog?:ReturnType<typeof setInterval>;private available=false;private stopping=false;
+  private health=new Liveness();private watchdog?:ReturnType<typeof setInterval>;private available=false;private stopping=false;private terminated=false;
   private suspend=()=>this.health.suspend();private resume=()=>this.health.resume();
   constructor(private vault:Vault,private emit:(event:HornetEvent)=>void,private stopped:()=>void=()=>{}) {}
   async start(userData:string){
-    this.health=new Liveness();this.stopping=false;
+    this.health=new Liveness();this.stopping=false;this.terminated=false;
     await new Promise<void>((resolve,reject)=>{
       const hostDirectory=app.isPackaged?__dirname.replace(/app\.asar(?=[\\/])/,'app.asar.unpacked'):__dirname;
       this.child=utilityProcess.fork(join(hostDirectory,'host.cjs'),[userData],{serviceName:'Hornet Protocol Host',stdio:'pipe'});
@@ -45,5 +45,12 @@ export class Backend {
       try{this.child.postMessage({type:'call',requestId,owner:'local-user',method,payload,context});}catch{this.pending.delete(requestId);reject(new AppError('IPC004','后台服务已退出，请重启应用。'));}
     });
   }
-  async stop(){this.stopping=true;try{if(this.available)await this.call('shutdown',{},undefined,10000);}finally{clearInterval(this.watchdog);this.child?.kill();}}
+  forceStop(){
+    if(this.terminated)return;this.terminated=true;
+    this.stopping=true;this.available=false;clearInterval(this.watchdog);
+    powerMonitor.removeListener('suspend',this.suspend);powerMonitor.removeListener('resume',this.resume);
+    for(const p of this.pending.values())p.reject(new AppError('IPC006','应用正在退出。'));this.pending.clear();
+    this.child?.kill();
+  }
+  async stop(){this.stopping=true;try{if(this.available)await this.call('shutdown',{},undefined,10000);}finally{this.forceStop();}}
 }

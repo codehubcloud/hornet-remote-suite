@@ -41,3 +41,10 @@ it('expires an unanswered request while the backend remains responsive',async()=
   await vi.advanceTimersByTimeAsync(3000);await result;expect(f.child.kill).not.toHaveBeenCalled();
  }finally{f.child.emit('exit',0);}
 });
+it('forces shutdown without waiting for a reply and rejects outstanding requests once',async()=>{
+ const f=await fixture();
+ const pending=expect(f.backend.call('file.list')).rejects.toThrow('正在退出');
+ f.backend.forceStop();f.backend.forceStop();await pending;
+ expect(f.child.kill).toHaveBeenCalledTimes(1);expect(powerMonitor.listenerCount('resume')).toBe(0);
+ await expect(f.backend.call('profile.list')).rejects.toThrow('后台服务已退出');f.child.emit('exit',0);
+});
