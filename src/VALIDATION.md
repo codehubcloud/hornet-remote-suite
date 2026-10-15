@@ -368,3 +368,10 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 真实标题栏回归增加已解码图片的主体覆盖范围检查：最长方向至少占 256 像素画布的 230 像素，继续检查角点透明、主题、菜单与原生窗口操作。版本入口和发布说明同步为 0.0.10。
 - 本地 npm run check 通过：TypeScript、语言目录、32 个文件 / 166 项测试与桌面构建；发布脚本两项测试通过。Windows 原生 LoadImageW 读取 ICO 的 32/48 帧确认可见主体分别为 28×30 / 40×46，角点 alpha=0；直接使用本机 .NET Icon(file).ToBitmap 解释 PNG 压缩 ICO 会产生错误像素，因此原生验证使用 LoadImageW 或从已打包 EXE 提取的 HICON。
 - 本地实际 Windows 0.0.10 解包程序通过 test:titlebar:package（透明角点、主体覆盖范围、主题、菜单、窄窗口、折叠与系统窗口按钮）。主程序与 NativeHost.exe 的真实内嵌图标经 ExtractAssociatedIcon 检查均为 32×32、清晰主体 28×30、角点 alpha=0；打包源码白名单审计通过，未包含 pngjs 构建依赖目录。
+
+### 0.0.10 发布验收
+
+- 私有 Actions [38769301939](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38769301939) 首轮全部成功：完整检查、Windows x64、macOS x64/arm64、Linux x64/arm64 与 publish。五个平台实际打包程序通过图标覆盖范围与透明度、标题栏、历史数据库、剪贴板、分屏/字体缩放、传输与退出验收。
+- [v0.0.10](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.10) 已公开并设为 latest；七个安装包与 SHA256SUMS 齐全，清单七行与 GitHub asset digest 逐项一致。
+- Windows 安装包 SHA-256：a10e8cdbb9d046b9950c3845a5e25c9c3a11f47ad442ba9d1ff6c09ee08e895e。
+- 源码仓库保持 private，公开仓库 Git 树仅 README.md。源码标签 v0.0.10 保持在构建提交 ad05cd2，发布验收记录单独提交，不修改已发布标签或安装包。原始 Logo PNG、用户现有安装与配置未被修改。
