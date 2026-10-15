@@ -300,3 +300,14 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - [v0.0.6](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.6) 已公开并设为 latest；七个安装包和 SHA256SUMS 齐全，校验文件七行与 GitHub asset digest 逐项一致。
 - Windows 安装包 SHA-256：6a52f979cebac9a4dc7ec0aa4595c8ed862f385d6d82cf2688f506c4bcf91ccc。
 - 源码仓库仍为 private；公开仓库 Git 树仅 README.md。源码标签 v0.0.6 保持在构建提交 33edcba，发布验收与下载说明单独提交，不移动发布标签或修改已发布安装包。用户原安装目录及配置未被修改。
+
+## 2026-10-15：0.0.7 透明 Logo 与合并标题栏
+
+- 使用用户新提供的透明 PNG（1358×1159），逐字节保存原始文件；SHA-256 为 0083b15c9340c664dc43a752800b290c3b8b19b5111ad7a993f6e90934bec8d4。使用透明留白将完整图片等比居中置入方形，保留 alpha、完整图形与配色，不绘制背景；重新生成 ICO、ICNS 和多尺寸 PNG。
+- 使用 Electron 官方 custom-title-bar 模式：titleBarStyle hidden 配合 Windows/Linux 原生窗口按钮覆盖层；macOS 保留系统交通灯按钮。移除独立白色标题区域与可见应用名称，透明图标与菜单位于同一条 36 DIP 顶栏。窗口元数据名称保留，便于任务栏、辅助技术及系统切换器识别。
+- 顶部空白和图标区域可拖动，菜单明确排除拖动；按原生按钮安全区域布局，macOS 额外预留左侧按钮空间。主题切换更新顶栏与原生按钮颜色，配色 IPC 通过现有发送方授权和严格十六进制颜色 schema，不经过协议后台。折叠工具栏保留标题菜单和窗口按钮。
+- 新增 test:titlebar 和对应实际打包验收，验证透明像素、图片解码、菜单处于 y=0、无可见产品名、原生覆盖层可见、主题/按钮配色同步、拖动与点击区域、窄窗口、折叠及 Alt 菜单；Windows/macOS 验证最大化、还原与最小化，Linux 无窗口管理器的 Xvfb 仅验证尺寸与菜单。
+- 初轮窄窗口检查把 setSize(1024) 后的 renderer 宽度错误假定为不超过 1024，Windows 最小客户区及 DPI 约束实际得到 1026。测试改为确认进入小于 1100 的窄窗口，再严格检查菜单与拖动安全区域，不改变应用窗口约束。后续开发程序标题栏验收通过。
+- npm run check 通过：类型、语言资源、32 个文件 / 166 项测试及生产构建；2 项发布测试通过。测试使用临时用户目录，未修改用户实际安装或配置。打包与完整跨平台结果另行记录。
+- 最终 test:appearance 通过：八种语言、十八套界面主题、运行中终端配色及会话连续性保持。真实 Windows 0.0.7 解包 EXE 的 test:package、test:titlebar:package、test:clipboard:package、test:shutdown:package 全部通过。后台请求与 renderer 故意卡住后仍在约 5.9 秒退出。
+- 另用隔离临时应用的真实窗口句柄截图（包含系统按钮，只截该窗口），已查看 titlebar-native-window.png：透明 Logo、菜单和原生最小化/最大化/关闭按钮同一行，顶栏配色一致，无旧白色标题栏或应用名；用户现有程序与数据未被修改。

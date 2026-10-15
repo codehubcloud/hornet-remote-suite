@@ -6,6 +6,7 @@ import type { TerminalRecording } from '../../../packages/contracts/terminal-rec
 import { BroadcastDialog } from './BroadcastDialog';
 import { useWorkspaceCommands } from './workspace-commands';
 import { MenuBar,type MenuGroup,type MenuItem } from './MenuBar';
+import { TitleBar } from './TitleBar';
 import { AppearanceDialog,themeLabels } from './AppearanceDialog';
 import { useAppearance,themes } from './appearance';
 import { suiteTools,type SuiteTool } from './SuiteWorkspace';
@@ -107,7 +108,7 @@ export function SessionCommands({recent,toggleHosts,hostsVisible,openTool,toolTa
   if(action){event.preventDefault();event.stopImmediatePropagation();action();}
  };window.addEventListener('keydown',key,true);return()=>window.removeEventListener('keydown',key,true);});
  return <div className="session-commands">
-  <MenuBar groups={groups} reveal={collapsed?toggleChrome:undefined}/>
+  <TitleBar><MenuBar groups={groups} reveal={collapsed?toggleChrome:undefined}/></TitleBar>
   <div className="standard-toolbar" role="toolbar" aria-label={tr('标准按钮')}>
    <button type="button" title={tr("新建会话")} aria-label={tr("新建会话")} onClick={()=>create()}>＋</button>
    <button type="button" title={tr("打开会话")} aria-label={tr("打开会话")} onClick={hosts}>▱</button>

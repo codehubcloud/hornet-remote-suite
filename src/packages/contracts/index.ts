@@ -125,6 +125,7 @@ export type HornetEvent =
   | { type: 'service.error'; message: string };
 export interface Layout { profileIds: string[]; activeProfileId?: string }
 export interface HornetApi {
+ windowChrome:{platform:string;setColors:(colors:{color:string;symbolColor:string})=>Promise<void>};
  clipboard:{read:()=>Promise<string>;write:(text:string)=>Promise<void>};
   localTerminal:{shells():Promise<{id:'powershell'|'cmd';name:string;path:string}[]>;open(config:LocalTerminalConfig):Promise<DeviceTerminal>};
   serialTerminal:{list():Promise<SerialDevice[]>;open(config:SerialTerminalConfig):Promise<DeviceTerminal>};

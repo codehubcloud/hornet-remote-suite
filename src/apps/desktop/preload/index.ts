@@ -14,6 +14,7 @@ function clipboardCall<T>(method:string,payload:unknown={}):Promise<T>{
  clipboardSequence=request.catch(()=>{});return request;
 }
 const api:HornetApi={
+ windowChrome:{platform:process.platform,setColors:colors=>local('windowChrome.colors',colors)},
  clipboard:{read:()=>clipboardCall('clipboard.read'),write:text=>clipboardCall('clipboard.write',{text})},
  localTerminal:{shells:()=>call('localTerminal.shells'),open:config=>call('localTerminal.open',config)},
  serialTerminal:{list:()=>call('serialTerminal.list'),open:config=>call('serialTerminal.open',config)},

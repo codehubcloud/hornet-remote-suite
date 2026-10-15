@@ -153,3 +153,19 @@
 @media(max-width:760px){.script-step{grid-template-columns:20px 108px minmax(80px,1fr) 90px 24px 24px;gap:4px}.script-step>button{width:24px}.script-toolbar select{width:150px}}
 
 .terminal-context-menu button{display:flex;align-items:center;justify-content:space-between;gap:12px}.terminal-context-menu kbd{color:var(--c-8fa6bf);font:inherit;font-size:10px;white-space:nowrap}.terminal-context-menu button:disabled{opacity:.45;cursor:default}
+
+/* Menus share the native caption row; only the empty/title icon area drags. */
+.app-titlebar{height:36px;flex-shrink:0;background:var(--c-101a2b);color:var(--c-c3d2e6);user-select:none;-webkit-app-region:drag}
+.titlebar-content{display:flex;align-items:center;height:36px;margin-left:env(titlebar-area-x,0px);width:env(titlebar-area-width,calc(100% - 138px));min-width:0}
+.titlebar-logo{width:22px;height:22px;object-fit:contain;margin:0 10px;flex-shrink:0;pointer-events:none}
+.titlebar-drag-space{flex:1;min-width:40px;height:100%}
+:root .app-titlebar .reference-menubar{height:36px;padding:0;align-items:center;gap:0;flex-shrink:0}
+:root .app-titlebar .reference-menubar>div>button{height:28px;padding:4px 9px;border-radius:4px}
+.app-titlebar .reference-menubar>div>button>span{display:none}
+.app-titlebar .reference-menubar,.app-titlebar .reference-popup{-webkit-app-region:no-drag}
+.app-titlebar[data-platform=darwin] .titlebar-content{margin-left:0;padding-left:78px;width:100%}
+:root[data-theme=light] .app-titlebar{background:#f0f0f0}
+:root[data-theme=visual-studio-blue] .app-titlebar{background:#293955}
+:root:fullscreen .app-titlebar .titlebar-content{margin-left:0;padding-left:0;width:100%}
+.chrome-collapsed .session-commands{display:block}
+.chrome-collapsed .standard-toolbar,.chrome-collapsed .quick-connect-bar{display:none}

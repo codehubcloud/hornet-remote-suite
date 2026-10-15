@@ -31,6 +31,7 @@ npm run test:release
 npm run package
 npm run test:package
 npm run test:clipboard:package
+npm run test:titlebar:package
 ```
 
 输出在 `src/release/`。macOS 安装包在 macOS 构建，不通过 Windows 伪装跨编译。

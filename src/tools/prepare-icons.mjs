@@ -7,10 +7,10 @@ await mkdir('assets/branding',{recursive:true});
 if(process.argv[2]&&resolve(process.argv[2])!==source)await copyFile(resolve(process.argv[2]),source);
 const png=await readFile(source);
 if(png.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw new Error('The brand source must be PNG.');
-const width=png.readUInt32BE(16),height=png.readUInt32BE(20),side=Math.min(width,height);
-if(side<512)throw new Error('The brand source must be at least 512 pixels on each side.');
-// Only trim the supplied image's outer side margins to fit desktop icon slots.
-// Keep its original pixels, aspect ratio, colors and background; never redraw it.
+const width=png.readUInt32BE(16),height=png.readUInt32BE(20),side=Math.max(width,height);
+if(Math.min(width,height)<512)throw new Error('The brand source must be at least 512 pixels on each side.');
+// Center the complete supplied image in a square with transparent padding.
+// Preserve its alpha channel, proportions and colors; never crop or redraw it.
 await mkdir('.cache/branding',{recursive:true});
 const svg=resolve('.cache/branding/source.svg');
 await writeFile(svg,`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 ${side} ${side}"><image x="${-(width-side)/2}" y="${-(height-side)/2}" width="${width}" height="${height}" href="data:image/png;base64,${png.toString('base64')}"/></svg>`);

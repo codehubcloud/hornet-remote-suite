@@ -73,6 +73,12 @@ async function setupIpc(){
       authorize(event);const m=z.object({method:z.string(),payload:z.unknown()}).strict().parse(raw);
       let data:unknown;
       switch(m.method){
+        case 'windowChrome.colors':{
+          const color=z.string().regex(/^#[0-9a-f]{6}$/i);
+          const colors=z.object({color,symbolColor:color}).strict().parse(m.payload);
+          if(process.platform!=='darwin')window?.setTitleBarOverlay({...colors,height:36});
+          data=null;break;
+        }
         case 'terminalLogs.openRecording':{
           const p=z.object({id:z.string().uuid().optional()}).strict().parse(m.payload??{});let path:string|undefined;
           if(p.id){const log=logs.list('local-user').find(l=>l.id===p.id);if(!log||log.format!=='recording'||!['stopped','failed'].includes(log.state))throw new AppError('LOG_STATE','请先停止会话录制。');path=log.path;}
@@ -179,7 +185,7 @@ async function bootstrap(){
   });
   vault=new Vault(join(app.getPath('userData'),'credentials','vault.json'));
   backend=new Backend(vault,emit,()=>{void logs.stopAll('local-user').catch(()=>{});});await backend.start(app.getPath('userData'));await setupIpc();
-  window=new BrowserWindow({title:'Hornet Remote Suite',icon:join(__dirname,process.platform==='win32'?'icon.ico':'icon.png'),width:1440,height:900,minWidth:1024,minHeight:720,backgroundColor:'#0c1220',show:process.env.HORNET_SMOKE!=='1',webPreferences:{preload:join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  window=new BrowserWindow({title:'Hornet Remote Suite',titleBarStyle:'hidden',...(process.platform==='darwin'?{trafficLightPosition:{x:12,y:11}}:{titleBarOverlay:{color:'#f0f0f0',symbolColor:'#20252b',height:36}}),icon:join(__dirname,process.platform==='win32'?'icon.ico':'icon.png'),width:1440,height:900,minWidth:1024,minHeight:720,backgroundColor:'#0c1220',show:process.env.HORNET_SMOKE!=='1',webPreferences:{preload:join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   window.removeMenu();window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_webContents,_permission,callback)=>callback(false));

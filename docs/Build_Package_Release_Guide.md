@@ -96,6 +96,7 @@ try {
 npm.cmd run test:clipboard:package
 npm.cmd run test:transfer-reliability:package
 npm.cmd run test:shutdown:package
+npm.cmd run test:titlebar:package
 ```
 
 `package` 先执行 `build:release`，再使用 electron-builder 构建 NSIS EXE；`--publish never` 禁止打包工具自行发布。只想检查解包后的应用时，使用 `npm.cmd run package:dir`，不会生成安装程序。
@@ -130,6 +131,7 @@ HORNET_SMOKE_SCHEMA_EOL=crlf npm run test:package
 npm run test:clipboard:package
 npm run test:transfer-reliability:package
 npm run test:shutdown:package
+npm run test:titlebar:package
 ```
 
 Linux 安装工作流列出的系统依赖后，用 Xvfb 执行验收：
@@ -140,6 +142,7 @@ HORNET_SMOKE_SCHEMA_EOL=crlf xvfb-run -a npm run test:package
 xvfb-run -a npm run test:clipboard:package
 xvfb-run -a npm run test:transfer-reliability:package
 xvfb-run -a npm run test:shutdown:package
+xvfb-run -a npm run test:titlebar:package
 ```
 
 macOS 解包目录为 `release/mac/` 或 `release/mac-arm64/`，Linux 为 `release/linux-unpacked/` 或 `release/linux-arm64-unpacked/`。测试脚本按本机架构选择程序；使用自定义输出目录时，将 `HORNET_PACKAGED_EXECUTABLE` 设置为实际可执行文件的绝对路径。
@@ -153,6 +156,8 @@ macOS 解包目录为 `release/mac/` 或 `release/mac-arm64/`，Linux 为 `relea
 `test:transfer-reliability:package` 验证远端完整 SHA-256、上传校验零回读、单次下载、任务校验进度、计算哈希期间 X11 状态查询仍可响应及电源事件处理。心跳超时、模拟长时间休眠、SFTP 错误处理和远端命令不支持时的回退另由单元/集成测试覆盖；不以这些夹具结果代替真实 GB 级文件性能基准。
 
 `test:shutdown:package` 在独立测试进程中阻断后台请求和 shutdown 的传递，并故意卡住测试 renderer，确认关闭提示无需等后台、取消保留应用、确认退出后清理等待有限且后台进程被结束。不在用户实际应用中注入故障；发布流程在每个平台执行此验收。
+
+`test:titlebar:package` 检查透明 Logo、顶端合并菜单、主题与原生窗口按钮配色、拖动区域与菜单可点击区域、窄窗口安全布局及折叠行为。Windows/macOS 同时验证最大化、还原、最小化；Linux 无窗口管理器的 Xvfb 环境只验证窗口尺寸调整与菜单。全部使用临时用户目录。
 
 这些测试使用临时数据和本机回环服务，不连接用户保存的远端主机。它们不能替代安装/卸载、真实远端协议、串口硬件、实体打印机或签名/公证验收；必要的人工安装验收应另行记录。
 
