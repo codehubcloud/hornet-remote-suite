@@ -8,6 +8,8 @@
 
 ## 章节目录
 
+实际编译和安装包发布请参阅 [编译、打包与发布操作指南](Build_Package_Release_Guide.md)。该指南依据当前脚本与 Actions 工作流，覆盖本地构建、五平台打包验收、私有源码向公开二进制仓库发布及失败排查；下列章节中的 CI/CD 概念示例不替代实际操作指南。
+
 | 章节 | 内容 |
 |---|---|
 | 1 | [系统总体设计](Hornet_Remote_Suite_Software_Detailed_Design_Specification_V1.0_Chapter1_System_Design.md) |

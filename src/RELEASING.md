@@ -1,5 +1,7 @@
 # 二进制发布
 
+完整操作流程、平台命令、版本准备、验收和故障排查见 [docs/Build_Package_Release_Guide.md](../docs/Build_Package_Release_Guide.md)。本文保留发布入口摘要；实际工作流以 `.github/workflows/release.yml` 为准。
+
 私有源仓库：`codehubcloud/hornet-remote-suite`。
 公开安装包仓库：`codehubcloud/hornet-remote-suite-release`。
 首个版本：`0.0.1`，对应标签 `v0.0.1`。
@@ -28,6 +30,7 @@ npm run check
 npm run test:release
 npm run package
 npm run test:package
+npm run test:clipboard:package
 ```
 
 输出在 `src/release/`。macOS 安装包在 macOS 构建，不通过 Windows 伪装跨编译。
