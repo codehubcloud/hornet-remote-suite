@@ -350,3 +350,12 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 
 - 按用户要求发布 Ctrl＋滚轮终端字号缩放功能；将 package.json、lockfile 与工作流手动版本入口同步为 0.0.9，并更新发布说明。产品功能沿用已验证的 1c48883，不改动用户配置或已发布安装包。
 - 发布版本检查与发布脚本两项测试通过。完整检查及五个平台实际打包程序的分屏/字号缩放、数据库、剪贴板、标题栏、传输与退出验收由本次标签工作流执行，通过后才发布七个安装包及 SHA256SUMS。
+- 本地 Windows x64 0.0.9 实际解包程序通过 test:package 与 test:terminal-tabs:package：历史配置、后台、SSH/SFTP、原生辅助程序、真实 Ctrl＋滚轮、分屏独立字号、8/32 边界、远端 PTY 行列同步、界面缩放不变和会话连续性均通过；打包审计确认不包含项目源码或 source map。测试使用独立临时数据，用户现有安装和配置未被修改。
+- 首轮 Windows 在 test:package 的回环 SSH 认证完成后等待 terminal-host 可见的默认 5 秒断言超时，其余四个构建全部通过；按原 v0.0.9 标签重试 Windows，未移动标签或跳过验收。本地相同 0.0.9 解包程序已通过相应检查。master 的 package-smoke 使用 expect.configure({timeout:30000}) 与现有页面操作等待一致，修改后 test:package 再次通过；该变更仅用于后续验收，不改变本次标签对应产品或本次发布检查。
+
+### 2026-10-16：0.0.9 发布验收
+
+- 私有 Actions [38762248450](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38762248450) 按原标签重试 Windows 后全部成功：完整检查、Windows x64、macOS x64/arm64、Linux x64/arm64 与 publish。五个平台实际打包程序均通过 Ctrl＋滚轮字号缩放、分屏独立状态、PTY 尺寸同步、历史数据库兼容、剪贴板、标题栏、传输与退出验收，未跳过首轮失败检查或修改发布标签。
+- [v0.0.9](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.9) 已公开并设为 latest；七个安装包和 SHA256SUMS 齐全，校验清单七行与 GitHub asset digest 逐项一致。
+- Windows 安装包 SHA-256：aba276118cca16c6991aa740be7cf554e94ec110c3a124c7e43e454482c00deb。
+- 源码仓库保持 private，公开仓库 Git 树仅 README.md；源码标签 v0.0.9 保持在构建提交 22d1b61，验收记录与后续测试等待改进单独提交，不移动标签或修改已发布安装包。覆盖安装保留连接和配置；本次未操作用户现有安装或实际主机。

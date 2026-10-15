@@ -1,4 +1,4 @@
-import { _electron as electron, expect } from '@playwright/test';
+import { _electron as electron, expect as baseExpect } from '@playwright/test';
 import { mkdtemp, mkdir, rm, readdir, readFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { dismissStartupSessions } from './session-dialog-helper.mjs';
+
+// Match the startup and page action allowance: page.setDefaultTimeout does not
+// affect expect's separate 5-second default on slower native CI runners.
+const expect=baseExpect.configure({timeout:30000});
 
 let executable = process.env.HORNET_PACKAGED_EXECUTABLE;
 if (!executable) {
