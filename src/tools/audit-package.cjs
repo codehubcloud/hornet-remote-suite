@@ -12,10 +12,10 @@ module.exports = async context => {
     if (!/^dist(?:\/|$)/.test(entry) || /\.(?:map|tsx?)$/i.test(entry)) {
       throw new Error('Unexpected first-party file in public package: ' + entry);
     }
-    if (entry !== 'dist' && !/^dist\/(?:main\.cjs|preload\.cjs|host\.cjs|schema\.sql|NativeHost\.exe|renderer(?:\/|$))$/.test(entry)
+    if (entry !== 'dist' && !/^dist\/(?:main\.cjs|preload\.cjs|host\.cjs|schema\.sql|icon\.(?:png|ico)|NativeHost\.exe|renderer(?:\/|$))$/.test(entry)
         && !entry.startsWith('dist/renderer/')) throw new Error('Unexpected build output: ' + entry);
   }
-  for (const entry of ['dist/main.cjs', 'dist/preload.cjs', 'dist/host.cjs', 'dist/schema.sql', 'dist/renderer/index.html']) {
+  for (const entry of ['dist/main.cjs', 'dist/preload.cjs', 'dist/host.cjs', 'dist/schema.sql', 'dist/icon.png', 'dist/icon.ico', 'dist/renderer/logo.png','dist/renderer/index.html']) {
     if (!entries.includes(entry)) throw new Error('Missing runtime file: ' + entry);
   }
   for (const entry of ['host.cjs', 'schema.sql', ...(context.electronPlatformName === 'win32' ? ['NativeHost.exe'] : [])]) {

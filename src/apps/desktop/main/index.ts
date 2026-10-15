@@ -169,6 +169,7 @@ async function bootstrap(){
   };
   app.on('second-instance',showWindow);
   await app.whenReady();
+  app.dock?.setIcon(join(__dirname,'icon.png'));
   const assets=resolve(__dirname,'renderer');
   protocol.handle('app',request=>{
     const url=new URL(request.url);
@@ -178,7 +179,7 @@ async function bootstrap(){
   });
   vault=new Vault(join(app.getPath('userData'),'credentials','vault.json'));
   backend=new Backend(vault,emit,()=>{void logs.stopAll('local-user').catch(()=>{});});await backend.start(app.getPath('userData'));await setupIpc();
-  window=new BrowserWindow({title:'Hornet Remote Suite',width:1440,height:900,minWidth:1024,minHeight:720,backgroundColor:'#0c1220',show:process.env.HORNET_SMOKE!=='1',webPreferences:{preload:join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  window=new BrowserWindow({title:'Hornet Remote Suite',icon:join(__dirname,process.platform==='win32'?'icon.ico':'icon.png'),width:1440,height:900,minWidth:1024,minHeight:720,backgroundColor:'#0c1220',show:process.env.HORNET_SMOKE!=='1',webPreferences:{preload:join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   window.removeMenu();window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_webContents,_permission,callback)=>callback(false));

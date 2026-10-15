@@ -1,11 +1,12 @@
 {
   "name": "hornet-remote-suite",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
   "description": "Unified remote workstation",
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node tools/build.mjs",
+    "prepare:icons": "node tools/prepare-icons.mjs",
     "start": "node tools/start.mjs",
     "dev": "npm run build && node tools/start.mjs",
     "typecheck": "tsc --noEmit",

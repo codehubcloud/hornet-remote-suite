@@ -284,3 +284,12 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - [v0.0.5](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.5) 已公开并设为 latest；七个安装包与 SHA256SUMS 齐全，校验文件七行与 GitHub asset digest 逐项一致。
 - Windows 安装包 SHA-256：`6cbf92837cffb6e8ce9021cd70d6a77681e1fe1bb81e5c7ed1aa098750832dfd`。
 - 源码仍为 private，公开仓库 Git 树仅 README.md。源码 v0.0.5 保持在构建提交 02fd125；发布验收与下载说明单独提交，不修改已发布包或标签。没有升级用户实际安装目录，本机检测到的原目录版本仍为 0.0.3，需由用户覆盖安装新版后使用。
+
+## 2026-10-15：0.0.6 应用 Logo
+
+- 使用用户提供的 Logo.png，原始文件逐字节保存到 assets/branding/source.png，SHA-256 为 5c0a7f549bf70b2c6cd0d5499c074530335330772c3f7b4022d3f9a2083e695a。使用现有锁定 electron-builder 配套图标转换工具生成 ICO、ICNS 和多尺寸 PNG；只裁掉两侧外边距适配方形图标，保留完整图形、背景、配色与比例。
+- 配置 Windows 应用、NSIS 安装/卸载程序、快捷方式，macOS 应用，Linux 应用图标；运行时窗口、macOS Dock、Windows 原生 RDP 窗口、关于窗口和 favicon 使用同一 Logo。菜单栏保持原有紧凑布局。生成资源随私有源码保存，构建不依赖用户下载目录。
+- npm run check 通过：类型、八语言资源、32 个文件 / 166 项测试及构建；2 项发布测试通过。Windows 0.0.6 解包 EXE 已通过 test:package，原生适配器、安装包源码白名单检查通过。实际提取并查看主程序及 NativeHost.exe 内嵌图标，均为新 Logo。
+- 测试只使用临时数据与本地夹具，未修改用户现有安装、连接或配置。完整五平台发布验收结果另行记录。
+- 关于窗口图片首次检查在异步解码完成前立即读取 naturalWidth，导致断言失败；失败截图显示图片随后正常加载。改为轮询等待图片 complete 且 naturalWidth 为 256，不改动产品资源路径。
+- 最终 test:appearance 通过，关于窗口实际图片加载完成且原始尺寸为 256；已查看 about-logo.png，显示正常。八语言、十八套界面主题与运行中终端配色/会话连续性验收同时通过。

@@ -34,8 +34,8 @@ public static class NativeHost {
             }
             if (op != "rdp" && op != "rdpProbe") return 1;
             Application.EnableVisualStyles();
-            using (var form = new Form()) using (var control = new RdpControl()) {
-                form.Text = "Hornet · RDP"; form.Width = 1280; form.Height = 800;
+            using (var form = new Form()) using (var control = new RdpControl()) using (var icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath)) {
+                form.Icon = icon; form.Text = "Hornet · RDP"; form.Width = 1280; form.Height = 800;
                 control.Dock = DockStyle.Fill; form.Controls.Add(control);
                 if (op == "rdpProbe") { form.ShowInTaskbar = false; form.Opacity = 0; }
                 dynamic rdp = null; bool parentClosed = false;

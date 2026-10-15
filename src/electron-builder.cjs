@@ -12,7 +12,7 @@ module.exports = {
   npmRebuild: false,
   beforePack: './tools/verify-native.cjs',
   files: [
-    'dist/main.cjs', 'dist/preload.cjs', 'dist/host.cjs', 'dist/schema.sql',
+    'dist/main.cjs', 'dist/preload.cjs', 'dist/host.cjs', 'dist/schema.sql', 'dist/icon.png', 'dist/icon.ico',
     'dist/renderer/**/*', 'dist/NativeHost.exe',
     '!**/*.map', '!**/*.ts', '!**/*.tsx', '!**/*.pdb', '!**/test{,s}/**',
   ],
@@ -24,13 +24,14 @@ module.exports = {
   ],
   afterPack: './tools/audit-package.cjs',
   publish: null,
-  win: { artifactName: 'Hornet-Remote-Suite-${version}-windows-${arch}.${ext}', target: [{ target: 'nsis', arch: ['x64'] }] },
+  win: { icon:'build/icons/icon.ico', artifactName: 'Hornet-Remote-Suite-${version}-windows-${arch}.${ext}', target: [{ target: 'nsis', arch: ['x64'] }] },
   nsis: {
     oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true, createStartMenuShortcut: true,
     shortcutName: 'Hornet Remote Suite', deleteAppDataOnUninstall: false,
+    installerIcon:'build/icons/icon.ico',uninstallerIcon:'build/icons/icon.ico',installerHeaderIcon:'build/icons/icon.ico',
     differentialPackage: false,
   },
-  mac: { artifactName: 'Hornet-Remote-Suite-${version}-macos-${arch}.${ext}', target: 'dmg', category: 'public.app-category.developer-tools' },
-  linux: { target: ['AppImage', 'deb'], category: 'Network', maintainer: 'codehubcloud' },
+  mac: { icon:'build/icons/icon.icns', artifactName: 'Hornet-Remote-Suite-${version}-macos-${arch}.${ext}', target: 'dmg', category: 'public.app-category.developer-tools' },
+  linux: { icon:'build/icons/png',target: ['AppImage', 'deb'], category: 'Network', maintainer: 'codehubcloud' },
 };
