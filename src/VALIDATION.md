@@ -359,3 +359,12 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - [v0.0.9](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.9) 已公开并设为 latest；七个安装包和 SHA256SUMS 齐全，校验清单七行与 GitHub asset digest 逐项一致。
 - Windows 安装包 SHA-256：aba276118cca16c6991aa740be7cf554e94ec110c3a124c7e43e454482c00deb。
 - 源码仓库保持 private，公开仓库 Git 树仅 README.md；源码标签 v0.0.9 保持在构建提交 22d1b61，验收记录与后续测试等待改进单独提交，不移动标签或修改已发布安装包。覆盖安装保留连接和配置；本次未操作用户现有安装或实际主机。
+
+## 2026-10-16：0.0.10 任务栏图标主体占比修正
+
+- 用户原始透明 PNG 1358×1159 中，alpha≥1 的外围像素扩展到 x=0，清晰主体（alpha≥128）仅占 942×1060。原生成逻辑按整个画布补成正方形，使 32×32 图标中的清晰主体仅为 22×24。
+- 图标生成改为读取 alpha≥16 的可见范围，等比居中、每边预留最长边 2% 的透明边距，仅调整嵌入原图的 SVG 视口。原始 PNG 逐字节不变，SHA-256 仍为 0083b15c9340c664dc43a752800b290c3b8b19b5111ad7a993f6e90934bec8d4；未重绘、拉伸或添加底色。pngjs 7.0.0 仅作为构建期 PNG 解码依赖，不加入运行依赖。
+- 重新生成 ICO、ICNS、多尺寸 PNG 和界面 Logo。32×32 PNG 清晰主体为 28×30，48×48 为 40×46，四角透明；已查看 32/256 像素图形。Windows Icon API 读取 ICO 的 32/48 像素帧，确认图形占比和透明度。
+- 真实标题栏回归增加已解码图片的主体覆盖范围检查：最长方向至少占 256 像素画布的 230 像素，继续检查角点透明、主题、菜单与原生窗口操作。版本入口和发布说明同步为 0.0.10。
+- 本地 npm run check 通过：TypeScript、语言目录、32 个文件 / 166 项测试与桌面构建；发布脚本两项测试通过。Windows 原生 LoadImageW 读取 ICO 的 32/48 帧确认可见主体分别为 28×30 / 40×46，角点 alpha=0；直接使用本机 .NET Icon(file).ToBitmap 解释 PNG 压缩 ICO 会产生错误像素，因此原生验证使用 LoadImageW 或从已打包 EXE 提取的 HICON。
+- 本地实际 Windows 0.0.10 解包程序通过 test:titlebar:package（透明角点、主体覆盖范围、主题、菜单、窄窗口、折叠与系统窗口按钮）。主程序与 NativeHost.exe 的真实内嵌图标经 ExtractAssociatedIcon 检查均为 32×32、清晰主体 28×30、角点 alpha=0；打包源码白名单审计通过，未包含 pngjs 构建依赖目录。

@@ -26,7 +26,8 @@ try{
  expect(await bar.innerText()).not.toContain('Hornet Remote Suite');
  await expect(bar).toHaveCSS('-webkit-app-region','drag');await expect(menu).toHaveCSS('-webkit-app-region','no-drag');
  const logo=bar.locator('img');await expect.poll(()=>logo.evaluate(img=>img.complete&&img.naturalWidth)).toBe(256);
- expect(await logo.evaluate(img=>{const c=document.createElement('canvas');c.width=c.height=256;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);return ctx.getImageData(0,0,1,1).data[3];})).toBe(0);
+ const artwork=await logo.evaluate(img=>{const c=document.createElement('canvas');c.width=c.height=256;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);const data=ctx.getImageData(0,0,256,256).data;let left=256,top=256,right=-1,bottom=-1;for(let y=0;y<256;y++)for(let x=0;x<256;x++)if(data[(y*256+x)*4+3]>=128){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}return {cornerAlpha:data[3],width:right-left+1,height:bottom-top+1};});
+ expect(artwork.cornerAlpha).toBe(0);expect(Math.max(artwork.width,artwork.height)).toBeGreaterThanOrEqual(230);
  const metrics=await app.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];return {outer:w.getBounds().height,inner:w.getContentBounds().height};});
  expect(metrics.outer-metrics.inner).toBeLessThan(20);
  await page.getByRole('button',{name:'语言与主题',exact:true}).click();

@@ -1,6 +1,6 @@
 {
   "name": "hornet-remote-suite",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "private": true,
   "description": "Unified remote workstation",
   "main": "dist/main.cjs",
@@ -75,6 +75,7 @@
     "electron": "44.4.5",
     "electron-builder": "26.15.3",
     "esbuild": "0.28.2",
+    "pngjs": "7.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.0",
     "vitest": "5.0.1"
