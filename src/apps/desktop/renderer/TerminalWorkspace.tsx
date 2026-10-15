@@ -1,14 +1,13 @@
 import { t as tr } from './i18n';
 import { useBroadcast } from './broadcast';
-﻿import { useEffect, useRef, useState } from 'react';
-import { useStore,openView,hasRemoteFiles,type View } from './store';
-import { showTerminalMenu } from './TerminalTitleMenu';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useStore,openView,hasRemoteFiles } from './store';
 import { FileView } from './FileView';
 import { QuickCommands } from './QuickCommands';
 import { TerminalView } from './TerminalView';
 import { layoutRects,setRatio } from './terminal-layout';
 
-export function TerminalWorkspace({onClose}:{onClose:(view:View)=>void}) {
+export function TerminalWorkspace({splitActive,renderTabs}:{splitActive:boolean;renderTabs:(paneId?:string,common?:boolean)=>ReactNode}) {
  const broadcast=useBroadcast();
  const s=useStore(),panes=s.views.filter(v=>v.kind==='terminal');
  const view=panes.find(v=>v.id===s.active)??panes[0],active=view?.id??'';
@@ -33,8 +32,6 @@ export function TerminalWorkspace({onClose}:{onClose:(view:View)=>void}) {
   };
   void poll();return()=>{cancelled=true;clearTimeout(timer);};
  },[follow,active,s.active,view?.terminalId]);
- const state=s.connectionStates[view?.connectionId??''];
- const recording=s.logs.find(l=>l.terminalId===view?.terminalId&&['starting','recording','stopping'].includes(l.state));
  function changeRatio(id:string,ratio:number){const tree=useStore.getState().terminalLayout;if(tree)s.setTerminalLayout(setRatio(tree,id,ratio));}
  const host=useRef<HTMLDivElement>(null),[visible,setVisible]=useState(true);
  const [width,setWidth]=useState(()=>{try{const saved=Number(localStorage.getItem('hornet.fileSidebar.width'));return saved>=240&&saved<=520?saved:300;}catch{return 300;}});
@@ -43,8 +40,10 @@ export function TerminalWorkspace({onClose}:{onClose:(view:View)=>void}) {
  if(!view)return null;
  const layout=s.terminalLayout?layoutRects(s.terminalLayout):null;
  const geometry=layout?.panes.has(active)?layout:layoutRects({kind:'leaf',id:active});
+ const filesVisible=visible&&hasRemoteFiles(view),firstPane=geometry.panes.keys().next().value;
  return <div className="terminal-workspace" ref={host}>
-  <aside className="terminal-files" aria-label={tr("终端远程文件")} style={{width,display:visible&&hasRemoteFiles(view)?'flex':'none'}}>
+  <aside className="terminal-files" aria-label={tr("终端远程文件")} style={{width,display:filesVisible?'flex':'none'}}>
+   {splitActive&&filesVisible&&renderTabs('')}
    <div className="terminal-files-heading"><strong>{tr("远程文件 · SFTP")}</strong><button aria-pressed={follow} title={tr("跟随当前选中的终端目录（Linux）")} onClick={()=>{setFollow(!follow);if(follow)setTarget(undefined);}}>{tr("跟随终端")}</button><button onClick={()=>setVisible(false)} aria-label={tr("隐藏远程文件")}>‹</button></div>
    {follow&&<div className="follow-status" role="status">{followStatus}</div>}
    <div className="workspace-file-views">{panes.filter(p=>hasRemoteFiles(p)).map(p=><div key={p.id+":"+p.connectionId} className="terminal-file-view" style={{display:p.id===active?'flex':'none'}}><FileView view={p} compact followTarget={follow&&p.id===active&&target?.terminalId===p.terminalId?target:undefined}/></div>)}</div>{hasRemoteFiles(view)&&<div className="task-dock-slot"/>}
@@ -56,12 +55,11 @@ export function TerminalWorkspace({onClose}:{onClose:(view:View)=>void}) {
    onPointerCancel={()=>{drag.current=null;}}
    onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();resize(width+(e.key==='ArrowLeft'?-20:20));}}}/>}
   <div className="terminal-pane">
-   {broadcast.targets.length>1&&<div className="broadcast-banner" role="status"><strong>{tr("键盘广播已开启")}</strong><span>{broadcast.targets.map(t=>t.name).join(" · ")}</span><button onClick={broadcast.stop}>{tr("停止广播")}</button></div>}
-   <div className="terminal-tools"><button disabled={!hasRemoteFiles(view)} onClick={()=>setVisible(!visible)}>{visible?tr("隐藏文件栏"):tr("显示文件栏")}</button><span className="terminal-address" title={(view.profile.username?view.profile.username+'@':'')+view.profile.host}>{view.profile.username?view.profile.username+'@':''}{view.profile.host} · {state==='closed'||state==='failed'||!!s.closedTerminals[view.terminalId??'']?tr("已断开"):view.source==='local'?tr("本地终端"):view.source==='serial'?tr("串口 · UTF-8"):view.profile.protocol==='telnet'?tr("Telnet · 明文连接"):'SSH'}</span>{recording&&<button className="recording-indicator" title={recording.path} aria-label={tr("停止终端日志")} disabled={recording.state==='stopping'} onClick={()=>void window.hornet.terminalLogs.stop(recording.id).catch(s.fail)}>{tr("● 日志")}</button>}<button onClick={()=>setRequests(r=>({...r,[active]:(r[active]??0)+1}))}>{tr("搜索终端")}</button><button disabled={!hasRemoteFiles(view)} onClick={()=>void openView(view.profile,'files').catch(useStore.getState().fail)}>{tr("打开文件")}</button></div>
    <div className="terminal-grid" ref={grid}>
-    {panes.map(p=>{const rect=geometry.panes.get(p.id),title=p.title??p.profile.name;return <section key={p.id} aria-label={tr("终端 ")+title} data-terminal-id={p.terminalId} className={'terminal-cell'+(active===p.id?' selected':'')} style={{display:rect?'flex':'none',left:(rect?.x??0)+'%',top:(rect?.y??0)+'%',width:(rect?.width??100)+'%',height:(rect?.height??100)+'%'}} onPointerDown={()=>s.setActive(p.id)} onFocusCapture={()=>s.setActive(p.id)}>
-     {geometry.panes.size>1&&<div className="pane-heading" onContextMenu={e=>showTerminalMenu(e,p.id)}><button aria-pressed={active===p.id} onClick={()=>s.setActive(p.id)}>{title}</button><button aria-label={tr("关闭分屏 ")+title} onClick={()=>onClose(p)}>×</button></div>}
-     <TerminalView view={p} searchRequested={requests[p.id]??0}/>
+    {panes.map(p=>{const rect=geometry.panes.get(p.id),title=p.title??p.profile.name,state=s.connectionStates[p.connectionId],recording=s.logs.find(l=>l.terminalId===p.terminalId&&['starting','recording','stopping'].includes(l.state));return <section key={p.id} aria-label={tr("终端 ")+title} data-terminal-id={p.terminalId} className={'terminal-cell'+(active===p.id?' selected':'')} style={{display:rect?'flex':'none',left:(rect?.x??0)+'%',top:(rect?.y??0)+'%',width:(rect?.width??100)+'%',height:(rect?.height??100)+'%'}} onPointerDown={()=>s.setActive(p.id)} onFocusCapture={()=>s.setActive(p.id)}>
+     {splitActive&&rect&&renderTabs(p.id,!filesVisible&&p.id===firstPane)}
+     <div className="terminal-tools"><button disabled={!hasRemoteFiles(p)} onClick={()=>setVisible(!visible)}>{visible?tr("隐藏文件栏"):tr("显示文件栏")}</button><span className="terminal-address" title={(p.profile.username?p.profile.username+'@':'')+p.profile.host}>{p.profile.username?p.profile.username+'@':''}{p.profile.host} · {state==='closed'||state==='failed'||!!s.closedTerminals[p.terminalId??'']?tr("已断开"):p.source==='local'?tr("本地终端"):p.source==='serial'?tr("串口 · UTF-8"):p.profile.protocol==='telnet'?tr("Telnet · 明文连接"):'SSH'}</span>{recording&&<button className="recording-indicator" title={recording.path} aria-label={tr("停止终端日志")} disabled={recording.state==='stopping'} onClick={()=>void window.hornet.terminalLogs.stop(recording.id).catch(s.fail)}>{tr("● 日志")}</button>}<button onClick={()=>setRequests(r=>({...r,[p.id]:(r[p.id]??0)+1}))}>{tr("搜索终端")}</button><button disabled={!hasRemoteFiles(p)} onClick={()=>void openView(p.profile,'files').catch(useStore.getState().fail)}>{tr("打开文件")}</button></div>
+     <TerminalView key={p.id} view={p} searchRequested={requests[p.id]??0}/>
     </section>;})}
     {geometry.dividers.map(({node,rect})=>{const vertical=node.axis==='vertical';return <div key={node.id} className={'terminal-divider '+(vertical?'vertical':'horizontal')} role="separator" aria-label={tr("调整终端分屏")} aria-orientation={vertical?'vertical':'horizontal'} aria-valuemin={20} aria-valuemax={80} aria-valuenow={Math.round(node.ratio*100)} tabIndex={0}
      style={vertical?{left:(rect.x+rect.width*node.ratio)+'%',top:rect.y+'%',height:rect.height+'%'}:{top:(rect.y+rect.height*node.ratio)+'%',left:rect.x+'%',width:rect.width+'%'}}
@@ -70,6 +68,7 @@ export function TerminalWorkspace({onClose}:{onClose:(view:View)=>void}) {
      onPointerUp={e=>e.currentTarget.releasePointerCapture(e.pointerId)}
      onKeyDown={e=>{if(['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(e.key)){e.preventDefault();changeRatio(node.id,node.ratio+(['ArrowLeft','ArrowUp'].includes(e.key)?-0.05:0.05));}}}/>;})}
    </div>
+   {broadcast.targets.length>1&&<div className="broadcast-banner" role="status"><strong>{tr("键盘广播已开启")}</strong><span>{broadcast.targets.map(t=>t.name).join(" · ")}</span><button onClick={broadcast.stop}>{tr("停止广播")}</button></div>}
    {commands&&<QuickCommands view={view} close={()=>setCommands(false)}/>}
   </div>
  </div>;

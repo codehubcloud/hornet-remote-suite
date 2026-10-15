@@ -14,6 +14,7 @@ import { showStartupSessions } from './session-dialog-preferences';
 import { TaskCenter } from './TaskCenter';
 import { TerminalTitleMenu,showTerminalMenu } from './TerminalTitleMenu';
 import { TerminalWorkspace } from './TerminalWorkspace';
+import { layoutRects } from './terminal-layout';
 import { StartPage,SuiteWorkspace,suiteTools,type SuiteTool } from './SuiteWorkspace';
 import { VncView } from './VncView';
 import { FileWorkspace } from './FileWorkspace';
@@ -62,6 +63,16 @@ export function App(){
  const groups=groupPaths(s.profiles,extraGroups);
  const active=s.views.find(v=>v.id===s.active);
  const hostsVisible=active?.kind==='terminal'?showHosts:!hostsHidden;
+ const splitPanes=s.terminalLayout?layoutRects(s.terminalLayout).panes:null;
+ const splitActive=active?.kind==='terminal'&&!!splitPanes?.has(active.id)&&splitPanes.size>1;
+ // In split mode the same session tabs belong to their panes. Common workspace
+ // tabs sit above the file browser, or in the first pane when it is hidden.
+ function renderTabs(paneId?:string,common=true){return <nav className="tabs">
+  {common&&<button className={s.active==='home'?'tab active':'tab'} onClick={()=>s.setActive('home')}>{tr("◈ 工作台")}</button>}
+  {s.views.filter(v=>paneId===undefined||(v.kind==='terminal'?v.id===paneId||common&&!splitPanes?.has(v.id):common)).map(v=><div className={s.active===v.id?'tab active':'tab'} key={v.id} data-tab-view-id={v.id} onContextMenu={e=>{if(v.kind==='terminal')showTerminalMenu(e,v.id);}}><button onClick={()=>s.setActive(v.id)}>{v.kind==='terminal'?'>_':v.kind==='files'?'▰':'▤'} {v.title??v.profile.name} · {v.kind==='terminal'?tr("终端"):v.kind==='files'?tr("文件"):v.kind==='vnc'?'VNC':v.path?.split('/').pop()}</button><button aria-label={tr("关闭 ")+(v.title??v.profile.name)} onClick={()=>void close(v)}>×</button></div>)}
+  {common&&toolTabs.map(tool=><div className={s.active===tool?'tab active':'tab'} key={tool}><button onClick={()=>s.setActive(tool)}>{tr(suiteTools.find(t=>t.id===tool)!.name)}</button><button aria-label={tr("关闭 ")+tr(suiteTools.find(t=>t.id===tool)!.name)} onClick={()=>closeTool(tool)}>×</button></div>)}
+  {common&&<button className="chrome-toggle" onClick={toggleChrome} aria-expanded={!collapsed} title={collapsed?tr("展开工具栏"):tr("折叠工具栏")} aria-label={collapsed?tr("展开工具栏"):tr("折叠工具栏")}>{collapsed?'⌄':'⌃'}</button>}
+ </nav>;}
  return <div className={collapsed?"app-shell chrome-collapsed":"app-shell"}>
   <SessionCommands recent={recent} edit={p=>{setConnectOnSave(false);setForm(p);}} hostsVisible={hostsVisible} toggleHosts={()=>{if(active?.kind==='terminal')setShowHosts(!showHosts);else setHostsHidden(!hostsHidden);}} openTool={openTool} toolTabs={toolTabs} closeTool={closeTool} create={fields=>{setConnectOnSave(Boolean(fields));setForm({...fresh(),...fields});}} connect={p=>void connect(p,'terminal')} close={close} hosts={()=>setSessionsOpen(true)} toggleChrome={toggleChrome} collapsed={collapsed} pending={pending}/>
   <div className="app-body"><aside className="sidebar" style={{display:hostsVisible?'flex':'none'}}>
@@ -71,16 +82,12 @@ export function App(){
    <div className="sidebar-bottom"><button onClick={()=>void window.hornet.profiles.import().then(refreshProfiles).catch(s.fail)}>{tr("导入配置")}</button><button onClick={()=>void window.hornet.profiles.export().catch(s.fail)}>{tr("导出配置")}</button></div>
   </aside>
   <main className="workspace">
-   <nav className="tabs"><button className={s.active==='home'?'tab active':'tab'} onClick={()=>s.setActive('home')}>{tr("◈ 工作台")}</button>
-    {s.views.map(v=><div className={s.active===v.id?'tab active':'tab'} key={v.id} onContextMenu={e=>{if(v.kind==='terminal')showTerminalMenu(e,v.id);}}><button onClick={()=>s.setActive(v.id)}>{v.kind==='terminal'?'>_':v.kind==='files'?'▰':'▤'} {v.title??v.profile.name} · {v.kind==='terminal'?tr("终端"):v.kind==='files'?tr("文件"):v.kind==='vnc'?'VNC':v.path?.split('/').pop()}</button><button aria-label={tr("关闭 ")+(v.title??v.profile.name)} onClick={()=>void close(v)}>×</button></div>)}
-    {toolTabs.map(tool=><div className={s.active===tool?'tab active':'tab'} key={tool}><button onClick={()=>s.setActive(tool)}>{tr(suiteTools.find(t=>t.id===tool)!.name)}</button><button aria-label={tr("关闭 ")+tr(suiteTools.find(t=>t.id===tool)!.name)} onClick={()=>closeTool(tool)}>×</button></div>)}
-    <button className="chrome-toggle" onClick={toggleChrome} aria-expanded={!collapsed} title={collapsed?tr("展开工具栏"):tr("折叠工具栏")} aria-label={collapsed?tr("展开工具栏"):tr("折叠工具栏")}>{collapsed?'⌄':'⌃'}</button>
-   </nav>
+   {!splitActive&&renderTabs()}
    {s.error&&<div className="error-banner" role="alert"><span>{s.error}</span><button onClick={s.clearError}>{tr("关闭")}</button></div>}
    <div className="content">
     {s.active==='home'&&<StartPage recent={recent} pending={pending} create={fields=>{setConnectOnSave(Boolean(fields));setForm({...fresh(),...fields});}} connect={(p,kind)=>void connect(p,kind)} openTool={openTool}/>}
     {toolTabs.map(tool=><div key={tool} className="tool-view" hidden={s.active!==tool}><SuiteWorkspace tool={tool}/></div>)}
-    <section className="view terminal-session-workspace" data-view-id={active?.kind==='terminal'?active.id:undefined} style={{display:active?.kind==='terminal'?'flex':'none'}}><TerminalWorkspace onClose={v=>void close(v)}/></section>
+    <section className="view terminal-session-workspace" data-view-id={active?.kind==='terminal'?active.id:undefined} style={{display:active?.kind==='terminal'?'flex':'none'}}><TerminalWorkspace splitActive={splitActive} renderTabs={renderTabs}/></section>
     {s.views.filter(v=>v.kind!=='terminal').map(v=><section key={v.id} className="view" data-view-id={v.id} style={{display:s.active===v.id?'flex':'none'}}>{v.kind!=='terminal'&&<div className="view-meta"><span>{v.profile.name} / {v.profile.host}</span><span>{s.connectionStates[v.connectionId]==='closed'?tr("已断开"):v.profile.protocol==='ftp'?(v.profile.ftpSecurity==='none'?tr("FTP · 明文"):tr("FTPS · TLS 加密连接")):tr("SSH · 加密连接")}</span><button hidden={v.profile.protocol==='ftp'} disabled={pending} onClick={()=>void connect(v.profile,v.kind==='files'?'terminal':'files')}>{v.kind==='files'?tr("打开终端"):tr("打开文件")}</button></div>}{v.kind==='vnc'?<VncView view={v}/>:v.kind==='files'?<FileWorkspace view={v}/>:<EditorView view={v}/>}</section>)}
    </div>
    <TaskCenter activeId={s.active} quiet={!active}/>

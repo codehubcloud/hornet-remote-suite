@@ -23,7 +23,7 @@
 .app-header{height:30px;padding:0 10px;gap:10px}
 .brand{width:auto;gap:6px;margin-right:12px}.brand-mark{width:18px;height:20px;font-size:14px}.brand strong{font-size:12px;letter-spacing:1px}.brand strong span{display:none}
 .app-header button{padding:2px 8px;font-size:11px;border-radius:3px}.version{font-size:10px}
-.tabs{height:29px}.tab{padding:0 9px;flex-shrink:0}.tab button{padding:3px 5px;font-size:11px}
+.tabs{height:29px;min-height:29px}.tab{padding:0 9px;flex-shrink:0}.tab button{padding:3px 5px;font-size:11px}
 .chrome-toggle{position:sticky;right:0;margin-left:auto;flex-shrink:0;border-radius:0;border-width:0 0 0 1px;background:var(--c-152337);padding:0 12px}
 .chrome-collapsed .app-header,.chrome-collapsed .view-meta,.chrome-collapsed .terminal-tools{display:none}
 .view-meta{height:26px;padding:0 10px}
@@ -49,7 +49,7 @@
 .tasks-collapsed{max-height:30px}
 .connection-tree,.group-children{list-style:none;margin:0;padding:0}.connection-tree{min-width:190px}.group-children{margin-left:9px;padding-left:8px;border-left:1px solid var(--c-2a3a50)}.group-heading{display:flex;align-items:center;gap:2px;margin:2px 0 5px;min-height:28px}.group-heading button{padding:3px 4px;background:transparent;border:0;font-size:12px}.group-heading .group-toggle{display:flex;align-items:center;gap:5px;flex:1;min-width:0;text-align:left}.group-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.group-folder{color:var(--c-d5b16b)}.group-toggle small{font-size:10px;color:var(--c-7f95b0)}.group-heading button:hover{background:var(--c-23364a)}.group-empty{padding:5px 4px 10px;color:var(--c-7289a5);font-size:10px}.connection-tree .host{padding:8px;margin-bottom:6px;border-radius:4px}.connection-tree .host-actions{justify-content:flex-end;margin-top:7px}.connection-tree .host-symbol{font-size:15px}.section-heading>span{flex:1}.section-heading{gap:4px}.host-list{min-height:0}
 .group-context-menu{position:fixed;z-index:20;width:200px;padding:5px;background:var(--c-18283b);border:1px solid var(--c-4a617a);border-radius:5px;box-shadow:0 8px 24px var(--c-0009)}.group-context-title{padding:5px 8px;color:var(--c-8fa6bf);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-bottom:1px solid var(--c-304359);margin-bottom:3px}.group-context-menu button{display:block;width:100%;padding:6px 9px;text-align:left;border:0;border-radius:3px;background:transparent;font-size:12px}.group-context-menu button:hover,.group-context-menu button:focus{background:var(--c-2a435d);color:var(--c-fff);outline:none}
-.terminal-grid{position:relative;flex:1;min-height:0;min-width:0;overflow:hidden}.terminal-cell{position:absolute;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;padding:2px}.terminal-cell.selected{box-shadow:inset 0 0 0 1px var(--c-38cdb844)}.pane-heading{height:24px;min-height:24px;display:flex;justify-content:space-between;align-items:center;background:var(--c-132134);padding:1px 6px}.pane-heading button{font-size:10px;border:0;padding:1px 6px;background:transparent}.pane-heading button[aria-pressed=true]{color:var(--c-4fe1c5)}.terminal-divider{position:absolute;background:var(--c-2d4155);touch-action:none;z-index:2}.terminal-divider.vertical{width:5px;margin-left:-2px;cursor:col-resize}.terminal-divider.horizontal{height:5px;margin-top:-2px;cursor:row-resize}.terminal-divider:hover,.terminal-divider:focus{background:var(--c-38cdb8)}.terminal-files-heading button[aria-pressed=true]{background:var(--c-235247);color:var(--c-8af6dc);border-color:var(--c-38cdb8)}.follow-status{font-size:10px;color:var(--c-90abc5);padding:4px 7px;overflow-wrap:anywhere}.terminal-cell .terminal-search input{flex:1;width:120px;min-width:80px}.terminal-tools{overflow-x:auto;flex-shrink:0}.terminal-cell .terminal-host{min-width:0}
+.terminal-grid{position:relative;flex:1;min-height:0;min-width:0;overflow:hidden}.terminal-cell{position:absolute;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}.terminal-cell.selected{box-shadow:inset 0 0 0 1px var(--c-38cdb844)}.terminal-divider{position:absolute;background:var(--c-2d4155);touch-action:none;z-index:2}.terminal-divider.vertical{width:5px;margin-left:-2px;cursor:col-resize}.terminal-divider.horizontal{height:5px;margin-top:-2px;cursor:row-resize}.terminal-divider:hover,.terminal-divider:focus{background:var(--c-38cdb8)}.terminal-files-heading button[aria-pressed=true]{background:var(--c-235247);color:var(--c-8af6dc);border-color:var(--c-38cdb8)}.follow-status{font-size:10px;color:var(--c-90abc5);padding:4px 7px;overflow-wrap:anywhere}.terminal-cell .terminal-search input{flex:1;width:120px;min-width:80px}.terminal-tools{overflow-x:auto;flex-shrink:0}.terminal-cell .terminal-host{min-width:0}
 
 .workspace-file-views,.terminal-file-view{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 
@@ -169,3 +169,9 @@
 :root:fullscreen .app-titlebar .titlebar-content{margin-left:0;padding-left:0;width:100%}
 .chrome-collapsed .session-commands{display:block}
 .chrome-collapsed .standard-toolbar,.chrome-collapsed .quick-connect-bar{display:none}
+
+/* Split the session tabs and terminal together; never add a second title row. */
+.terminal-cell>.tabs,.terminal-files>.tabs{flex-shrink:0;min-width:0}
+.terminal-cell>.tabs .tab{min-width:0;flex-shrink:1;padding:0 5px}
+.terminal-cell>.tabs .tab>button:first-child{overflow:hidden;text-overflow:ellipsis}
+.terminal-cell>.tabs .tab>button:last-child{flex-shrink:0}

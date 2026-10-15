@@ -319,3 +319,12 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - [v0.0.7](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.7) 已公开并设为 latest；七个安装包和 SHA256SUMS 齐全，校验文件七行与 GitHub asset digest 逐项一致。
 - Windows 安装包 SHA-256：1e796ff203996a41ba1af249a93f07b2d9e34742a96b2a97cebbc3639c9929d9。
 - 源码仓库仍为 private；公开仓库 Git 树仅 README.md。源码标签 v0.0.7 保持在构建提交 9917057；验收记录和公开下载说明单独提交，不修改已发布标签或安装包。用户现有安装及配置未被修改。
+
+## 2026-10-15：0.0.8 终端标签随窗格分屏
+
+- 分屏时移除独立全局终端标签栏和重复窗格标题，每个终端标签随对应窗格直接位于顶部；公共工作台/工具入口位于 SFTP 栏上方，无文件栏时移入首个窗格。取消分屏或关闭到一个窗格时恢复统一标签栏，右键分割、重命名与关闭继续操作原视图。
+- 终端组件保持稳定键值和挂载，工具按钮作用于所在终端。新增 test:terminal-tabs / test:terminal-tabs:package：检查两个方向的标签/窗格几何位置、标签不重复、重命名、分隔条、文件栏显隐、活动目录跟随、工作台往返、合并及关闭；对比 xterm DOM 实例、终端 ID 和回环服务器 Shell/认证计数，确认没有重建连接或丢失输出。实际打包验收加入五个平台的发布矩阵。
+- 初轮桌面回归仍右键点击原 pane-heading 背景；该元素已删除，改为右键现有会话标签后，test:desktop 通过 SSH/SFTP、三终端两向分屏、重命名、调整、目录跟随、关闭隔离、隧道和 VNC。test:clipboard 验证分屏复制粘贴和右键目标通过；test:session-advanced 验证分屏重连、日志回放和批量关闭通过。
+- 本地 PowerShell/CMD 回归发现正常退出后已排队的 xterm 输入回调会报 SCRIPT_CLOSED；增加已结束状态保护，仅丢弃正常关闭后的输入失败，活动终端失败和显式向已关闭终端执行命令仍提示错误。
+- 最终 npm run check 通过：TypeScript、语言目录、32 个测试文件 / 166 项测试与桌面构建；发布脚本两项测试通过。
+- 修正后 test:terminal-tabs 再次通过，已查看上下及左右分屏截图；test:device-terminals 通过真实 PowerShell/CMD 分屏、日志、关闭隔离及正常 exit，末尾无全局错误。

@@ -1,6 +1,6 @@
 {
   "name": "hornet-remote-suite",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "description": "Unified remote workstation",
   "main": "dist/main.cjs",
@@ -42,7 +42,9 @@
     "test:shutdown": "node tools/shutdown-smoke.mjs",
     "test:shutdown:package": "node tools/shutdown-smoke.mjs --packaged",
     "test:titlebar": "node tools/titlebar-smoke.mjs",
-    "test:titlebar:package": "node tools/titlebar-smoke.mjs --packaged"
+    "test:titlebar:package": "node tools/titlebar-smoke.mjs --packaged",
+    "test:terminal-tabs": "node tools/terminal-tabs-smoke.mjs",
+    "test:terminal-tabs:package": "node tools/terminal-tabs-smoke.mjs --packaged"
   },
   "engines": {
     "node": ">=24 <25"

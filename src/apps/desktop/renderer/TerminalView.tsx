@@ -44,6 +44,9 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
    if(e.type==='terminal.closed'&&e.terminalId===id){ended=true;runner.close();term.write(tr("\r\n\u001b[33m[连接已关闭；重新连接会创建新的会话]\u001b[0m\r\n"));}
   });
   let writes:Promise<void>=Promise.resolve();
+  // Reflowing or closing a pane can leave an already queued xterm reply. A
+  // normal shell exit cancels that input; it must not become a global error.
+  const reportInputFailure=(error:unknown)=>{if(!ended)useStore.getState().fail(error);};
   const send=(data:string,signal?:AbortSignal):Promise<void>=>{
    const operation=writes.then(async()=>{
     for(let i=0;i<data.length;){
@@ -55,14 +58,14 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
    writes=operation.catch(()=>{});return operation;
   };
   const input=term.onData(data=>{
-   if(runner.running)return;
-   void send(data).catch(useStore.getState().fail);const targets=useBroadcast.getState().targets;
+   if(ended||runner.running)return;
+   void send(data).catch(reportInputFailure);const targets=useBroadcast.getState().targets;
    if(!ended&&targets.some(t=>t.terminalId===id))for(const target of targets)if(target.terminalId!==id)window.dispatchEvent(new CustomEvent<TerminalAction>('hornet:terminal-action',{detail:{viewId:target.viewId,terminalId:target.terminalId,kind:'input',text:data}}));
   });
   const action=(event:Event)=>{const detail=(event as CustomEvent<TerminalAction>).detail;if(detail.viewId!==view.id||detail.terminalId&&detail.terminalId!==id)return;
    if(runner.running&&['input','execute','paste'].includes(detail.kind))return;
-   if(detail.kind==='input'&&detail.terminalId===id&&detail.text)void send(detail.text).catch(useStore.getState().fail);
-   if(detail.kind==='execute'){if(ended){useStore.getState().fail(new Error(tr("终端已关闭，命令未发送。")));return;}if(detail.text){void send(detail.text.replace(/[\r\n]+$/,'').replace(/\r\n|\n/g,'\r')+'\r').catch(useStore.getState().fail);term.focus();}}
+   if(detail.kind==='input'&&detail.terminalId===id&&detail.text&&!ended)void send(detail.text).catch(reportInputFailure);
+   if(detail.kind==='execute'){if(ended){useStore.getState().fail(new Error(tr("终端已关闭，命令未发送。")));return;}if(detail.text){void send(detail.text.replace(/[\r\n]+$/,'').replace(/\r\n|\n/g,'\r')+'\r').catch(reportInputFailure);term.focus();}}
    if(detail.kind==='copy'){const text=detail.text??term.getSelection();if(text)void window.hornet.clipboard.write(text).catch(useStore.getState().fail);term.focus();}
    if(detail.kind==='paste'&&!ended)void window.hornet.clipboard.read().then(text=>{if(!ended&&!runner.running&&useStore.getState().active===view.id&&(!/[\r\n]/.test(text)||window.confirm(tr("粘贴多行文本可能执行命令。继续？")))){term.paste(text);term.focus();}}).catch(useStore.getState().fail);
    if(detail.kind==='reset')term.reset();

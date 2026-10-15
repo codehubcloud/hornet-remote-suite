@@ -8,7 +8,7 @@ on:
       version:
         description: 'Version matching src/package.json, without v'
         required: true
-        default: '0.0.7'
+        default: '0.0.8'
 
 permissions:
   contents: read
@@ -110,6 +110,12 @@ jobs:
       - name: Test terminal clipboard and context menu in the packaged app
         if: runner.os != 'Linux'
         run: npm run test:clipboard:package
+      - name: Test terminal pane tabs and live session continuity
+        if: runner.os != 'Linux'
+        run: npm run test:terminal-tabs:package
+      - name: Test terminal pane tabs and live session continuity on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:terminal-tabs:package
       - name: Test integrated title bar and transparent logo
         if: runner.os != 'Linux'
         run: npm run test:titlebar:package
