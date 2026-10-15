@@ -1,14 +1,15 @@
 import { Server,utils,type Connection,type SFTPWrapper } from 'ssh2';
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync,createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import { createServer,createConnection,type Socket,type Server as TcpServer } from 'node:net';
 interface Handle { path:string;directory?:boolean;read?:boolean }
-export async function sshFixture(options:{atomicRename?:boolean;password?:string;writeDelay?:number;key?:string;directoryTracking?:boolean;procReadlink?:boolean;procProbeDelayMs?:number;rejectTrackingExec?:boolean}={}){
+export async function sshFixture(options:{hashDelayMs?:number;remoteHash?:'supported'|'corrupt';atomicRename?:boolean;password?:string;writeDelay?:number;key?:string;directoryTracking?:boolean;procReadlink?:boolean;procProbeDelayMs?:number;rejectTrackingExec?:boolean}={}){
  const key=options.key??generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs1',format:'pem'},publicKeyEncoding:{type:'pkcs1',format:'pem'}}).privateKey;
  const directories=new Set(['/','/tmp','/tmp/space dir']);const shellCwds=new Map<number,string>(),shellInputs=new Map<number,string>();
  const shellBytes=new Map<number,Buffer>();
  const modes=new Map<string,number>(),mtimes=new Map<string,number>();
  const files=new Map<string,Buffer>([['/hello.txt',Buffer.from('hello 世界\n')]]);const clients=new Set<Connection>();let authCount=0,shellCount=0;
+ const remoteHashes:string[]=[],readBytes=new Map<string,number>();
  const server=new Server({hostKeys:[key]},client=>{
   clients.add(client);client.on('error',()=>{});client.on('close',()=>clients.delete(client));
   client.on('authentication',ctx=>{if(ctx.method==='password'&&ctx.username==='tester'&&ctx.password===(options.password??'test-password')){authCount++;ctx.accept();}else ctx.reject(['password']);});
@@ -62,6 +63,12 @@ export async function sshFixture(options:{atomicRename?:boolean;password?:string
    };
    session.on('shell',accept=>startShell(accept()));
    session.on('exec',(accept,reject,info)=>{
+    if(info.command.startsWith('LC_ALL=C sha256sum < ')){
+     if(!options.remoteHash){reject();return;}
+     const encoded=info.command.slice('LC_ALL=C sha256sum < '.length),path=encoded.slice(1,-1).replace(/'"'"'/g,"'");remoteHashes.push(path);
+     const stream=accept(),data=files.get(path);if(!data){stream.exit(1);stream.end();return;}
+     const reply=()=>{if(stream.destroyed)return;stream.write(createHash('sha256').update(options.remoteHash==='corrupt'?'corrupt':data).digest('hex')+'  -\n');stream.exit(0);stream.end();};if(options.hashDelayMs)setTimeout(reply,options.hashDelayMs);else reply();return;
+    }
     const marker=/HornetDirectory-[a-f0-9-]{36}:/.exec(info.command)?.[0];
     if(marker){const path=/readlink (\/proc\/(?:self|[0-9]+\/cwd))$/.exec(info.command)?.[1];
      const value=options.directoryTracking===false?undefined:path==='/proc/self'?'999':shellCwds.get(Number(path?.split('/')[2]));
@@ -104,7 +111,7 @@ export async function sshFixture(options:{atomicRename?:boolean;password?:string
    if(!files.has(p)||(flags&16))files.set(p,Buffer.alloc(0));
    handle(id,{path:p});
   });
-  sftp.on('READ',(id:number,h:Buffer,offset:number,length:number)=>{const v=handles.get(h.toString()),data=v&&files.get(v.path);if(!data)return status(id,4);if(offset>=data.length)return status(id,1);sftp.data(id,data.subarray(offset,Math.min(data.length,offset+length)));});
+  sftp.on('READ',(id:number,h:Buffer,offset:number,length:number)=>{const v=handles.get(h.toString()),data=v&&files.get(v.path);if(!data||!v)return status(id,4);if(offset>=data.length)return status(id,1);const chunk=data.subarray(offset,Math.min(data.length,offset+length));readBytes.set(v.path,(readBytes.get(v.path)??0)+chunk.length);sftp.data(id,chunk);});
   sftp.on('WRITE',(id:number,h:Buffer,offset:number,data:Buffer)=>{
    const run=()=>{const v=handles.get(h.toString());if(!v)return status(id,4);const prev=files.get(v.path)??Buffer.alloc(0);const updated=Buffer.alloc(Math.max(prev.length,offset+data.length));prev.copy(updated);data.copy(updated,offset);files.set(v.path,updated);status(id);};
    options.writeDelay?setTimeout(run,options.writeDelay):run();
@@ -118,5 +125,5 @@ export async function sshFixture(options:{atomicRename?:boolean;password?:string
  }
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
  const port=(server.address() as {port:number}).port;
- return {port,key,files,directories,mtimes,get shellBytes(){return [...shellBytes.entries()];},get shellInputs(){return [...shellInputs.entries()];},get shellPaths(){return [...shellCwds.values()];},get authCount(){return authCount;},get shellCount(){return shellCount;},disconnect(){for(const c of clients)c.end();},async close(){for(const c of clients)c.end();await new Promise<void>(resolve=>server.close(()=>resolve()));}};
+ return {port,key,files,directories,mtimes,remoteHashes,readBytes,get shellBytes(){return [...shellBytes.entries()];},get shellInputs(){return [...shellInputs.entries()];},get shellPaths(){return [...shellCwds.values()];},get authCount(){return authCount;},get shellCount(){return shellCount;},disconnect(){for(const c of clients)c.end();},async close(){for(const c of clients)c.end();await new Promise<void>(resolve=>server.close(()=>resolve()));}};
 }

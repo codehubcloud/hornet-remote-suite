@@ -13,6 +13,7 @@ import { AppError,safeError } from '../../packages/core/errors';
 
 import type { TransferContext } from './tree-transfers';
 import type { FtpTransfers } from '../ftp/transfers';
+import { hashTransferStream,hashRemoteFile,type HashProgress } from './transfer-hash';
 
 interface Plan { transport?:'ftp';expectedTarget?:TransferContext['expectedTarget'];preserveModified?:boolean;expectedSource?:TransferContext['expectedSource'];remoteParent?:string; localPath:string; localParent:string; remotePath:string; temp:string; profileRevision:number; sourceHash?:string; sourceSize?:number; committing?:boolean }
 export interface TransferTask { snapshot:TaskSnapshot;owner:string;key:string;hash:string;plan:Plan; abort?:AbortController; stop?:'paused'|'cancelled' }
@@ -21,7 +22,7 @@ export class Transfers {
   private tasks=new Map<string,Task>();private running=new Set<string>();private stopped=false;
   constructor(private store:Storage,private connections:Connections,private emit:(owner:string,event:HornetEvent)=>void,private ftp?:FtpTransfers){
     for(const r of store.loadTasks()){
-      const task:Task={snapshot:r.snapshot,owner:r.owner,key:r.key,hash:r.hash,plan:r.detail as Plan};
+      const task:Task={snapshot:{...r.snapshot,verification:undefined},owner:r.owner,key:r.key,hash:r.hash,plan:r.detail as Plan};
       if(['queued','running','verifying','pausing','cancelling'].includes(task.snapshot.state))task.snapshot={...task.snapshot,state:'paused',revision:task.snapshot.revision+1,error:'应用已重启，恢复前会重新校验文件。'};
       if(task.snapshot.state==='committing')task.snapshot={...task.snapshot,state:'conflict',revision:task.snapshot.revision+1,error:'提交结果未知，请检查目标文件。禁止自动重复提交。'};
       this.tasks.set(task.snapshot.taskId,task);this.persist(task);
@@ -45,7 +46,7 @@ export class Transfers {
   pause(owner:string,id:string,revision:number){const t=this.get(owner,id,revision);if(!['running','queued','verifying'].includes(t.snapshot.state))throw new AppError('TASK_STATE_CONFLICT','当前阶段不能暂停。');if(this.running.has(id)){t.stop='paused';this.change(t,'pausing');t.abort?.abort();}else this.change(t,'paused');}
   cancel(owner:string,id:string,revision:number){const t=this.get(owner,id,revision);if(['succeeded','committing','cancelled'].includes(t.snapshot.state))throw new AppError('TASK_STATE_CONFLICT','任务已完成或正在提交，不能取消。');if(this.running.has(id)){t.stop='cancelled';this.change(t,'cancelling');t.abort?.abort();}else this.change(t,'cancelled');}
   resume(owner:string,id:string,revision:number){const t=this.get(owner,id,revision);if(!['paused','failed'].includes(t.snapshot.state)||t.plan.committing)throw new AppError('TASK_STATE_CONFLICT','此任务不能安全恢复。');t.stop=undefined;this.change(t,'queued');this.pump();}
-  private change(t:Task,state:TaskSnapshot['state'],error?:string){t.snapshot={...t.snapshot,state,error,revision:t.snapshot.revision+1,updatedAt:Date.now()};this.persist(t);this.emit(t.owner,{type:'task.state',task:t.snapshot});}
+  private change(t:Task,state:TaskSnapshot['state'],error?:string){t.snapshot={...t.snapshot,state,error,verification:undefined,revision:t.snapshot.revision+1,updatedAt:Date.now()};this.persist(t);this.emit(t.owner,{type:'task.state',task:t.snapshot});}
   private persist(t:Task){this.store.saveTask(t.snapshot,t.owner,t.key,t.hash,t.plan);}
   private destination(t:Task){return t.snapshot.direction==='upload'?'remote:'+t.snapshot.profileId+':'+posix.normalize(t.plan.remotePath):'local:'+(process.platform==='win32'?t.plan.localPath.toLowerCase():t.plan.localPath);}
   private pump(){
@@ -59,11 +60,6 @@ export class Transfers {
       this.running.add(t.snapshot.taskId);
       void this.run(t).finally(()=>{this.running.delete(t.snapshot.taskId);this.pump();});
     }
-  }
-  private async hashStream(stream:Readable,signal:AbortSignal):Promise<string>{
-    const hash=createHash('sha256');const abort=()=>stream.destroy(new AppError('IPC006','已停止。'));signal.addEventListener('abort',abort,{once:true});
-    try{if(signal.aborted)throw new AppError('IPC006','已停止。');for await(const chunk of stream){if(signal.aborted)throw new AppError('IPC006','已停止。');hash.update(chunk);}return hash.digest('hex');}
-    finally{signal.removeEventListener('abort',abort);stream.destroy();}
   }
   private async run(t:Task){
     let lease:Awaited<ReturnType<Connections['acquire']>>|undefined;
@@ -85,8 +81,20 @@ export class Transfers {
       const modified='mtimeMs' in sourceStat?sourceStat.mtimeMs:sourceStat.mtime*1000;
       if(p.expectedSource&&(p.expectedSource.size!==sourceStat.size||p.expectedSource.modified!==modified))throw new AppError('FILE_CONFLICT','预览后源文件发生变化，请重新比较。');
       const size=sourceStat.size;if(!Number.isSafeInteger(size))throw new AppError('FILE_LIMIT','文件大小超出当前实现范围。');
-      const readSource=(start=0,end?:number):Readable=>upload?createReadStream(p.localPath,{start,end}):sftp.createReadStream(p.remotePath,{start,end});
-      const sourceHash=await this.hashStream(readSource(),signal);check();
+      t.snapshot.totalBytes=size;
+      let lastHashProgress=0;
+      const progress:HashProgress=(bytes,totalBytes,method)=>{t.snapshot.verification={bytes,totalBytes,method};if(bytes===0||bytes===totalBytes||Date.now()-lastHashProgress>=150){lastHashProgress=Date.now();this.emit(t.owner,{type:'task.state',task:{...t.snapshot}});}};
+      const localHash=(stream:Readable,total=size)=>hashTransferStream(stream,signal,total,progress);
+      const remoteHash=async(path:string,total=size)=>{
+        let canonical=path;
+        if(!posix.isAbsolute(path)){
+          try{canonical=await remoteRealpath(sftp,path);}catch{return localHash(sftp.createReadStream(path),total);}
+        }
+        check();
+        return hashRemoteFile(this.connections.get(t.owner,lease!.connectionId).client,canonical,total,signal,()=>sftp.createReadStream(path),progress);
+      };
+      const readSource=(start=0,end?:number):Readable=>upload?createReadStream(p.localPath,{start,end,highWaterMark:1024*1024}):sftp.createReadStream(p.remotePath,{start,end});
+      const sourceHash=upload?await localHash(readSource()):await remoteHash(p.remotePath);check();
       if((p.expectedSource?.hash&&p.expectedSource.hash!==sourceHash)||(p.sourceHash&&p.sourceHash!==sourceHash))throw new AppError('FILE_CONFLICT','源文件已改变，拒绝续传。');
       p.sourceHash=sourceHash;p.sourceSize=size;t.snapshot.totalBytes=size;this.persist(t);
       const verifyTarget=async()=>{
@@ -96,7 +104,7 @@ export class Transfers {
         const current=upload?await stat(sftp,p.remotePath):await lstat(p.localPath);
         const mtime='mtimeMs' in current?current.mtimeMs:current.mtime*1000;
         if(!current.isFile()||current.isSymbolicLink()||current.size!==expected.size||mtime!==expected.modified)throw new AppError('FILE_CONFLICT','预览后目标文件发生变化，已拒绝覆盖。');
-        const hash=await this.hashStream(upload?sftp.createReadStream(p.remotePath):createReadStream(p.localPath),signal);
+        const hash=upload?await remoteHash(p.remotePath,expected.size):await localHash(createReadStream(p.localPath),expected.size);
         if(hash!==expected.hash)throw new AppError('FILE_CONFLICT','预览后目标文件内容发生变化，已拒绝覆盖。');
         const after=upload?await stat(sftp,p.remotePath):await lstat(p.localPath);if(!after.isFile()||after.isSymbolicLink()||after.size!==expected.size||('mtimeMs' in after?after.mtimeMs:after.mtime*1000)!==expected.modified)throw new AppError('FILE_CONFLICT','校验期间目标文件发生变化。');
         return current;
@@ -106,10 +114,11 @@ export class Transfers {
       try{const st=upload?await stat(sftp,p.temp):await lstat(p.temp);if(!st.isFile()||st.isSymbolicLink())throw new AppError('FILE_CONFLICT','临时文件类型不正确。');offset=st.size;tempExists=true;}catch(e){if(!isMissing(e))throw e;}
       if(offset>size)throw new AppError('FILE_CONFLICT','检查点超出源文件大小。');
       if(offset>0){
-        const readTemp=upload?sftp.createReadStream(p.temp):createReadStream(p.temp);
-        if(await this.hashStream(readSource(0,offset-1),signal)!==await this.hashStream(readTemp,signal))throw new AppError('FILE_CONFLICT','已传输内容校验失败。');
+        const prefix=await localHash(readSource(0,offset-1),offset);
+        const temporary=upload?await remoteHash(p.temp,offset):await localHash(createReadStream(p.temp),offset);
+        if(prefix!==temporary)throw new AppError('FILE_CONFLICT','已传输内容校验失败。');
       }
-      t.snapshot.transferredBytes=offset;check();
+      t.snapshot.verification=undefined;t.snapshot.transferredBytes=offset;check();
       if(offset<size||(!tempExists&&size===0)){
         let last=0;
         const meter=new Transform({transform:(chunk:Buffer,_encoding,callback)=>{t.snapshot.transferredBytes+=chunk.length;if(Date.now()-last>100){last=Date.now();this.emit(t.owner,{type:'task.state',task:{...t.snapshot}});}callback(null,chunk);}});
@@ -117,9 +126,11 @@ export class Transfers {
         await pipeline(readSource(offset),meter,destination,{signal});
       }
       check();this.change(t,'verifying');
-      const targetHash=await this.hashStream(upload?sftp.createReadStream(p.temp):createReadStream(p.temp),signal);
+      const targetHash=upload?await remoteHash(p.temp):await localHash(createReadStream(p.temp));
       if(targetHash!==sourceHash)throw new AppError('FILE_CONFLICT','传输内容校验不一致。');
-      if(await this.hashStream(readSource(),signal)!==sourceHash)throw new AppError('FILE_CONFLICT','传输期间源文件改变。');
+      if((upload?await localHash(readSource()):await remoteHash(p.remotePath))!==sourceHash)throw new AppError('FILE_CONFLICT','传输期间源文件改变。');
+      const afterSource=upload?await lstat(p.localPath):await stat(sftp,p.remotePath);
+      if(!afterSource.isFile()||afterSource.isSymbolicLink()||afterSource.size!==size||('mtimeMs' in afterSource?afterSource.mtimeMs:afterSource.mtime*1000)!==modified)throw new AppError('FILE_CONFLICT','传输期间源文件改变。');
       if(p.preserveModified){
         if(upload)await new Promise<void>((resolve,reject)=>sftp.setstat(p.temp,{mtime:Math.floor(modified/1000),atime:Math.floor(modified/1000),...(originalTarget?{mode:originalTarget.mode&0o777}:{})},e=>e?reject(e):resolve()));
         else{await utimes(p.temp,modified/1000,modified/1000);if(originalTarget)await chmod(p.temp,originalTarget.mode&0o777);}

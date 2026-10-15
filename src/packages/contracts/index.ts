@@ -111,7 +111,7 @@ export interface Lease { connectionId: string; leaseId: string; generation: numb
 export interface FileEntry { name: string; path: string; kind: 'directory'|'file'|'link'|'other'; size: number; modified: number; mode: number }
 export interface FilePage { path: string; entries: FileEntry[]; truncated: boolean }
 export type TaskState = 'queued'|'running'|'verifying'|'committing'|'pausing'|'paused'|'cancelling'|'cancelled'|'succeeded'|'failed'|'conflict';
-export interface TaskSnapshot { taskId: string; profileId: string; direction: 'upload'|'download'; name: string; state: TaskState; totalBytes: number; transferredBytes: number; revision: number; error?: string; updatedAt: number }
+export interface TaskSnapshot { taskId: string; profileId: string; direction: 'upload'|'download'; name: string; state: TaskState; totalBytes: number; transferredBytes: number; verification?:{bytes:number;totalBytes:number;method:'stream'|'remote'}; revision: number; error?: string; updatedAt: number }
 export interface Capability { id: string; name: string; state: 'available'|'unavailable'|'requires-setup'|'experimental'; reason: string }
 export type HornetEvent =
   | { type:'terminal.log';log:TerminalLog }

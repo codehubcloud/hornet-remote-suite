@@ -20,8 +20,8 @@ export async function ftpList(client:Client,path:string):Promise<FileInfo[]>{
 }
 export async function ftpStat(client:Client,path:string){path=ftpPath(path);return (await ftpList(client,posix.dirname(path))).find(e=>e.name===posix.basename(path));}
 export async function ftpAbsent(client:Client,path:string){if(await ftpStat(client,path))throw new AppError('FILE_CONFLICT','目标名称已存在，请另存。');}
-export async function ftpHash(client:Client,path:string){
- const hash=createHash('sha256');await client.downloadTo(new Writable({write(chunk,_encoding,done){hash.update(chunk);done();}}),ftpPath(path));return hash.digest('hex');
+export async function ftpHash(client:Client,path:string,progress:(bytes:number)=>void=()=>{}){
+ const hash=createHash('sha256');let bytes=0;progress(0);await client.downloadTo(new Writable({write(chunk,_encoding,done){hash.update(chunk);bytes+=chunk.length;progress(bytes);done();}}),ftpPath(path));return hash.digest('hex');
 }
 export class FtpFiles {
  constructor(private connections:FtpConnections){}

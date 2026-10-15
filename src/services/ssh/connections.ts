@@ -75,8 +75,18 @@ export class Connections {
   }
   async sftp(owner:string,id:string):Promise<SFTPWrapper> {
     const c=this.get(owner,id);
-    if(!c.sftp)c.sftp=new Promise((resolve,reject)=>c.client.sftp((err,sftp)=>err?reject(new AppError('SSH004','SFTP 子系统不可用。')):resolve(sftp)));
-    try{return await c.sftp;}catch(e){c.sftp=undefined;throw e;}
+    if(!c.sftp){
+      const pending=new Promise<SFTPWrapper>((resolve,reject)=>c.client.sftp((err,sftp)=>{
+        if(err){reject(new AppError('SSH004','SFTP 子系统不可用。'));return;}
+        const invalidate=()=>{if(c.sftp===pending)c.sftp=undefined;};
+        // A failed subsystem is a connection error, not an uncaught EventEmitter
+        // error that should terminate every user's protocol session.
+        sftp.on('error',invalidate);sftp.once('close',invalidate);resolve(sftp);
+      }));
+      c.sftp=pending;
+    }
+    const pending=c.sftp;
+    try{return await pending;}catch(e){if(c.sftp===pending)c.sftp=undefined;throw e;}
   }
   async stop(owner?:string) {
     this.stopped=!owner;

@@ -25,6 +25,46 @@ async function harness(writeDelay=0,directoryTracking=true,options:Parameters<ty
  return {server,root,db,profile,events,connections,terminals,files,transfers,async close(){await transfers.stop();terminals.stop();await connections.stop();db.close();await server.close();await rm(root,{recursive:true,force:true});}};
 }
 describe('real loopback SSH / SFTP',()=>{
+ it('verifies uploads remotely without downloading the uploaded bytes and downloads only once',async()=>{
+  const h=await harness(0,true,{remoteHash:'supported'});
+  try{
+   const lease=await h.connections.acquire('a',h.profile.profileId),source=join(h.root,'large.bin'),data=Buffer.alloc(2*1024*1024,0x71);
+   await writeFile(source,data);
+   const task=await h.transfers.start('a',lease.connectionId,'upload',source,h.root,"/large 'quoted;$.bin",randomUUID());
+   await waitFor(()=>['succeeded','failed','conflict'].includes(h.transfers.list('a').find(t=>t.taskId===task.taskId)!.state));
+   expect(h.transfers.list('a').find(t=>t.taskId===task.taskId)?.state).toBe('succeeded');
+   expect(h.server.files.get("/large 'quoted;$.bin")).toEqual(data);
+   expect([...h.server.readBytes.values()].reduce((a,b)=>a+b,0)).toBe(0);
+   expect(h.server.remoteHashes).toHaveLength(1);
+   expect(h.events.some(e=>e.type==='task.state'&&e.task.verification?.method==='remote')).toBe(true);
+   const download=await h.transfers.start('a',lease.connectionId,'download',join(h.root,'down.bin'),h.root,"/large 'quoted;$.bin",randomUUID());
+   await waitFor(()=>['succeeded','failed','conflict'].includes(h.transfers.list('a').find(t=>t.taskId===download.taskId)!.state));
+   expect(h.transfers.list('a').find(t=>t.taskId===download.taskId)?.state).toBe('succeeded');
+   expect(await readFile(join(h.root,'down.bin'))).toEqual(data);expect(h.server.readBytes.get("/large 'quoted;$.bin")).toBe(data.length);
+   const relative=await h.transfers.start('a',lease.connectionId,'upload',source,h.root,'relative.bin',randomUUID());
+   await waitFor(()=>['succeeded','failed','conflict'].includes(h.transfers.list('a').find(t=>t.taskId===relative.taskId)!.state));
+   expect(h.transfers.list('a').find(t=>t.taskId===relative.taskId)?.state).toBe('succeeded');expect(h.server.files.get('/relative.bin')).toEqual(data);
+   expect([...h.server.readBytes.values()].reduce((a,b)=>a+b,0)).toBe(data.length);
+  }finally{await h.close();}
+ },40000);
+ it('refuses a mismatched server checksum and leaves the destination absent',async()=>{
+  const h=await harness(0,true,{remoteHash:'corrupt'});
+  try{
+   const lease=await h.connections.acquire('a',h.profile.profileId),source=join(h.root,'source');await writeFile(source,'unchanged');
+   const task=await h.transfers.start('a',lease.connectionId,'upload',source,h.root,'/not-committed',randomUUID());
+   await waitFor(()=>h.transfers.list('a').find(t=>t.taskId===task.taskId)?.state==='conflict');expect(h.server.files.has('/not-committed')).toBe(false);
+  }finally{await h.close();}
+ });
+ it('handles a subsystem error without terminating SSH and replaces only the failed SFTP channel',async()=>{
+  const h=await harness();
+  try{
+   const lease=await h.connections.acquire('a',h.profile.profileId),first=await h.connections.sftp('a',lease.connectionId);
+   expect(()=>first.emit('error',new Error('fixture subsystem failure'))).not.toThrow();
+   const second=await h.connections.sftp('a',lease.connectionId);expect(second).not.toBe(first);
+   first.emit('close');expect(await h.connections.sftp('a',lease.connectionId)).toBe(second);
+   expect((await h.files.list('a',lease.connectionId,'/')).entries.some(e=>e.name==='hello.txt')).toBe(true);
+  }finally{await h.close();}
+ });
  it('recursively uploads and downloads folders, preserves empty directories and refuses changed sources',async()=>{
   const h=await harness();
   try{

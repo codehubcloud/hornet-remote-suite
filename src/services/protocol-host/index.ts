@@ -142,6 +142,7 @@ async function dispatch(m:Message):Promise<unknown>{
   }
 }
 port.on('message',({data:m})=>{
+  if(m.type==='ping'){port.postMessage({type:'heartbeat'});return;}
   if(m.type==='vault.reply'){vaultWait.get(m.requestId)?.(m.secret);vaultWait.delete(m.requestId);return;}
   if(m.type!=='call')return;
   void dispatch(m).then(data=>port.postMessage({type:'result',requestId:m.requestId,result:{ok:true,requestId:m.requestId,data}}),error=>port.postMessage({type:'result',requestId:m.requestId,result:{ok:false,requestId:m.requestId,error:error instanceof z.ZodError?{code:'IPC002',message:'请求参数不正确。',retryable:false}:safeError(error)}}));
