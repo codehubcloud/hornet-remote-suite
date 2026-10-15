@@ -10,6 +10,9 @@ import { TerminalContextMenu,type TerminalContextAction } from './TerminalContex
 import { useStore,type View } from './store';
 export function TerminalView({view,searchRequested=0}:{view:View;searchRequested?:number}){
  const preferences=useTerminalPreferences(s=>s.value),resizeTerminal=useRef<(()=>void)|null>(null);
+ const [fontSize,setFontSize]=useState(preferences.fontSize),fontSizeRef=useRef(fontSize);fontSizeRef.current=fontSize;
+ // A wheel zoom belongs to this view; applying terminal settings resets it.
+ useEffect(()=>setFontSize(preferences.fontSize),[preferences]);
  const element=useRef<HTMLDivElement>(null),searchInput=useRef<HTMLInputElement>(null);
  const search=useRef<SearchAddon|null>(null),terminal=useRef<Terminal|null>(null);
  const inputAvailable=useRef<()=>boolean>(()=>false),closed=useStore(s=>!!s.closedTerminals[view.terminalId??'']);
@@ -28,7 +31,7 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   if(!element.current||!view.terminalId)return;
   const id=view.terminalId;
   const prefs=useTerminalPreferences.getState().value;
-  const term=new Terminal({cursorBlink:prefs.cursorBlink,cursorStyle:prefs.cursorStyle,fontSize:prefs.fontSize,fontFamily:terminalFonts[prefs.font],scrollback:prefs.scrollback,theme:terminalThemes[prefs.theme],allowProposedApi:false});
+  const term=new Terminal({cursorBlink:prefs.cursorBlink,cursorStyle:prefs.cursorStyle,fontSize:fontSizeRef.current,fontFamily:terminalFonts[prefs.font],scrollback:prefs.scrollback,theme:terminalThemes[prefs.theme],allowProposedApi:false});
   const fit=new FitAddon();term.loadAddon(fit);term.open(element.current);
   terminal.current=term;const addon=new SearchAddon();term.loadAddon(addon);search.current=addon;
   term.attachCustomKeyEventHandler(e=>{if(e.ctrlKey&&e.shiftKey&&e.code==='KeyF'){if(e.type==='keydown'){setSearchOpen(true);searchInput.current?.focus();}return false;}return true;});
@@ -81,13 +84,20 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   const resize=()=>{if(element.current?.offsetWidth&&element.current?.offsetHeight){fit.fit();if(!ended)void window.hornet.terminal.resize(id,view.generation,term.cols,term.rows).catch(useStore.getState().fail);}};
   resizeTerminal.current=resize;
   const observer=new ResizeObserver(resize);observer.observe(element.current);
+  const onWheel=(event:WheelEvent)=>{
+   if(!event.ctrlKey||!Number.isFinite(event.deltaY)||event.deltaY===0)return;
+   // Capture before xterm's scrolling/mouse reporting and Chromium page zoom.
+   event.preventDefault();event.stopPropagation();
+   setFontSize(size=>Math.max(8,Math.min(32,size+(event.deltaY<0?1:-1))));
+  };
+  element.current.addEventListener('wheel',onWheel,{capture:true,passive:false});
   const onPaste=(e:ClipboardEvent)=>{const text=e.clipboardData?.getData('text/plain')??'';if(/[\r\n]/.test(text)&&!window.confirm(tr("将向 ")+view.profile.name+tr(" 粘贴多行文本，可能执行命令。继续？"))){e.preventDefault();e.stopImmediatePropagation();}};
   element.current.addEventListener('paste',onPaste,true);
   void window.hornet.terminal.attach(id).then(resize).catch(useStore.getState().fail);
   term.focus();
   const el=element.current;
-  return()=>{ended=true;inputAvailable.current=()=>false;unregister();window.removeEventListener('hornet:terminal-action',action);resizeTerminal.current=null;unsubscribe();input.dispose();observer.disconnect();el.removeEventListener('paste',onPaste,true);search.current=null;terminal.current=null;term.dispose();};
+  return()=>{ended=true;inputAvailable.current=()=>false;unregister();window.removeEventListener('hornet:terminal-action',action);resizeTerminal.current=null;unsubscribe();input.dispose();observer.disconnect();el.removeEventListener('wheel',onWheel,true);el.removeEventListener('paste',onPaste,true);search.current=null;terminal.current=null;term.dispose();};
  },[view.id,view.terminalId,view.generation]);
- useEffect(()=>{const term=terminal.current;if(!term)return;term.options.fontSize=preferences.fontSize;term.options.fontFamily=terminalFonts[preferences.font];term.options.theme=terminalThemes[preferences.theme];term.options.scrollback=preferences.scrollback;term.options.cursorStyle=preferences.cursorStyle;term.options.cursorBlink=preferences.cursorBlink;resizeTerminal.current?.();},[preferences]);
+ useEffect(()=>{const term=terminal.current;if(!term)return;term.options.fontSize=fontSize;term.options.fontFamily=terminalFonts[preferences.font];term.options.theme=terminalThemes[preferences.theme];term.options.scrollback=preferences.scrollback;term.options.cursorStyle=preferences.cursorStyle;term.options.cursorBlink=preferences.cursorBlink;resizeTerminal.current?.();},[preferences,fontSize]);
  return <>{searchOpen&&<form className="terminal-search" onSubmit={e=>{e.preventDefault();find();}}><input ref={searchInput} aria-label={tr("搜索终端内容")} placeholder={tr("搜索终端 · Ctrl+Shift+F")} value={query} onChange={e=>{setQuery(e.target.value);setResult('');}} onKeyDown={e=>{if(e.key==='Escape'){setQuery('');setResult('');closeSearch();}else if(e.key==='Enter'&&e.shiftKey){e.preventDefault();find(true);}}}/><button type="button" onClick={()=>find(true)}>{tr("上一个")}</button><button>{tr("下一个")}</button><span role="status">{result}</span><button type="button" aria-label={tr("关闭终端搜索")} onClick={closeSearch}>×</button></form>}<div className="terminal-host" ref={element} onPointerDownCapture={event=>{if(event.button===2){rightClickSelection.current=terminal.current?.getSelection()??'';event.preventDefault();}else rightClickSelection.current=undefined;}} onContextMenuCapture={event=>{event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);rightClickSelection.current=undefined;}} onKeyDownCapture={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();const box=element.current?.getBoundingClientRect();openMenu((box?.left??0)+20,(box?.top??0)+20);}}}/>{menu&&<TerminalContextMenu x={menu.x} y={menu.y} canCopy={!!menu.selection} canPaste={!closed&&inputAvailable.current()} choose={choose} close={closeMenu}/>} </>;
 }

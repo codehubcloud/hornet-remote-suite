@@ -39,6 +39,28 @@ try{
  const a=await first.boundingBox(),b=await second.boundingBox(),content=await page.locator('.content').boundingBox();expect(b.x).toBeGreaterThanOrEqual(a.x+a.width-1);expect(a.y).toBe(content.y);expect(b.y).toBe(content.y);
  await checkIdentity();
  await page.screenshot({path:'test-results/terminal-tab-groups-vertical.png'});
+ // Real Ctrl+wheel events must resize only the hovered terminal, never the UI
+ // or the other pane, and must propagate the new grid size to the remote PTY.
+ const font=cell=>cell.locator('.xterm-rows');
+ await expect(font(first)).toHaveCSS('font-size','14px');await expect(font(second)).toHaveCSS('font-size','14px');
+ await expect.poll(()=>server.shellSizes.find(([pid])=>pid===1002)?.[1]?.cols??0).toBeGreaterThan(0);
+ const originalCols=server.shellSizes.find(([pid])=>pid===1002)[1].cols;
+ const chromeHeight=(await page.locator('.session-commands').boundingBox()).height;
+ const savedFont=await page.evaluate(()=>localStorage.getItem('hornet.terminal.preferences.v1'));
+ const wheel=async(cell,deltaY,ctrl=true)=>{await cell.locator('.terminal-host').hover();if(ctrl)await page.keyboard.down('Control');try{await page.mouse.wheel(0,deltaY);}finally{if(ctrl)await page.keyboard.up('Control');}};
+ await wheel(second,-120);await expect(font(second)).toHaveCSS('font-size','15px');await expect(font(first)).toHaveCSS('font-size','14px');
+ await expect.poll(()=>server.shellSizes.find(([pid])=>pid===1002)[1].cols).toBeLessThan(originalCols);
+ await wheel(second,120);await expect(font(second)).toHaveCSS('font-size','14px');await expect.poll(()=>server.shellSizes.find(([pid])=>pid===1002)[1].cols).toBe(originalCols);
+ await wheel(second,-120,false);await expect(font(second)).toHaveCSS('font-size','14px');
+ const burst=async(deltaY,count)=>second.locator('.xterm-screen').evaluate((el,{deltaY,count})=>{for(let i=0;i<count;i++)el.dispatchEvent(new WheelEvent('wheel',{ctrlKey:true,deltaY,bubbles:true,cancelable:true}));},{deltaY,count});
+ await burst(-120,50);await expect(font(second)).toHaveCSS('font-size','32px');await wheel(second,-120);await expect(font(second)).toHaveCSS('font-size','32px');
+ await burst(120,50);await expect(font(second)).toHaveCSS('font-size','8px');await wheel(second,120);await expect(font(second)).toHaveCSS('font-size','8px');await expect(font(first)).toHaveCSS('font-size','14px');
+ expect((await page.locator('.session-commands').boundingBox()).height).toBe(chromeHeight);
+ expect(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.getZoomFactor())).toBe(1);
+ expect(await page.evaluate(()=>localStorage.getItem('hornet.terminal.preferences.v1'))).toBe(savedFont);
+ await checkIdentity();
+ const setGlobalFont=async size=>{await appMenu('工具','选项…');const settings=page.getByRole('dialog',{name:'终端设置',exact:true});await settings.getByLabel('终端字号',{exact:true}).fill(String(size));await settings.getByRole('button',{name:'应用设置',exact:true}).click();await expect(font(first)).toHaveCSS('font-size',size+'px');await expect(font(second)).toHaveCSS('font-size',size+'px');};
+ await setGlobalFont(18);await setGlobalFont(14);await checkIdentity();
  await titleMenu(tab(second),'重命名终端');await page.getByLabel('终端标题',{exact:true}).fill('Secondary terminal');await page.getByRole('button',{name:'保存标题',exact:true}).click();await expect(tab(second)).toContainText('Secondary terminal');
  // Switching the focused split must still switch the directory browser.
  await page.getByRole('button',{name:'跟随终端',exact:true}).click();
@@ -52,11 +74,12 @@ try{
  await page.screenshot({path:'test-results/terminal-tab-groups.png'});
  // Leaving the terminal workspace and returning must retain both pane tabs.
  await page.getByRole('button',{name:'◈ 工作台',exact:true}).click();await expect(page.locator('.workspace>.tabs')).toBeVisible();await page.locator('.workspace>.tabs [data-tab-view-id]').last().locator('button').first().click();await expect(second.locator('.tabs')).toBeVisible();await checkIdentity();
- await titleMenu(tab(second),'取消分屏');await expect(page.locator('.workspace>.tabs')).toBeVisible();await expect(page.locator('.terminal-cell>.tabs')).toHaveCount(0);await checkIdentity();
- await appMenu('窗口','垂直分割');await expect(page.locator('.terminal-cell>.tabs')).toHaveCount(2);await checkIdentity();
+ await wheel(second,-120);await expect(font(second)).toHaveCSS('font-size','15px');
+ await titleMenu(tab(second),'取消分屏');await expect(page.locator('.workspace>.tabs')).toBeVisible();await expect(page.locator('.terminal-cell>.tabs')).toHaveCount(0);await expect(font(second)).toHaveCSS('font-size','15px');await checkIdentity();
+ await appMenu('窗口','垂直分割');await expect(page.locator('.terminal-cell>.tabs')).toHaveCount(2);await expect(font(second)).toHaveCSS('font-size','15px');await expect(font(first)).toHaveCSS('font-size','14px');await checkIdentity();
  await second.getByRole('button',{name:'关闭 Secondary terminal',exact:true}).click();await expect(page.locator('.terminal-cell')).toHaveCount(1);await expect(page.locator('.workspace>.tabs')).toBeVisible();await expect(first).toContainText('fixture ready');
  expect(await first.evaluate(cell=>cell.__originalXterm===cell.querySelector('.xterm'))).toBe(true);expect(await first.getAttribute('data-terminal-id')).toBe(ids[0]);expect(server.shellCount).toBe(2);
  expect(errors).toEqual([]);await expect(page.locator('.error-banner')).toHaveCount(0);
- console.log('Terminal pane tabs passed: top-aligned tab groups, both axes, rename, resize, active directory follow, hidden file bar, workspace switching, merge/close and unchanged live terminal instances.');
+ console.log('Terminal pane tabs passed: top-aligned tab groups, both axes, rename, resize, Ctrl+wheel pane font zoom and bounds, remote PTY refit, unchanged UI/page zoom, settings reset, directory follow, workspace switching, merge/close and unchanged live terminal instances.');
 }catch(error){if(app)await (await app.firstWindow()).screenshot({path:'test-results/terminal-tabs-failure.png',timeout:5000}).catch(()=>{});throw error;}
 finally{if(app)await app.evaluate(({app})=>app.exit(0)).catch(()=>{});await server.close();await rm(data,{recursive:true,force:true,maxRetries:5,retryDelay:200});}

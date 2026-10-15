@@ -338,3 +338,10 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - [v0.0.8](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.8) 已公开并设为 latest；七个安装包与 SHA256SUMS 齐全，校验清单七行与 GitHub asset digest 逐项一致。
 - Windows 安装包 SHA-256：b288b8cebc75adb12f99fdcb875493566df7f13316c6aa99effbe1a3f45a1b95。
 - 源码仓库仍为 private；公开仓库 Git 树仅 README.md。源码标签 v0.0.8 保持在构建提交 36ef800；后续测试 helper 和验收记录单独提交，不移动标签或修改已发布安装包。用户现有安装及配置未被修改。
+
+## 2026-10-15：Ctrl＋滚轮终端字号缩放（未发布源码变更）
+
+- TerminalView 以每视图临时状态维护字号，Ctrl＋滚轮向上加 1、向下减 1，范围 8–32 像素；非 passive 捕获监听器阻止该手势触发 Chromium 缩放、xterm 滚动及鼠标报告，普通滚轮沿用原处理。更改字号后调用原 FitAddon / terminal.resize 通路，不重建 xterm 或远端 Shell。关闭视图移除监听器；切换标签、分屏/合并保留临时字号，同视图重连初始化使用当前临时字号。应用终端设置重置临时字号，不通过滚轮修改持久偏好。
+- 扩展现有终端分屏 Electron 回归：真实键盘 Ctrl＋鼠标滚轮验证增减、普通滚轮不改字号、鼠标所在窗格独立、8/32 上下限、菜单区域高度与 WebContents zoomFactor 不变、全局偏好未改、设置应用重置、分屏合并及恢复后保持字号。回环 SSH 夹具记录 PTY 尺寸，验证字体放大时列数减少、缩小后恢复；稳定 DOM 实例、Shell 数量和认证数量检查继续通过。
+- TypeScript 与桌面构建通过；test:terminal-tabs 最终通过。完整测试首轮 166 项断言通过但 sync-transfers 测试关闭时出现一次 No response from server 未捕获异步错误；独立重跑该文件 5 项通过，随后完整重跑 32 个文件 / 166 项全部通过且无未处理错误，未为此改动 SFTP 产品逻辑。
+- 本次仅修改并验证源码，已发布 v0.0.8 安装包未改动；从项目 start.cmd 重新构建启动可使用该功能。

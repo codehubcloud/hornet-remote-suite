@@ -7,6 +7,7 @@ export async function sshFixture(options:{hashDelayMs?:number;remoteHash?:'suppo
  const key=options.key??generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs1',format:'pem'},publicKeyEncoding:{type:'pkcs1',format:'pem'}}).privateKey;
  const directories=new Set(['/','/tmp','/tmp/space dir']);const shellCwds=new Map<number,string>(),shellInputs=new Map<number,string>();
  const shellBytes=new Map<number,Buffer>();
+ const shellSizes=new Map<number,{cols:number;rows:number}>();
  const modes=new Map<string,number>(),mtimes=new Map<string,number>();
  const files=new Map<string,Buffer>([['/hello.txt',Buffer.from('hello 世界\n')]]);const clients=new Set<Connection>();let authCount=0,shellCount=0;
  const remoteHashes:string[]=[],readBytes=new Map<string,number>();
@@ -53,9 +54,11 @@ export async function sshFixture(options:{hashDelayMs?:number;remoteHash?:'suppo
    }else reject();
   });
   client.on('ready',()=>client.on('session',accept=>{
-   const session=accept();session.on('pty',accept=>accept?.());session.on('window-change',accept=>accept?.());
+   const session=accept();let shellPid=0,ptySize={cols:80,rows:24};
+   session.on('pty',(accept,_reject,info)=>{ptySize={cols:info.cols,rows:info.rows};accept?.();});
+   session.on('window-change',(accept,_reject,info)=>{if(shellPid)shellSizes.set(shellPid,{cols:info.cols,rows:info.rows});accept?.();});
    const startShell=(stream:import('ssh2').ServerChannel,token?:string)=>{
-    const pid=1000+(++shellCount);shellCwds.set(pid,'/');let input='';
+    const pid=1000+(++shellCount);shellPid=pid;shellSizes.set(pid,ptySize);shellCwds.set(pid,'/');let input='';
     if(token)stream.write('\x1b]1337;HornetPID='+token+';'+pid+'\x07');
     stream.write('fixture ready\r\n$ ');
     stream.on('data',(data:Buffer)=>{shellBytes.set(pid,Buffer.concat([shellBytes.get(pid)??Buffer.alloc(0),data]).subarray(-65536));shellInputs.set(pid,((shellInputs.get(pid)??'')+data.toString()).slice(-65536));stream.write(Buffer.concat([Buffer.from('echo:'),data]));input+=data.toString();const lines=input.split(/[\r\n]/);input=lines.pop()??'';for(const line of lines){if(line.startsWith('cd ')){let path=line.slice(3).trim().replace(/^['"]|['"]$/g,'');path=posix.resolve(shellCwds.get(pid)??'/',path);if(directories.has(path))shellCwds.set(pid,path);}}});
@@ -125,5 +128,5 @@ export async function sshFixture(options:{hashDelayMs?:number;remoteHash?:'suppo
  }
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
  const port=(server.address() as {port:number}).port;
- return {port,key,files,directories,mtimes,remoteHashes,readBytes,get shellBytes(){return [...shellBytes.entries()];},get shellInputs(){return [...shellInputs.entries()];},get shellPaths(){return [...shellCwds.values()];},get authCount(){return authCount;},get shellCount(){return shellCount;},disconnect(){for(const c of clients)c.end();},async close(){for(const c of clients)c.end();await new Promise<void>(resolve=>server.close(()=>resolve()));}};
+ return {port,key,files,directories,mtimes,remoteHashes,readBytes,get shellSizes(){return [...shellSizes.entries()];},get shellBytes(){return [...shellBytes.entries()];},get shellInputs(){return [...shellInputs.entries()];},get shellPaths(){return [...shellCwds.values()];},get authCount(){return authCount;},get shellCount(){return shellCount;},disconnect(){for(const c of clients)c.end();},async close(){for(const c of clients)c.end();await new Promise<void>(resolve=>server.close(()=>resolve()));}};
 }
