@@ -328,3 +328,13 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 本地 PowerShell/CMD 回归发现正常退出后已排队的 xterm 输入回调会报 SCRIPT_CLOSED；增加已结束状态保护，仅丢弃正常关闭后的输入失败，活动终端失败和显式向已关闭终端执行命令仍提示错误。
 - 最终 npm run check 通过：TypeScript、语言目录、32 个测试文件 / 166 项测试与桌面构建；发布脚本两项测试通过。
 - 修正后 test:terminal-tabs 再次通过，已查看上下及左右分屏截图；test:device-terminals 通过真实 PowerShell/CMD 分屏、日志、关闭隔离及正常 exit，末尾无全局错误。
+- 本地实际 Windows x64 0.0.8 解包程序通过 test:package（历史 LF 数据库、沙箱 preload、后台、SSH/SFTP、原生辅助程序）、test:terminal-tabs:package 与 test:clipboard:package。打包白名单审计确认不包含项目源码或 source map；使用独立临时用户目录，未修改用户安装及配置。
+- 发布首轮 Linux ARM64 在启动会话对话框的默认 5 秒断言处超时，Windows 在最后的退出耗时断言处失败（24164ms，要求小于 10000ms）；各平台的分屏验收已通过项未被绕过。按原标签重跑失败构建，不移动标签或放宽本次退出断言。本地相同 0.0.8 实际程序再次通过 test:shutdown:package：后台请求无响应、renderer 故意冻结，确认退出后 5928ms 退出且后台进程结束。
+- master 的共享启动测试 helper 显式使用 30 秒断言等待；页面默认超时不控制 Playwright expect 默认值。修改后本地 test:package 通过。此项仅改进后续测试等待，不改动 v0.0.8 标签对应产品代码或当前发布验收脚本。
+
+### 0.0.8 发布验收
+
+- 私有 Actions [38751687121](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38751687121) 按原构建提交重试后全部成功：完整检查、Windows x64、macOS x64/arm64、Linux x64/arm64 和 publish。首轮失败项未跳过或放宽；五个平台的实际打包程序均通过分屏标签、会话连续性、历史数据库、剪贴板、标题栏、传输与退出验收。
+- [v0.0.8](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.8) 已公开并设为 latest；七个安装包与 SHA256SUMS 齐全，校验清单七行与 GitHub asset digest 逐项一致。
+- Windows 安装包 SHA-256：b288b8cebc75adb12f99fdcb875493566df7f13316c6aa99effbe1a3f45a1b95。
+- 源码仓库仍为 private；公开仓库 Git 树仅 README.md。源码标签 v0.0.8 保持在构建提交 36ef800；后续测试 helper 和验收记录单独提交，不移动标签或修改已发布安装包。用户现有安装及配置未被修改。
