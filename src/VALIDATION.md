@@ -259,3 +259,10 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 本机真实 Windows 0.0.4 解包 EXE 已通过启动/历史 LF 数据库保留/回环 SSH-SFTP/原生辅助程序/ConPTY，以及新传输可靠性验收。4MiB 上传完整校验后 SFTP 读取字节数为 0；下载读取字节数恰等于文件大小；校验期间 X11 状态查询可响应。这里验证的是数据流量，不是用户网络上的 GB 级耗时基准。
 - 所有测试使用临时存储与本机夹具，没有连接用户既有主机、修改用户安装目录、读写真实剪贴板或访问实体打印机。
 - 最终 `npm run check` 通过：类型、八语言资源、31 个测试文件 / 162 项测试及构建；2 项发布校验通过。本机 0.0.4 解包程序的 `test:package`、`test:transfer-reliability:package`、`test:clipboard:package` 全部通过。构建保留已有包体积提示；云端五平台发布验收结果另行记录。
+
+### 0.0.4 发布验收
+
+- 私有 Actions [38693476552](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38693476552) 的完整检查、五个平台构建与实际打包程序验收、publish 全部成功；每个平台均完成新增传输可靠性测试及既有数据库/剪贴板回归。
+- [v0.0.4](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.4) 已公开并设为 latest；七个安装包和 SHA256SUMS 齐全，校验文件七行逐一与 GitHub asset digest 一致。
+- Windows 安装包 SHA-256：`1ba6b74153b9db9323b7dde1c57a1c29f4b4cdbd99efcdad14a853cabcd4c76d`。
+- 源码仓库仍为 private，公开 Git 树仅 README.md。源码标签 v0.0.4 保持在构建提交 3f5b7a9；公开下载说明与本验收记录作为后续文档提交，不移动已发布标签。
