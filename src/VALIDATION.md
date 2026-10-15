@@ -293,3 +293,10 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 测试只使用临时数据与本地夹具，未修改用户现有安装、连接或配置。完整五平台发布验收结果另行记录。
 - 关于窗口图片首次检查在异步解码完成前立即读取 naturalWidth，导致断言失败；失败截图显示图片随后正常加载。改为轮询等待图片 complete 且 naturalWidth 为 256，不改动产品资源路径。
 - 最终 test:appearance 通过，关于窗口实际图片加载完成且原始尺寸为 256；已查看 about-logo.png，显示正常。八语言、十八套界面主题与运行中终端配色/会话连续性验收同时通过。
+
+### 0.0.6 发布验收
+
+- 私有 Actions [38719903012](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38719903012) 首轮全部成功：完整检查、Windows x64、macOS x64/arm64、Linux x64/arm64 和 publish。实际打包程序的历史数据库兼容、终端剪贴板/右键菜单、传输校验与后台响应、后台及 renderer 无响应时的退出验收均通过。
+- [v0.0.6](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.6) 已公开并设为 latest；七个安装包和 SHA256SUMS 齐全，校验文件七行与 GitHub asset digest 逐项一致。
+- Windows 安装包 SHA-256：6a52f979cebac9a4dc7ec0aa4595c8ed862f385d6d82cf2688f506c4bcf91ccc。
+- 源码仓库仍为 private；公开仓库 Git 树仅 README.md。源码标签 v0.0.6 保持在构建提交 33edcba，发布验收与下载说明单独提交，不移动发布标签或修改已发布安装包。用户原安装目录及配置未被修改。
