@@ -311,3 +311,11 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - npm run check 通过：类型、语言资源、32 个文件 / 166 项测试及生产构建；2 项发布测试通过。测试使用临时用户目录，未修改用户实际安装或配置。打包与完整跨平台结果另行记录。
 - 最终 test:appearance 通过：八种语言、十八套界面主题、运行中终端配色及会话连续性保持。真实 Windows 0.0.7 解包 EXE 的 test:package、test:titlebar:package、test:clipboard:package、test:shutdown:package 全部通过。后台请求与 renderer 故意卡住后仍在约 5.9 秒退出。
 - 另用隔离临时应用的真实窗口句柄截图（包含系统按钮，只截该窗口），已查看 titlebar-native-window.png：透明 Logo、菜单和原生最小化/最大化/关闭按钮同一行，顶栏配色一致，无旧白色标题栏或应用名；用户现有程序与数据未被修改。
+
+### 0.0.7 发布验收
+
+- 私有 Actions [38736295110](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38736295110) 首轮完整检查、Windows x64、macOS x64/arm64、Linux x64/arm64 和 publish 全部成功。五个平台均通过新增的实际打包程序标题栏与透明 Logo 验收，以及既有数据库兼容、剪贴板、传输与退出保障回归。
+- Windows 主程序与 NativeHost.exe 实际内嵌图标经提取检查，左上角 alpha 均为 0，未将透明区域填黑。
+- [v0.0.7](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.7) 已公开并设为 latest；七个安装包和 SHA256SUMS 齐全，校验文件七行与 GitHub asset digest 逐项一致。
+- Windows 安装包 SHA-256：1e796ff203996a41ba1af249a93f07b2d9e34742a96b2a97cebbc3639c9929d9。
+- 源码仓库仍为 private；公开仓库 Git 树仅 README.md。源码标签 v0.0.7 保持在构建提交 9917057；验收记录和公开下载说明单独提交，不修改已发布标签或安装包。用户现有安装及配置未被修改。
