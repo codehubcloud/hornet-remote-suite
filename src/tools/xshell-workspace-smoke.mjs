@@ -20,7 +20,7 @@ try{
  await app.evaluate(({safeStorage,BrowserWindow,session},path)=>{
   // Test-only keyring for headless hosts; Windows keeps native encryption.
   if(process.platform!=='win32'){safeStorage.isEncryptionAvailable=()=>true;safeStorage.getSelectedStorageBackend=()=> 'test-keyring';safeStorage.encryptString=text=>Buffer.from(text).map(b=>b^0xa5);safeStorage.decryptString=data=>Buffer.from(data).map(b=>b^0xa5).toString();}
-  for(const win of BrowserWindow.getAllWindows()){win.webContents.setBackgroundThrottling(false);if(process.platform==='linux')win.showInactive();}
+  for(const win of BrowserWindow.getAllWindows()){win.webContents.setBackgroundThrottling(false);win.showInactive();}
   session.defaultSession.on('will-download',(_event,item)=>item.setSavePath(path));
  },exportPath);
  await page.evaluate(()=>localStorage.setItem('hornet.terminal.commands.v1',JSON.stringify([{id:crypto.randomUUID(),name:'Legacy command',text:'pwd'}])));await page.reload();await page.locator('.app-shell').waitFor();

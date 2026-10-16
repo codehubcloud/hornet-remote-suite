@@ -458,3 +458,4 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 首次候选的 Linux x64/ARM64 在颜色编辑器截图时等待 compositor 超时，前面的样式/交互断言已通过。新增验收与既有标题栏验收一致，在 Linux Xvfb 中 showInactive 测试窗口以生成可捕获帧，保留实际截图及全部业务断言；帮助验收同步处理。
 - 第二候选 1303310 / Actions 38853248696：macOS ARM64 全部通过；两个 Linux 已通过新增颜色/属性/帮助验收。macOS Intel 的 PDF 仍在生成时，测试默认 5 秒断言先超时，已把断言上限调整为 25 秒以覆盖功能已有的 20 秒有界等待。Windows 本机 RDP 探测在约 15 秒后返回不可用：只将 RDP 探测冷启动限时改为 30 秒，其他系统操作保持原限时；同时等待 child close 而非 exit，确保 stdout 排空后解析，失败保留受控原因并记录耗时。新增 3 项测试覆盖退出后排空、20 秒冷启动成功、30 秒强制截止。该候选未发布。
 - 修正后本机 npm run check 再次通过（38 文件 / 187 测试）；新增 native-host 单测 3/3、类型检查、test:native 与 test:help 均通过。test:native 只初始化 RDP 控件并枚举打印机，未连接远端、未提交打印任务。第二候选两个 Linux 平台最终全部通过，publish 按预期跳过。
+- 第三候选 5dfc254 / Actions 38854711706：39 文件 / 190 测试通过，macOS x64/ARM64 与 Linux x64/ARM64 全部通过。Windows 原生探测及历史 LF/CRLF 升级已通过；新增综合验收在第一个编辑器截图处遇到与 Linux 相同的隐藏窗口 compositor 超时，功能断言均已通过。将隔离验收窗口 showInactive 扩展至全部平台（与既有标题栏验收一致），仍检查全部截图与业务功能；未改动应用代码。该候选 publish 已跳过，未公开安装包。
