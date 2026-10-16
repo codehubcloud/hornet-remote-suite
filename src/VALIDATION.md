@@ -461,3 +461,20 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 第三候选 5dfc254 / Actions 38854711706：39 文件 / 190 测试通过，macOS x64/ARM64 与 Linux x64/ARM64 全部通过。Windows 原生探测及历史 LF/CRLF 升级已通过；新增综合验收在第一个编辑器截图处遇到与 Linux 相同的隐藏窗口 compositor 超时，功能断言均已通过。将隔离验收窗口 showInactive 扩展至全部平台（与既有标题栏验收一致），仍检查全部截图与业务功能；未改动应用代码。该候选 publish 已跳过，未公开安装包。
 - 第四候选 188805b / Actions 38856702703 的 Windows 原生探测通过（1364 ms / 398 ms）；旧 terminal-tabs 验收在鼠标展开“排列”子菜单后全局匹配到两个“水平分割”按钮，触发 strict mode。将标题菜单操作明确限定在根菜单直接子按钮（仍按精确可访问名称定位），剪贴板测试的同类定位同步修正；原分屏截图测试也显示隔离窗口以避免隐藏捕获偶发失败。未绕过点击/布局/会话连续性断言，未改动应用实现。
 - 修正根菜单定位后，本机 test:terminal-tabs 与 test:clipboard 全部通过；第四候选其余四个平台全部成功，publish 按预期跳过。
+
+## 2026-10-16：0.0.12 发布备用路径
+
+- 当前标签/Windows 构建提交：8df4c6d0fadce4a95e218e4b80b4f80956191887。Actions 38872849475 在 verify 启动前即被 GitHub 拒绝，检查注释明确表示近期付款失败或支出限额需提高（未执行任何步骤）。未更改账号账单/付费设置，未公开源代码。
+- 跨平台产物取自 38856702703 中完整成功的 macOS x64/ARM64、Linux x64/ARM64 四个原生构建；artifact 构建提交 188805bf80008441f7056d6303780dd460479fc3。188805b..8df4c6d 仅有验证记录和两个测试脚本差异，应用代码、依赖、构建/打包配置及版本完全一致。下载后逐个核对 GitHub artifact SHA-256，再仅提取本版本预期的安装包文件。
+- Windows 在本机使用锁定 Node/Electron 版本构建正式 NSIS，输出到隔离的 .tools/release-0.0.12/windows；原生适配器与包内容审计通过，未修改用户安装目录。
+- Windows LF/CRLF 历史数据库升级、真实打包程序/后台/SSH/SFTP/ConPTY/RDP 探测、剪贴板、分屏、标题栏、真实丢包/手动重连、标签/系统加密凭据、快速命令/会话属性/工具栏、离线帮助/PDF/更新、传输与退出保障全部通过。日志保存在忽略目录 windows-validation.log，含 LOCAL_WINDOWS_RELEASE_CHECKS_PASSED。首次本地剪贴板结束检查出现一条未记录内容的 banner，完整错误断言保留；加入诊断后同一安装包连续两次通过，未修改应用代码或清除提示绕过验收，首次失败记录保留。
+- 最新运行时的 CI 类型/翻译/构建、39 文件 / 190 项测试和 2 项发布规则测试已通过；备用发布不以账单失败的 run 冒充全绿工作流。
+
+## 2026-10-16：0.0.12 已公开发布
+
+- 正式版本：https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.12 ，已核对 latest=v0.0.12、非草稿、非预发布。七个安装包与 SHA256SUMS 共八个附件，全部逐个与本地完整 SHA-256 对照成功。
+- Windows SHA-256：cfc85779c67272135075b167c759fb8e683bbb44c212da29d13bb6589e6e85ac；安装程序 104604838 字节。
+- 公开 README 已更新并推送至 1eece42474ed153f89016db371f910f092fa5708。再次核对源码仓库 private=true；公开仓库 Git 树仅 README.md，不含项目源代码。
+- 因 GitHub 账单/额度阻止 Actions 启动，本次使用前述已完成原生验收的四个平台产物，加本机完整验收的 Windows 包，经同一七包完整性检查后手动上传。先保留草稿，仅在八个附件大小/状态/摘要全部匹配后公开并设为 latest；没有更改账号付费设置。
+- 上传网络中断时保留已验证附件，后续只补齐缺失附件；最终通过直连完成。草稿修改显式保留 tag_name、target_commitish、draft/prerelease，避免编辑描述后标签变为 untagged；常规发布脚本也已加固这些字段并检查发布后的版本状态。node --check 与 test:release（2 项）通过。已发布的 v0.0.12 标签不再移动。
+- 已从公开 browser_download_url 以四段 HTTP Range 实际下载 Windows 安装包，合并为 104604838 字节；重新读取整个下载文件计算 SHA-256，结果 cfc85779c67272135075b167c759fb8e683bbb44c212da29d13bb6589e6e85ac，与本机发布文件、公开 SHA256SUMS 及 GitHub asset digest 三方一致。未执行安装程序，实际运行验收使用隔离的同构建 win-unpacked 程序；未覆盖用户已安装程序或数据。

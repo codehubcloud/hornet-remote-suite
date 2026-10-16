@@ -95,6 +95,9 @@ try{
  await openContext(second);await context.getByRole('menuitem',{name:'关闭当前标签',exact:true}).click();await expect(page.locator('.terminal-cell')).toHaveCount(1);
  expect(errors).toEqual([]);await expect(page.locator('.error-banner')).toHaveCount(0);
  console.log('Terminal clipboard passed: async IPC, ordered copy/paste, mouse selection, content context menu, selected split targeting, keyboard menu/shortcut, multiline cancellation, limits, rejected writes, recovery and closed-session guard.');
+}catch(error){
+ if(app){const page=await app.firstWindow();console.error('Clipboard banner diagnostics: '+JSON.stringify(await page.locator('.error-banner').allTextContents().catch(()=>[])));}
+ throw error;
 }finally{
  if(app)await app.evaluate(({app})=>app.exit(0)).catch(()=>{});
  await server.close();await rm(data,{recursive:true,force:true,maxRetries:5,retryDelay:200});

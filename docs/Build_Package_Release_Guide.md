@@ -292,6 +292,7 @@ Get-FileHash './Hornet-Remote-Suite-0.0.4-windows-x64.exe' -Algorithm SHA256
 | 问题 | 处理方法 |
 | --- | --- |
 | 请求版本不匹配 | 对照触发标签/手动输入和构建提交中的 package.json，检查 lockfile 同步；不要只改手动输入绕过版本准备 |
+| Actions 在启动前因账号付款或支出限额被拒绝 | 按 GitHub Billing 提示处理账号设置，不关闭测试。确需备用发布时，只使用已通过完整验收的原生平台产物，核对 artifact 摘要；复用产物必须证明应用代码、依赖和打包输入一致。Windows 本机须执行同一套实际包验收，并保留提交、产物、日志和校验记录；凑齐七个安装包后仍通过发布脚本的完整性检查 |
 | 原生模块检查失败 | 确认本机 OS/CPU 与目标一致、使用 Node 24，并在该目标重新 npm ci；不要从其他系统复制依赖或禁用检查 |
 | Windows NativeHost 编译失败 | 检查 build.mjs 使用的 Framework64 csc.exe 及系统 .NET 环境 |
 | DEB 打包缺少元数据 | 检查 package.json 的 homepage 和打包配置的 maintainer，不移除当前必需字段 |

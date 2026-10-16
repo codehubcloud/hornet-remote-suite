@@ -27,7 +27,7 @@ const body = await readFile(new URL('../release-notes.md', import.meta.url), 'ut
 const release = existing ?? await api('/releases', 'POST', {
   tag_name: tag, target_commitish: repo.default_branch, name: `Hornet Remote Suite ${version}`, body, draft: true, prerelease: false,
 });
-if (existing) await api('/releases/' + release.id, 'PATCH', { body, name: `Hornet Remote Suite ${version}` });
+if (existing) await api('/releases/' + release.id, 'PATCH', { tag_name: tag, target_commitish: repo.default_branch, body, name: `Hornet Remote Suite ${version}`, draft: true, prerelease: false });
 const previous = await api('/releases/' + release.id + '/assets?per_page=100');
 // A failed upload can be retried, but only on an unpublished draft.
 for (const asset of previous) await api('/releases/assets/' + asset.id, 'DELETE');
@@ -43,5 +43,6 @@ for (const name of assets) {
 }
 const uploaded = await api('/releases/' + release.id + '/assets?per_page=100');
 if (uploaded.length !== assets.length || assets.some(name => !uploaded.some(asset => asset.name === name && asset.state === 'uploaded'))) throw new Error('Uploaded assets are incomplete; release remains a draft.');
-const published = await api('/releases/' + release.id, 'PATCH', { draft: false, make_latest: 'true' });
+const published = await api('/releases/' + release.id, 'PATCH', { tag_name: tag, target_commitish: repo.default_branch, draft: false, prerelease: false, make_latest: 'true' });
+if (published.tag_name !== tag || published.draft || published.prerelease) throw new Error('Published release state does not match the requested stable version.');
 console.log('Published ' + published.html_url);
