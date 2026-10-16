@@ -498,4 +498,4 @@ SSH、Telnet 和设备终端关闭事件携带原因及时间；SSH 传输异常
 - 本机原生 Windows x64 安装包已生成，目标 Electron 原生模块验证和公开包文件范围审计通过。安装包为 `Hornet-Remote-Suite-0.0.13-windows-x64.exe`，104603437 字节，SHA-256 为 `9dfa53a27781b05e9df12685c303e0d1d18c8abc525817f6bd9dc9d21605a911`。
 - 实际打包程序完整验收通过：历史 LF/CRLF 数据库升级、沙箱 preload、后台服务、SSH/SFTP、ConPTY、原生辅助程序、真实丢包断线与历史保留/全屏恢复、剪贴板、分屏与字号、合并标题栏、会话菜单与系统加密凭据、快速命令/会话属性/自动重连、帮助/PDF/更新、传输校验和后台无响应退出。使用隔离临时用户目录及本机夹具。日志 `.tools/release-0.0.13/windows-validation.log` 以 `LOCAL_WINDOWS_RELEASE_CHECKS_PASSED` 结束。
 - Actions 运行 `38893419760` 的 verify 在执行任何步骤前失败，GitHub 明确提示账号付款失败或支出限额需要增加；build/publish 均未执行。未修改账号付款或额度设置，也未将 0.0.12 的其他平台安装包改名充当 0.0.13。
-- Windows 安装包及单行 SHA256SUMS 已上传到公开下载仓库的 **v0.0.13 草稿**，两附件的大小、上传状态和 GitHub SHA-256 digest 与本地一致。草稿尚未公开，最新公开版本保持 v0.0.12；等待选择先发 Windows 版，或恢复 Actions 后按原有七包规则统一发布。
+- Windows 安装包及单行 SHA256SUMS 已上传到公开下载仓库的 **v0.0.13 草稿**，两附件的大小、上传状态和 GitHub SHA-256 digest 与本地一致。草稿尚未公开，最新公开版本保持 v0.0.12。用户已明确选择：恢复 GitHub Actions 后，按原有七包规则全平台统一发布，不单独发布 Windows 版。草稿说明已同步为全平台待发布计划；已验收的 Windows 包保留。
