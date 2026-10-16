@@ -55,7 +55,7 @@ try{
  await expect(first.locator('.xterm-helper-textarea')).toBeFocused();
  await page.getByLabel('快速连接地址',{exact:true}).fill('Clipboard fixture');await page.locator('.quick-connect-bar').getByRole('button',{name:'连接',exact:true}).click();await expect.poll(()=>server.shellCount).toBe(2);
  const tabs=page.locator('.tabs').getByRole('button',{name:'>_ Clipboard fixture · 终端',exact:true});
- await tabs.first().click({button:'right'});await page.getByRole('menuitem',{name:'水平分割',exact:true}).click();
+ await tabs.first().click({button:'right'});await page.getByRole('menu',{name:'终端标题菜单',exact:true}).locator(':scope > .menu-entry > button').and(page.getByRole('menuitem',{name:'水平分割',exact:true})).click();
  const second=page.locator('.terminal-cell').nth(1);await expect(second).toBeVisible();
  await expect(second.locator('.terminal-host')).toBeVisible();
  await setClipboard('selection marker');await selectFixture(second);await page.keyboard.press('Control+Shift+C');await expect.poll(clipboard).toBe('fixture');

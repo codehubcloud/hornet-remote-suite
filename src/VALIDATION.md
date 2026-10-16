@@ -459,3 +459,5 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 第二候选 1303310 / Actions 38853248696：macOS ARM64 全部通过；两个 Linux 已通过新增颜色/属性/帮助验收。macOS Intel 的 PDF 仍在生成时，测试默认 5 秒断言先超时，已把断言上限调整为 25 秒以覆盖功能已有的 20 秒有界等待。Windows 本机 RDP 探测在约 15 秒后返回不可用：只将 RDP 探测冷启动限时改为 30 秒，其他系统操作保持原限时；同时等待 child close 而非 exit，确保 stdout 排空后解析，失败保留受控原因并记录耗时。新增 3 项测试覆盖退出后排空、20 秒冷启动成功、30 秒强制截止。该候选未发布。
 - 修正后本机 npm run check 再次通过（38 文件 / 187 测试）；新增 native-host 单测 3/3、类型检查、test:native 与 test:help 均通过。test:native 只初始化 RDP 控件并枚举打印机，未连接远端、未提交打印任务。第二候选两个 Linux 平台最终全部通过，publish 按预期跳过。
 - 第三候选 5dfc254 / Actions 38854711706：39 文件 / 190 测试通过，macOS x64/ARM64 与 Linux x64/ARM64 全部通过。Windows 原生探测及历史 LF/CRLF 升级已通过；新增综合验收在第一个编辑器截图处遇到与 Linux 相同的隐藏窗口 compositor 超时，功能断言均已通过。将隔离验收窗口 showInactive 扩展至全部平台（与既有标题栏验收一致），仍检查全部截图与业务功能；未改动应用代码。该候选 publish 已跳过，未公开安装包。
+- 第四候选 188805b / Actions 38856702703 的 Windows 原生探测通过（1364 ms / 398 ms）；旧 terminal-tabs 验收在鼠标展开“排列”子菜单后全局匹配到两个“水平分割”按钮，触发 strict mode。将标题菜单操作明确限定在根菜单直接子按钮（仍按精确可访问名称定位），剪贴板测试的同类定位同步修正；原分屏截图测试也显示隔离窗口以避免隐藏捕获偶发失败。未绕过点击/布局/会话连续性断言，未改动应用实现。
+- 修正根菜单定位后，本机 test:terminal-tabs 与 test:clipboard 全部通过；第四候选其余四个平台全部成功，publish 按预期跳过。

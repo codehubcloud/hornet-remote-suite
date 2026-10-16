@@ -17,7 +17,7 @@ let app;
 try{
  app=await electron.launch({...(executable?{executablePath:executable}:{}),args:executable?(process.platform==='linux'?['--no-sandbox']:[]):['.'],env,timeout:60000});
  const page=await app.firstWindow();page.setDefaultTimeout(20000);await dismissStartupSessions(page);
- await app.evaluate(({BrowserWindow})=>{for(const win of BrowserWindow.getAllWindows())win.webContents.setBackgroundThrottling(false);});
+ await app.evaluate(({BrowserWindow})=>{for(const win of BrowserWindow.getAllWindows()){win.webContents.setBackgroundThrottling(false);win.showInactive();}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const quick=async text=>{await page.getByLabel('快速连接地址',{exact:true}).fill(text);await page.locator('.quick-connect-bar').getByRole('button',{name:'连接',exact:true}).click();};
  await quick('tester@127.0.0.1:'+server.port);
@@ -27,7 +27,7 @@ try{
  await expect(first).toContainText('fixture ready');await quick('Split fixture');await expect(second).toContainText('fixture ready');
  const ids=await page.locator('.terminal-cell').evaluateAll(cells=>cells.map(cell=>{cell.__originalXterm=cell.querySelector('.xterm');return cell.dataset.terminalId;}));
  const tab=cell=>cell.locator('.tabs [data-tab-view-id]');
- const titleMenu=async(locator,item)=>{await locator.click({button:'right'});await page.getByRole('menuitem',{name:item,exact:true}).click();};
+ const titleMenu=async(locator,item)=>{await locator.click({button:'right'});await page.getByRole('menu',{name:'终端标题菜单',exact:true}).locator(':scope > .menu-entry > button').and(page.getByRole('menuitem',{name:item,exact:true})).click();};
  const appMenu=async(group,item)=>{await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:group,exact:true}).click();await page.getByRole('menuitem',{name:item,exact:true}).click();};
  await titleMenu(page.locator('.tabs [data-tab-view-id]').first(),'垂直分割');
  await expect(first.locator('.tabs')).toBeVisible();await expect(second.locator('.tabs')).toBeVisible();
