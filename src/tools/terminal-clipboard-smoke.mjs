@@ -1,4 +1,4 @@
-import { _electron as electron,expect } from '@playwright/test';
+import { _electron as electron,expect as baseExpect } from '@playwright/test';
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { mkdtemp,mkdir,rm } from 'node:fs/promises';
@@ -6,6 +6,7 @@ import { join,resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { dismissStartupSessions } from './session-dialog-helper.mjs';
 
+const expect=baseExpect.configure({timeout:30000});
 await mkdir('test-results',{recursive:true});
 await build({entryPoints:['tests/fixtures/ssh-server.ts'],outfile:'test-results/clipboard-fixture.cjs',bundle:true,platform:'node',format:'cjs',external:['ssh2']});
 const server=await createRequire(import.meta.url)(resolve('test-results/clipboard-fixture.cjs')).sshFixture();
@@ -79,7 +80,19 @@ try{
  await setClipboard('x'.repeat(131073));const limit=await page.evaluate(async()=>{try{await window.hornet.clipboard.read();return '';}catch(error){return error.message;}});expect(limit).toContain('FILE_LIMIT');expect(limit).not.toContain('could not be cloned');
  await app.evaluate(()=>{globalThis.__hornetClipboardFixture.failWrite=true;});const writeFailure=await page.evaluate(async()=>{try{await window.hornet.clipboard.write('blocked');return '';}catch(error){return error.message;}});expect(writeFailure).toContain('IPC004');
  await app.evaluate(()=>{globalThis.__hornetClipboardFixture.failWrite=false;});await setClipboard('recovered');expect(await page.evaluate(()=>window.hornet.clipboard.read())).toBe('recovered');
- const id=await second.getAttribute('data-terminal-id');await page.evaluate(id=>window.hornet.terminal.close(id),id);await expect.poll(()=>server.shellCount).toBe(2);await page.waitForTimeout(100);await openContext(second);await expect(context.getByRole('menuitem',{name:'粘贴',exact:true})).toBeDisabled();await page.keyboard.press('Escape');
+ await openContext(second);await context.getByRole('menuitem',{name:'重命名终端',exact:true}).click();
+ await page.getByLabel('终端标题',{exact:true}).fill('Renamed pane');await page.getByRole('button',{name:'保存标题',exact:true}).click();
+ await expect(second.locator('.tabs')).toContainText('Renamed pane');await expect(first.locator('.tabs')).toContainText('Clipboard fixture');expect(server.shellCount).toBe(2);
+ const id=await second.getAttribute('data-terminal-id');await openContext(second);await context.getByRole('menuitem',{name:'断开',exact:true}).click();await expect.poll(()=>server.shellCount).toBe(2);await page.waitForTimeout(100);await openContext(second);await expect(context.getByRole('menuitem',{name:'粘贴',exact:true})).toBeDisabled();await page.keyboard.press('Escape');
+ if(!executable)await page.screenshot({path:'test-results/terminal-disconnected.png'});
+ await expect(second.locator('.terminal-disconnected')).toContainText('已断开');await expect(second.locator('.tabs')).toContainText('已断开');
+ await openContext(second);await expect(context.getByRole('menuitem',{name:'断开',exact:true})).toBeDisabled();await context.getByRole('menuitem',{name:'重新连接',exact:true}).click();
+ await expect.poll(()=>server.shellCount).toBe(3);await expect(second).toHaveAttribute('data-terminal-id',/.+/);await expect.poll(()=>second.getAttribute('data-terminal-id')).not.toBe(id);
+ await expect(second.locator('.terminal-disconnected')).toHaveCount(0);await expect(second.locator('.tabs')).toContainText('Renamed pane');expect(server.authCount).toBe(1);
+ server.disconnect();await expect(first.locator('.terminal-disconnected')).toBeVisible();await expect(second.locator('.terminal-disconnected')).toBeVisible();
+ await expect(first.locator('.terminal-host')).toContainText('fixture ready');await expect(second.locator('.terminal-host')).toContainText('fixture ready');
+ await openContext(second);await context.getByRole('menuitem',{name:'全选',exact:true}).click();await openContext(second);await context.getByRole('menuitem',{name:'复制',exact:true}).click();await expect.poll(clipboard).toContain('fixture ready');
+ await openContext(second);await context.getByRole('menuitem',{name:'关闭当前标签',exact:true}).click();await expect(page.locator('.terminal-cell')).toHaveCount(1);
  expect(errors).toEqual([]);await expect(page.locator('.error-banner')).toHaveCount(0);
  console.log('Terminal clipboard passed: async IPC, ordered copy/paste, mouse selection, content context menu, selected split targeting, keyboard menu/shortcut, multiline cancellation, limits, rejected writes, recovery and closed-session guard.');
 }finally{

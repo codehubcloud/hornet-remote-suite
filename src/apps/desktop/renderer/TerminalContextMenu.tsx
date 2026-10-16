@@ -1,9 +1,11 @@
 import { useEffect,useLayoutEffect,useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { t as tr } from './i18n';
+import { TerminalSessionMenuItems } from './TerminalSessionMenuItems';
+import type { View } from './store';
 
 export type TerminalContextAction='copy'|'paste'|'selectAll'|'clear'|'search';
-export function TerminalContextMenu({x,y,canCopy,canPaste,choose,close}:{x:number;y:number;canCopy:boolean;canPaste:boolean;choose:(action:TerminalContextAction)=>void;close:(focus:boolean)=>void}){
+export function TerminalContextMenu({view,x,y,canCopy,canPaste,choose,close}:{view:View;x:number;y:number;canCopy:boolean;canPaste:boolean;choose:(action:TerminalContextAction)=>void;close:(focus:boolean)=>void}){
  const element=useRef<HTMLDivElement>(null);
  useLayoutEffect(()=>{const node=element.current;if(!node)return;node.style.left=Math.max(2,Math.min(x,window.innerWidth-node.offsetWidth-2))+'px';node.style.top=Math.max(2,Math.min(y,window.innerHeight-node.offsetHeight-2))+'px';},[x,y]);
  useEffect(()=>{
@@ -23,5 +25,7 @@ export function TerminalContextMenu({x,y,canCopy,canPaste,choose,close}:{x:numbe
   <button role="menuitem" onClick={()=>choose('selectAll')}>{tr('全选')}</button>
   <button role="menuitem" aria-label={tr('清屏')} onClick={()=>choose('clear')}>{tr('清屏')}<kbd>Ctrl+Shift+L</kbd></button>
   <button role="menuitem" aria-label={tr('搜索终端')} onClick={()=>choose('search')}>{tr('搜索终端')}<kbd>Ctrl+Shift+F</kbd></button>
+  <div role="separator" className="menu-separator"/>
+  <TerminalSessionMenuItems view={view} choose={action=>{close(false);action();}}/>
  </div>,document.body);
 }

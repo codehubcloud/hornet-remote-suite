@@ -175,3 +175,9 @@
 .terminal-cell>.tabs .tab{min-width:0;flex-shrink:1;padding:0 5px}
 .terminal-cell>.tabs .tab>button:first-child{overflow:hidden;text-overflow:ellipsis}
 .terminal-cell>.tabs .tab>button:last-child{flex-shrink:0}
+
+.terminal-disconnected{display:flex;align-items:center;gap:12px;flex-shrink:0;padding:4px 10px;border-bottom:1px solid var(--c-29384b);color:var(--c-8fa6bf);background:var(--c-182437)}.terminal-disconnected button{padding:2px 8px}.terminal-tab-disconnected{color:var(--c-8fa6bf)}
+
+.terminal-tab-menu .reference-popup{z-index:30;min-width:300px}.terminal-tab-menu .nested-menu{z-index:31}.tab-state-icon{color:#36ad69;font-size:10px}.tab-state-icon.disconnected{color:#8b8b8b}.profile-credentials{border:1px solid var(--c-304359);margin:8px 0;padding:10px}.profile-credentials legend{padding:0 5px}
+
+.terminal-tab-menu .menu-entry>button{height:25px;min-height:25px;padding:2px 9px;font-size:12px}.terminal-tab-menu .menu-separator{margin-top:3px;margin-bottom:3px}

@@ -7,7 +7,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import { FitAddon } from '@xterm/addon-fit';
 import { terminalAction,terminalFonts,terminalThemes,useTerminalPreferences,type TerminalAction } from './terminal-preferences';
 import { TerminalContextMenu,type TerminalContextAction } from './TerminalContextMenu';
-import { useStore,type View } from './store';
+import { isTerminalClosed,reconnectView,useStore,type View } from './store';
 export function TerminalView({view,searchRequested=0}:{view:View;searchRequested?:number}){
  const preferences=useTerminalPreferences(s=>s.value),resizeTerminal=useRef<(()=>void)|null>(null);
  const [fontSize,setFontSize]=useState(preferences.fontSize),fontSizeRef=useRef(fontSize);fontSizeRef.current=fontSize;
@@ -15,7 +15,7 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
  useEffect(()=>setFontSize(preferences.fontSize),[preferences]);
  const element=useRef<HTMLDivElement>(null),searchInput=useRef<HTMLInputElement>(null);
  const search=useRef<SearchAddon|null>(null),terminal=useRef<Terminal|null>(null);
- const inputAvailable=useRef<()=>boolean>(()=>false),closed=useStore(s=>!!s.closedTerminals[view.terminalId??'']);
+ const inputAvailable=useRef<()=>boolean>(()=>false),closed=useStore(s=>isTerminalClosed(view,s)),reconnecting=useStore(s=>!!s.reconnecting[view.id]);
  const rightClickSelection=useRef<string|undefined>(undefined);
  const [menu,setMenu]=useState<{x:number;y:number;selection:string}|null>(null);
  const closeMenu=useCallback((focus:boolean)=>{setMenu(null);if(focus&&useStore.getState().active===view.id)terminal.current?.focus();},[view.id]);
@@ -34,9 +34,12 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   const term=new Terminal({cursorBlink:prefs.cursorBlink,cursorStyle:prefs.cursorStyle,fontSize:fontSizeRef.current,fontFamily:terminalFonts[prefs.font],scrollback:prefs.scrollback,theme:terminalThemes[prefs.theme],allowProposedApi:false});
   const fit=new FitAddon();term.loadAddon(fit);term.open(element.current);
   terminal.current=term;const addon=new SearchAddon();term.loadAddon(addon);search.current=addon;
+  const titleChange=term.onTitleChange(title=>useStore.getState().updateTerminal(view.id,{terminalTitle:title.replace(/[\x00-\x1f\x7f]/g,'').slice(0,255)}));
   term.attachCustomKeyEventHandler(e=>{if(e.ctrlKey&&e.shiftKey&&e.code==='KeyF'){if(e.type==='keydown'){setSearchOpen(true);searchInput.current?.focus();}return false;}return true;});
   let inputSeq=0,ended=false;
   const runner=new ScriptRunner((text,signal)=>send(text,signal));
+  const endTerminal=()=>{if(ended)return;ended=true;runner.close();term.options.disableStdin=true;term.options.cursorBlink=false;term.write(tr("\r\n\u001b[33m[连接已关闭；重新连接会创建新的会话]\u001b[0m\r\n"));};
+  const stopState=useStore.subscribe(state=>{if(isTerminalClosed(view,state))endTerminal();});
   inputAvailable.current=()=>!ended&&!runner.running;
   const unregister=registerScriptRunner(id,runner);
   const unsubscribe=window.hornet.onEvent(e=>{
@@ -44,7 +47,8 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
     runner.feed(new Uint8Array(e.data));
     term.write(new Uint8Array(e.data),()=>{if(!ended)window.hornet.terminal.ack(id,e.seq);});
    }
-   if(e.type==='terminal.closed'&&e.terminalId===id){ended=true;runner.close();term.write(tr("\r\n\u001b[33m[连接已关闭；重新连接会创建新的会话]\u001b[0m\r\n"));}
+   if(e.type==='terminal.closed'&&e.terminalId===id)endTerminal();
+   if(e.type==='connection.state'&&e.connectionId===view.connectionId&&e.generation===view.generation&&['closed','failed'].includes(e.state))endTerminal();
   });
   let writes:Promise<void>=Promise.resolve();
   // Reflowing or closing a pane can leave an already queued xterm reply. A
@@ -81,7 +85,7 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
    }
   };
   window.addEventListener('hornet:terminal-action',action);
-  const resize=()=>{if(element.current?.offsetWidth&&element.current?.offsetHeight){fit.fit();if(!ended)void window.hornet.terminal.resize(id,view.generation,term.cols,term.rows).catch(useStore.getState().fail);}};
+  const resize=()=>{if(element.current?.offsetWidth&&element.current?.offsetHeight){fit.fit();if(!ended)void window.hornet.terminal.resize(id,view.generation,term.cols,term.rows).catch(reportInputFailure);}};
   resizeTerminal.current=resize;
   const observer=new ResizeObserver(resize);observer.observe(element.current);
   const onWheel=(event:WheelEvent)=>{
@@ -93,11 +97,13 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   element.current.addEventListener('wheel',onWheel,{capture:true,passive:false});
   const onPaste=(e:ClipboardEvent)=>{const text=e.clipboardData?.getData('text/plain')??'';if(/[\r\n]/.test(text)&&!window.confirm(tr("将向 ")+view.profile.name+tr(" 粘贴多行文本，可能执行命令。继续？"))){e.preventDefault();e.stopImmediatePropagation();}};
   element.current.addEventListener('paste',onPaste,true);
-  void window.hornet.terminal.attach(id).then(resize).catch(useStore.getState().fail);
+  // A background tab can receive the close event before its xterm mounts.
+  if(isTerminalClosed(view,useStore.getState()))endTerminal();
+  if(!ended)void window.hornet.terminal.attach(id).then(resize).catch(reportInputFailure);
   term.focus();
   const el=element.current;
-  return()=>{ended=true;inputAvailable.current=()=>false;unregister();window.removeEventListener('hornet:terminal-action',action);resizeTerminal.current=null;unsubscribe();input.dispose();observer.disconnect();el.removeEventListener('wheel',onWheel,true);el.removeEventListener('paste',onPaste,true);search.current=null;terminal.current=null;term.dispose();};
+  return()=>{ended=true;inputAvailable.current=()=>false;stopState();unregister();window.removeEventListener('hornet:terminal-action',action);resizeTerminal.current=null;unsubscribe();input.dispose();titleChange.dispose();observer.disconnect();el.removeEventListener('wheel',onWheel,true);el.removeEventListener('paste',onPaste,true);search.current=null;terminal.current=null;term.dispose();};
  },[view.id,view.terminalId,view.generation]);
- useEffect(()=>{const term=terminal.current;if(!term)return;term.options.fontSize=fontSize;term.options.fontFamily=terminalFonts[preferences.font];term.options.theme=terminalThemes[preferences.theme];term.options.scrollback=preferences.scrollback;term.options.cursorStyle=preferences.cursorStyle;term.options.cursorBlink=preferences.cursorBlink;resizeTerminal.current?.();},[preferences,fontSize]);
- return <>{searchOpen&&<form className="terminal-search" onSubmit={e=>{e.preventDefault();find();}}><input ref={searchInput} aria-label={tr("搜索终端内容")} placeholder={tr("搜索终端 · Ctrl+Shift+F")} value={query} onChange={e=>{setQuery(e.target.value);setResult('');}} onKeyDown={e=>{if(e.key==='Escape'){setQuery('');setResult('');closeSearch();}else if(e.key==='Enter'&&e.shiftKey){e.preventDefault();find(true);}}}/><button type="button" onClick={()=>find(true)}>{tr("上一个")}</button><button>{tr("下一个")}</button><span role="status">{result}</span><button type="button" aria-label={tr("关闭终端搜索")} onClick={closeSearch}>×</button></form>}<div className="terminal-host" ref={element} onPointerDownCapture={event=>{if(event.button===2){rightClickSelection.current=terminal.current?.getSelection()??'';event.preventDefault();}else rightClickSelection.current=undefined;}} onContextMenuCapture={event=>{event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);rightClickSelection.current=undefined;}} onKeyDownCapture={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();const box=element.current?.getBoundingClientRect();openMenu((box?.left??0)+20,(box?.top??0)+20);}}}/>{menu&&<TerminalContextMenu x={menu.x} y={menu.y} canCopy={!!menu.selection} canPaste={!closed&&inputAvailable.current()} choose={choose} close={closeMenu}/>} </>;
+ useEffect(()=>{const term=terminal.current;if(!term)return;term.options.fontSize=fontSize;term.options.fontFamily=terminalFonts[preferences.font];term.options.theme=terminalThemes[preferences.theme];term.options.scrollback=preferences.scrollback;term.options.cursorStyle=preferences.cursorStyle;term.options.cursorBlink=!closed&&preferences.cursorBlink;resizeTerminal.current?.();},[preferences,fontSize,closed]);
+ return <>{closed&&<div className="terminal-disconnected" role="status"><strong>{tr("已断开")}</strong>{!view.source&&<button disabled={reconnecting} onClick={()=>void reconnectView(view.id).catch(useStore.getState().fail)}>{tr("重新连接")}</button>}</div>}{searchOpen&&<form className="terminal-search" onSubmit={e=>{e.preventDefault();find();}}><input ref={searchInput} aria-label={tr("搜索终端内容")} placeholder={tr("搜索终端 · Ctrl+Shift+F")} value={query} onChange={e=>{setQuery(e.target.value);setResult('');}} onKeyDown={e=>{if(e.key==='Escape'){setQuery('');setResult('');closeSearch();}else if(e.key==='Enter'&&e.shiftKey){e.preventDefault();find(true);}}}/><button type="button" onClick={()=>find(true)}>{tr("上一个")}</button><button>{tr("下一个")}</button><span role="status">{result}</span><button type="button" aria-label={tr("关闭终端搜索")} onClick={closeSearch}>×</button></form>}<div className="terminal-host" ref={element} onPointerDownCapture={event=>{if(event.button===2){rightClickSelection.current=terminal.current?.getSelection()??'';event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);}else rightClickSelection.current=undefined;}} onContextMenuCapture={event=>{event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);rightClickSelection.current=undefined;}} onKeyDownCapture={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();const box=element.current?.getBoundingClientRect();openMenu((box?.left??0)+20,(box?.top??0)+20);}}}/>{menu&&<TerminalContextMenu view={view} x={menu.x} y={menu.y} canCopy={!!menu.selection} canPaste={!closed&&inputAvailable.current()} choose={choose} close={closeMenu}/>} </>;
 }

@@ -1,5 +1,6 @@
 import { useEffect,useLayoutEffect,useRef,useState } from 'react';
 import { t as tr } from './i18n';
+import { createPortal } from 'react-dom';
 export type MenuItem={label:string;literal?:boolean;action?:()=>void;disabled?:boolean;unsupported?:boolean;shortcut?:string;children?:MenuItem[];separator?:boolean;checked?:boolean};
 export type MenuGroup={label:string;access:string;items:MenuItem[]};
 export function MenuBar({groups,reveal}:{groups:MenuGroup[];reveal?:()=>void}){
@@ -13,9 +14,17 @@ export function MenuBar({groups,reveal}:{groups:MenuGroup[];reveal?:()=>void}){
  useEffect(()=>{if(open&&!current)setOpen(null);},[open,current]);
  return <nav ref={root} className="session-menubar reference-menubar" aria-label={tr('应用菜单')}>{groups.map((g,i)=><div className="session-menu" key={g.label}><button aria-label={tr(g.label)} data-menu={g.label} aria-haspopup="menu" aria-expanded={open===g.label} onClick={()=>setOpen(open===g.label?null:g.label)} onPointerEnter={()=>{if(open)setOpen(g.label);}} onKeyDown={e=>{if(e.key==='ArrowDown'){e.preventDefault();setOpen(g.label);}if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const next=groups[(i+(e.key==='ArrowRight'?1:groups.length-1))%groups.length];root.current?.querySelector<HTMLButtonElement>('[data-menu="'+next.label+'"]')?.focus();if(open)setOpen(next.label);}}}>{tr(g.label)}<span aria-hidden="true">({g.access})</span></button>{open===g.label&&<Popup items={g.items} label={g.label} dismiss={()=>setOpen(null)} move={direction=>setOpen(groups[(i+direction+groups.length)%groups.length].label)}/>}</div>)}</nav>;
 }
-function Popup({items,label,dismiss,back,move}:{items:MenuItem[];label:string;dismiss:()=>void;back?:()=>void;move?:(direction:number)=>void}){
+export function ContextMenu({items,label,x,y,dismiss}:{items:MenuItem[];label:string;x:number;y:number;dismiss:()=>void}){
+ const root=useRef<HTMLDivElement>(null);
+ useEffect(()=>{const outside=(event:Event)=>{if(!root.current?.contains(event.target as Node))dismiss();},key=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();dismiss();}};
+  window.addEventListener('pointerdown',outside,true);window.addEventListener('scroll',outside,true);window.addEventListener('keydown',key);window.addEventListener('resize',dismiss);window.addEventListener('blur',dismiss);
+  return()=>{window.removeEventListener('pointerdown',outside,true);window.removeEventListener('scroll',outside,true);window.removeEventListener('keydown',key);window.removeEventListener('resize',dismiss);window.removeEventListener('blur',dismiss);};
+ },[dismiss]);
+ return createPortal(<div ref={root} className="terminal-tab-menu" onContextMenu={event=>event.preventDefault()}><Popup items={items} label={label} dismiss={dismiss} point={{x,y}}/></div>,document.body);
+}
+function Popup({items,label,dismiss,back,move,point}:{items:MenuItem[];label:string;dismiss:()=>void;back?:()=>void;move?:(direction:number)=>void;point?:{x:number;y:number}}){
  const [child,setChild]=useState<number|null>(null),ref=useRef<HTMLDivElement>(null),[position,setPosition]=useState<{left:number;top:number}>();
- useLayoutEffect(()=>{const node=ref.current;if(!node)return;const anchor=node.parentElement!.getBoundingClientRect(),width=node.offsetWidth,height=node.offsetHeight;setPosition({left:Math.max(2,Math.min(back?anchor.right:anchor.left,window.innerWidth-width-2)),top:Math.max(2,Math.min(back?anchor.top:anchor.bottom,window.innerHeight-height-4))});},[label]);
+ useLayoutEffect(()=>{const node=ref.current;if(!node)return;const anchor=node.parentElement!.getBoundingClientRect(),width=node.offsetWidth,height=node.offsetHeight;setPosition({left:Math.max(2,Math.min(point?.x??(back?anchor.right:anchor.left),window.innerWidth-width-2)),top:Math.max(2,Math.min(point?.y??(back?anchor.top:anchor.bottom),window.innerHeight-height-4))});},[label,point?.x,point?.y]);
  useEffect(()=>{ref.current?.querySelector<HTMLButtonElement>(':scope > .menu-entry > button:not(:disabled)')?.focus();},[]);
  return <div ref={ref} style={position} role="menu" aria-label={tr(label)} className={'session-menu-popup reference-popup'+(back?' nested-menu':'')} onKeyDown={e=>{
   if((e.target as HTMLElement).closest('[role=menu]')!==e.currentTarget)return;

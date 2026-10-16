@@ -3,10 +3,11 @@ import { generateKeyPairSync,createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import { createServer,createConnection,type Socket,type Server as TcpServer } from 'node:net';
 interface Handle { path:string;directory?:boolean;read?:boolean }
-export async function sshFixture(options:{hashDelayMs?:number;remoteHash?:'supported'|'corrupt';atomicRename?:boolean;password?:string;writeDelay?:number;key?:string;directoryTracking?:boolean;procReadlink?:boolean;procProbeDelayMs?:number;rejectTrackingExec?:boolean}={}){
+export async function sshFixture(options:{networkProxy?:boolean;hashDelayMs?:number;remoteHash?:'supported'|'corrupt';atomicRename?:boolean;password?:string;writeDelay?:number;key?:string;directoryTracking?:boolean;procReadlink?:boolean;procProbeDelayMs?:number;rejectTrackingExec?:boolean}={}){
  const key=options.key??generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs1',format:'pem'},publicKeyEncoding:{type:'pkcs1',format:'pem'}}).privateKey;
  const directories=new Set(['/','/tmp','/tmp/space dir']);const shellCwds=new Map<number,string>(),shellInputs=new Map<number,string>();
  const shellBytes=new Map<number,Buffer>();
+ const shellStreams=new Map<number,import('ssh2').ServerChannel>();
  const shellSizes=new Map<number,{cols:number;rows:number}>();
  const modes=new Map<string,number>(),mtimes=new Map<string,number>();
  const files=new Map<string,Buffer>([['/hello.txt',Buffer.from('hello 世界\n')]]);const clients=new Set<Connection>();let authCount=0,shellCount=0;
@@ -59,10 +60,11 @@ export async function sshFixture(options:{hashDelayMs?:number;remoteHash?:'suppo
    session.on('window-change',(accept,_reject,info)=>{if(shellPid)shellSizes.set(shellPid,{cols:info.cols,rows:info.rows});accept?.();});
    const startShell=(stream:import('ssh2').ServerChannel,token?:string)=>{
     const pid=1000+(++shellCount);shellPid=pid;shellSizes.set(pid,ptySize);shellCwds.set(pid,'/');let input='';
+    shellStreams.set(pid,stream);
     if(token)stream.write('\x1b]1337;HornetPID='+token+';'+pid+'\x07');
     stream.write('fixture ready\r\n$ ');
     stream.on('data',(data:Buffer)=>{shellBytes.set(pid,Buffer.concat([shellBytes.get(pid)??Buffer.alloc(0),data]).subarray(-65536));shellInputs.set(pid,((shellInputs.get(pid)??'')+data.toString()).slice(-65536));stream.write(Buffer.concat([Buffer.from('echo:'),data]));input+=data.toString();const lines=input.split(/[\r\n]/);input=lines.pop()??'';for(const line of lines){if(line.startsWith('cd ')){let path=line.slice(3).trim().replace(/^['"]|['"]$/g,'');path=posix.resolve(shellCwds.get(pid)??'/',path);if(directories.has(path))shellCwds.set(pid,path);}}});
-    stream.on('close',()=>shellCwds.delete(pid));
+    stream.on('close',()=>{shellCwds.delete(pid);shellStreams.delete(pid);});
    };
    session.on('shell',accept=>startShell(accept()));
    session.on('exec',(accept,reject,info)=>{
@@ -127,6 +129,16 @@ export async function sshFixture(options:{hashDelayMs?:number;remoteHash?:'suppo
   sftp.on('error',()=>{});
  }
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
- const port=(server.address() as {port:number}).port;
- return {port,key,files,directories,mtimes,remoteHashes,readBytes,get shellSizes(){return [...shellSizes.entries()];},get shellBytes(){return [...shellBytes.entries()];},get shellInputs(){return [...shellInputs.entries()];},get shellPaths(){return [...shellCwds.values()];},get authCount(){return authCount;},get shellCount(){return shellCount;},disconnect(){for(const c of clients)c.end();},async close(){for(const c of clients)c.end();await new Promise<void>(resolve=>server.close(()=>resolve()));}};
+ let port=(server.address() as {port:number}).port;
+ const links=new Set<{front:Socket;back:Socket;blocked:boolean}>();let proxy:TcpServer|undefined;
+ if(options.networkProxy){
+  const targetPort=port;
+  proxy=createServer(front=>{
+   const back=createConnection({host:'127.0.0.1',port:targetPort}),link={front,back,blocked:false};links.add(link);
+   front.on('data',data=>{if(!link.blocked)back.write(data);});back.on('data',data=>{if(!link.blocked)front.write(data);});
+   const close=()=>{links.delete(link);front.destroy();back.destroy();};front.on('error',close);back.on('error',close);front.on('close',close);back.on('close',close);
+  });
+  await new Promise<void>(resolve=>proxy!.listen(0,'127.0.0.1',resolve));port=(proxy.address() as {port:number}).port;
+ }
+ return {setShellTitle(pid:number,title:string){shellStreams.get(pid)?.write("\x1b]2;"+title+"\x07");},port,key,files,directories,mtimes,remoteHashes,readBytes,get shellSizes(){return [...shellSizes.entries()];},get shellBytes(){return [...shellBytes.entries()];},get shellInputs(){return [...shellInputs.entries()];},get shellPaths(){return [...shellCwds.values()];},get authCount(){return authCount;},get shellCount(){return shellCount;},blackhole(){if(!proxy)throw new Error('networkProxy required');for(const link of links)link.blocked=true;},disconnect(){for(const c of clients)c.end();},async close(){for(const link of links){link.front.destroy();link.back.destroy();}for(const c of clients)c.end();if(proxy)await new Promise<void>(resolve=>proxy!.close(()=>resolve()));await new Promise<void>(resolve=>server.close(()=>resolve()));}};
 }

@@ -3,7 +3,7 @@ import { join,basename,resolve,sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readFile,writeFile,stat } from 'node:fs/promises';
 import { z } from 'zod';
-import { envelopeSchema,schemas,profileSchema,terminalAckSchema,terminalInputSchema,type HornetEvent,type Profile,type TaskSnapshot } from '../../../packages/contracts';
+import { envelopeSchema,schemas,profileSchema,profileCredentialSchema,terminalAckSchema,terminalInputSchema,type HornetEvent,type Profile,type TaskSnapshot } from '../../../packages/contracts';
 import { AppError,safeError } from '../../../packages/core/errors';
 import { TreeTransfers } from '../../../services/file/tree-transfers';
 import { treeRequestSchema } from '../../../packages/contracts/file-tree';
@@ -12,6 +12,7 @@ import { TerminalLogs } from '../../../services/terminal/logs';
 import { LocalFiles } from '../../../services/file/local-files';
 import { PathGrants } from '../../../packages/security/path-grants';
 import { Vault } from './vault';
+import { ProfileCredentials } from './profile-credentials';
 import { Backend } from './backend';
 import { ExitController } from './exit-controller';
 import { RdpService, nativeCall } from '../../../services/native/host';
@@ -46,6 +47,7 @@ function authorize(event:IpcMainInvokeEvent|IpcMainEvent){
 function responseError(e:unknown,requestId='local'){return {ok:false,requestId,error:e instanceof z.ZodError?{code:'IPC002',message:'请求参数无效。',retryable:false}:safeError(e)};}
 async function setupIpc(){
   const treeTransfers=new TreeTransfers(localFiles,grants,backend);
+  const credentials=new ProfileCredentials(vault,()=>backend.call('profile.list'),(profile,expectedRevision)=>backend.call('profile.save',{profile,expectedRevision}));
   ipcMain.handle('hornet:request',async(event,raw:unknown)=>{
     let requestId='';
     try{
@@ -73,6 +75,15 @@ async function setupIpc(){
       authorize(event);const m=z.object({method:z.string(),payload:z.unknown()}).strict().parse(raw);
       let data:unknown;
       switch(m.method){
+        case 'profile.save':{
+          const p=z.object({profile:profileSchema,expectedRevision:z.number().int().nonnegative(),credential:profileCredentialSchema.optional()}).strict().parse(m.payload);
+          data=await credentials.saveProfile(p.profile,p.expectedRevision,p.credential);break;
+        }
+        case 'profile.credentialStatus':{
+          const {profileId}=z.object({profileId:z.string().uuid()}).strict().parse(m.payload);
+          const profile=(await backend.call<Profile[]>('profile.list')).find(p=>p.profileId===profileId);
+          data={saved:!!profile&&vault.has(profile)};break;
+        }
         case 'windowChrome.colors':{
           const color=z.string().regex(/^#[0-9a-f]{6}$/i);
           const colors=z.object({color,symbolColor:color}).strict().parse(m.payload);

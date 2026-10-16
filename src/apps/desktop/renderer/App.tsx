@@ -5,7 +5,7 @@ import { useAppearance } from './appearance';
 import { useEffect,useState } from 'react';
 import type { Profile,HornetEvent } from '../../../packages/contracts';
 import { profileSchema } from '../../../packages/contracts';
-import { useStore,refreshProfiles,openView,type View } from './store';
+import { useStore,refreshProfiles,openView,closeTerminalView,isTerminalClosed,type View } from './store';
 import { ConnectionTree,GroupDialog,groupPath,groupPaths,readGroups } from './ConnectionTree';
 import { SessionCommands } from './SessionCommands';
 import { JumpRouteEditor } from './JumpRouteEditor';
@@ -15,6 +15,7 @@ import { TaskCenter } from './TaskCenter';
 import { TerminalTitleMenu,showTerminalMenu } from './TerminalTitleMenu';
 import { TerminalWorkspace } from './TerminalWorkspace';
 import { layoutRects } from './terminal-layout';
+import { tabGroup } from './terminal-tabs';
 import { StartPage,SuiteWorkspace,suiteTools,type SuiteTool } from './SuiteWorkspace';
 import { VncView } from './VncView';
 import { FileWorkspace } from './FileWorkspace';
@@ -40,6 +41,7 @@ export function App(){
  },[]);
  async function connect(p:Profile,kind:'terminal'|'files'){setPending(true);try{await openView(p,kind);setRecent(ids=>[p.profileId,...ids.filter(id=>id!==p.profileId)].slice(0,20));}catch(e){s.fail(e);}finally{setPending(false);}}
  async function close(v:View):Promise<boolean>{
+  if(v.kind==='terminal'){try{await closeTerminalView(v.id);return true;}catch(e){s.fail(e);return false;}}
   if(v.desktop){try{await window.hornet.vnc.close(v.desktop.desktopId);s.removeView(v.id);return true;}catch(e){s.fail(e);return false;}}
   if(v.kind==='editor'&&!window.confirm(tr("关闭编辑器？请先保存未提交的更改。")))return false;
   try{for(const id of v.terminalIds??(v.terminalId?[v.terminalId]:[]))await window.hornet.terminal.close(id);if(v.leaseId)await window.hornet.connection.release(v.leaseId);s.removeView(v.id);
@@ -69,8 +71,10 @@ export function App(){
  // tabs sit above the file browser, or in the first pane when it is hidden.
  function renderTabs(paneId?:string,common=true){return <nav className="tabs">
   {common&&<button className={s.active==='home'?'tab active':'tab'} onClick={()=>s.setActive('home')}>{tr("◈ 工作台")}</button>}
-  {s.views.filter(v=>paneId===undefined||(v.kind==='terminal'?v.id===paneId||common&&!splitPanes?.has(v.id):common)).map(v=><div className={s.active===v.id?'tab active':'tab'} key={v.id} data-tab-view-id={v.id} onContextMenu={e=>{if(v.kind==='terminal')showTerminalMenu(e,v.id);}}><button onClick={()=>s.setActive(v.id)}>{v.kind==='terminal'?'>_':v.kind==='files'?'▰':'▤'} {v.title??v.profile.name} · {v.kind==='terminal'?tr("终端"):v.kind==='files'?tr("文件"):v.kind==='vnc'?'VNC':v.path?.split('/').pop()}</button><button aria-label={tr("关闭 ")+(v.title??v.profile.name)} onClick={()=>void close(v)}>×</button></div>)}
+  {s.views.filter(v=>paneId===undefined||(v.kind==='terminal'?v.id===paneId||s.views.some(p=>p.id===paneId&&tabGroup(p)===tabGroup(v))||common&&!s.views.some(p=>splitPanes?.has(p.id)&&tabGroup(p)===tabGroup(v)):common)).map(v=><div className={s.active===v.id?'tab active':'tab'} key={v.id} data-tab-view-id={v.id} style={v.tabColor?{borderTopColor:v.tabColor,boxShadow:`inset 0 2px ${v.tabColor}`}:{}} onPointerDown={e=>{if(e.button===2&&v.kind==='terminal')showTerminalMenu(e,v.id);}} onContextMenu={e=>{if(v.kind==='terminal')showTerminalMenu(e,v.id);}}><button aria-label={(v.kind==='terminal'?'>_':v.kind==='files'?'▰':'▤')+' '+(v.title??v.profile.name)+' · '+(v.kind==='terminal'?tr("终端"):v.kind==='files'?tr("文件"):v.kind==='vnc'?'VNC':v.path?.split('/').pop())} onClick={()=>s.setActive(v.id)}>{v.kind==='terminal'&&s.tabDisplay.status&&<span className={'tab-state-icon'+(isTerminalClosed(v,s)?' disconnected':'')} aria-hidden="true">● </span>}{v.kind==='terminal'&&s.tabDisplay.numbers&&<span className="tab-number" aria-hidden="true">{s.views.filter(p=>p.kind==='terminal').findIndex(p=>p.id===v.id)+1} </span>}{v.kind==='terminal'?'>_':v.kind==='files'?'▰':'▤'} {s.tabDisplay.title&&v.kind==='terminal'&&v.terminalTitle?v.terminalTitle:v.title??v.profile.name} · {v.kind==='terminal'?tr("终端"):v.kind==='files'?tr("文件"):v.kind==='vnc'?'VNC':v.path?.split('/').pop()}{v.kind==='terminal'&&isTerminalClosed(v,s)&&<span className="terminal-tab-disconnected"> · {tr('已断开')}</span>}</button><button aria-label={tr("关闭 ")+(v.title??v.profile.name)} disabled={!!v.locked} title={v.locked?tr("标签已锁定，请先解锁。"):undefined} onClick={()=>void close(v)}>{v.locked?'🔒':'×'}</button></div>)}
+  {common&&s.blankTabs.map(id=><div key={id} className={'tab'+(s.active===id?' active':'')}><button onClick={()=>s.setActive(id)}>{tr('新选项卡')}</button><button aria-label={tr('关闭当前标签')} onClick={()=>s.closeBlankTab(id)}>×</button></div>)}
   {common&&toolTabs.map(tool=><div className={s.active===tool?'tab active':'tab'} key={tool}><button onClick={()=>s.setActive(tool)}>{tr(suiteTools.find(t=>t.id===tool)!.name)}</button><button aria-label={tr("关闭 ")+tr(suiteTools.find(t=>t.id===tool)!.name)} onClick={()=>closeTool(tool)}>×</button></div>)}
+  {common&&<button aria-label={tr('新选项卡')} onClick={s.newTab}>＋</button>}
   {common&&<button className="chrome-toggle" onClick={toggleChrome} aria-expanded={!collapsed} title={collapsed?tr("展开工具栏"):tr("折叠工具栏")} aria-label={collapsed?tr("展开工具栏"):tr("折叠工具栏")}>{collapsed?'⌄':'⌃'}</button>}
  </nav>;}
  return <div className={collapsed?"app-shell chrome-collapsed":"app-shell"}>
@@ -85,7 +89,7 @@ export function App(){
    {!splitActive&&renderTabs()}
    {s.error&&<div className="error-banner" role="alert"><span>{s.error}</span><button onClick={s.clearError}>{tr("关闭")}</button></div>}
    <div className="content">
-    {s.active==='home'&&<StartPage recent={recent} pending={pending} create={fields=>{setConnectOnSave(Boolean(fields));setForm({...fresh(),...fields});}} connect={(p,kind)=>void connect(p,kind)} openTool={openTool}/>}
+    {(s.active==='home'||s.blankTabs.includes(s.active))&&<StartPage recent={recent} pending={pending} create={fields=>{setConnectOnSave(Boolean(fields));setForm({...fresh(),...fields});}} connect={(p,kind)=>void connect(p,kind)} openTool={openTool}/>}
     {toolTabs.map(tool=><div key={tool} className="tool-view" hidden={s.active!==tool}><SuiteWorkspace tool={tool}/></div>)}
     <section className="view terminal-session-workspace" data-view-id={active?.kind==='terminal'?active.id:undefined} style={{display:active?.kind==='terminal'?'flex':'none'}}><TerminalWorkspace splitActive={splitActive} renderTabs={renderTabs}/></section>
     {s.views.filter(v=>v.kind!=='terminal').map(v=><section key={v.id} className="view" data-view-id={v.id} style={{display:s.active===v.id?'flex':'none'}}>{v.kind!=='terminal'&&<div className="view-meta"><span>{v.profile.name} / {v.profile.host}</span><span>{s.connectionStates[v.connectionId]==='closed'?tr("已断开"):v.profile.protocol==='ftp'?(v.profile.ftpSecurity==='none'?tr("FTP · 明文"):tr("FTPS · TLS 加密连接")):tr("SSH · 加密连接")}</span><button hidden={v.profile.protocol==='ftp'} disabled={pending} onClick={()=>void connect(v.profile,v.kind==='files'?'terminal':'files')}>{v.kind==='files'?tr("打开终端"):tr("打开文件")}</button></div>}{v.kind==='vnc'?<VncView view={v}/>:v.kind==='files'?<FileWorkspace view={v}/>:<EditorView view={v}/>}</section>)}
@@ -103,9 +107,11 @@ export function App(){
 function ProfileDialog({profile,groups,close,saved,connectOnSave}:{profile:Profile;groups:string[];close:()=>void;saved:(profile:Profile)=>void;connectOnSave:boolean}){
  const profiles=useStore(s=>s.profiles);
  const [p,setP]=useState(profile),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const [password,setPassword]=useState(''),[savePassword,setSavePassword]=useState(true),[passwordSaved,setPasswordSaved]=useState(false);
+ useEffect(()=>{let active=true;if(profile.revision)void window.hornet.profiles.credentialStatus(profile.profileId).then(status=>{if(active)setPasswordSaved(status.saved);}).catch(()=>{});return()=>{active=false;};},[profile.profileId,profile.revision]);
  const field=(key:keyof Profile,value:string|number)=>setP({...p,[key]:value});
- async function save(){setBusy(true);try{const clean=profileSchema.parse({...p,group:groupPath(p.group)});const result=await window.hornet.profiles.save(clean,profile.revision);await refreshProfiles();close();saved(result);}catch(e){setError(e instanceof Error?e.message:tr("无法保存"));}finally{setBusy(false);}}
- return <div className="modal-backdrop"><form className="modal profile-dialog" onSubmit={e=>{e.preventDefault();void save();}}><div className="modal-heading"><h2>{profile.revision?tr("编辑连接"):tr("新建连接")}</h2><button type="button" onClick={close}>×</button></div><p className="muted">{tr("连接资料保存在本机，密码在连接时输入。")}</p>
+ async function save(){setBusy(true);try{const clean=profileSchema.parse({...p,group:groupPath(p.group)});const credential=clean.protocol==='telnet'||clean.authType!=='password'||!savePassword?{mode:'remove' as const}:password?{mode:'save' as const,password}:{mode:'keep' as const};const result=await window.hornet.profiles.save(clean,profile.revision,credential);setPassword('');await refreshProfiles();close();saved(result);}catch(e){setError(e instanceof Error?e.message:tr("无法保存"));}finally{setBusy(false);}}
+ return <div className="modal-backdrop"><form className="modal profile-dialog" onSubmit={e=>{e.preventDefault();void save();}}><div className="modal-heading"><h2>{profile.revision?tr("编辑连接"):tr("新建连接")}</h2><button type="button" disabled={busy} onClick={close}>×</button></div><p className="muted">{tr("用户名保存在连接配置中，密码使用系统加密存储。")}</p>
   <label>{tr("协议")}<select aria-label={tr("连接协议")} value={p.protocol??'ssh'} onChange={e=>setP({...p,protocol:e.target.value as Profile['protocol'],ftpSecurity:e.target.value==='ftp'?'explicit':undefined,authType:e.target.value==='ftp'?'password':p.authType,jumpProfileIds:e.target.value==='ssh'?p.jumpProfileIds:[],port:[21,22,23,990].includes(p.port)?(e.target.value==='telnet'?23:e.target.value==='ftp'?21:22):p.port})}><option value="ssh">SSH / SFTP</option><option value="ftp">FTP / FTPS</option><option value="telnet">{tr("Telnet（明文）")}</option></select></label>
   <label>{tr("名称")}<input required autoFocus value={p.name} onChange={e=>field('name',e.target.value)}/></label>
   <div className="form-row"><label>{tr("主机")}<input required placeholder="192.168.1.10" value={p.host} onChange={e=>field('host',e.target.value)}/></label><label className="port">{tr("端口")}<input required type="number" min={1} max={65535} value={p.port} onChange={e=>field('port',Number(e.target.value))}/></label></div>
@@ -113,6 +119,7 @@ function ProfileDialog({profile,groups,close,saved,connectOnSave}:{profile:Profi
   <label>{tr("说明")}<input maxLength={2048} value={p.description??''} onChange={e=>field('description',e.target.value)}/></label>
   <label>{tr("分组")}<input list="connection-group-options" maxLength={128} placeholder={tr("例如：生产环境/北京/数据库")} value={p.group} onChange={e=>field('group',e.target.value)}/></label><datalist id="connection-group-options">{groups.map(path=><option key={path} value={path}/>)}</datalist><p className="muted">{tr("选择已有分组，或用 / 分隔创建多级子分组。")}</p>
   {p.protocol==='telnet'?<p className="muted">{tr("Telnet 使用明文连接；用户名和密码在远端登录提示中手动输入，不使用 SSH 凭据库。")}</p>:<label hidden={p.protocol==='ftp'}>{tr("认证方式")}<select value={p.authType} onChange={e=>field('authType',e.target.value)}><option value="password">{tr("密码 / 交互认证")}</option><option value="privateKey">{tr("私钥文件")}</option><option value="agent">{tr("系统 SSH Agent")}</option></select></label>}
+  {p.protocol!=='telnet'&&p.authType==='password'&&<fieldset className="profile-credentials"><legend>{tr('用户身份验证')}</legend><label>{tr('密码')}<input aria-label={tr('连接密码')} type="password" maxLength={16384} autoComplete="new-password" disabled={!savePassword||busy} value={password} onChange={e=>setPassword(e.target.value)}/></label><label className="checkbox"><input type="checkbox" checked={savePassword} disabled={busy} onChange={e=>setSavePassword(e.target.checked)}/>{tr('保存密码')}</label><p className="muted">{passwordSaved?tr('已保存密码，留空保持不变。'):tr('密码留空时，在连接时询问。')}{tr('修改主机、端口或用户名后需重新输入密码。')}</p></fieldset>}
   {p.protocol==='ftp'?<><label>{tr('FTP 连接安全')}<select aria-label={tr('FTP 连接安全')} value={p.ftpSecurity??'explicit'} onChange={e=>setP({...p,ftpSecurity:e.target.value as Profile['ftpSecurity'],port:[21,990].includes(p.port)?(e.target.value==='implicit'?990:21):p.port})}><option value="explicit">{tr('FTPS · 显式 TLS（推荐）')}</option><option value="implicit">{tr('FTPS · 隐式 TLS')}</option><option value="none">{tr('FTP · 明文')}</option></select></label><p className="muted">{tr('被动模式，UTF-8 文件名。FTPS 严格校验证书；普通 FTP 的密码和文件均为明文。')}</p></>:<EncodingSelect value={p.encoding} change={encoding=>setP({...p,encoding})}/>} 
   {(p.protocol??'ssh')==='ssh'&&<JumpRouteEditor profile={p} profiles={profiles} change={jumpProfileIds=>setP({...p,jumpProfileIds})}/>}
   {error&&<p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" onClick={close}>{tr("取消")}</button><button className="primary" disabled={busy}>{connectOnSave?tr("保存并连接"):tr("保存配置")}</button></div>

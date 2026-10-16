@@ -19,6 +19,11 @@ export const profileSchema = z.object({
   revision: z.number().int().nonnegative(),
 }).strict().refine(p=>p.protocol==='telnet'||p.username.length>0,{message:'连接需要用户名。',path:['username']}).refine(p=>!p.jumpProfileIds?.length||((p.protocol??'ssh')==='ssh'&&!p.jumpProfileIds.includes(p.profileId)&&new Set(p.jumpProfileIds).size===p.jumpProfileIds.length),{message:'跳板链只能用于 SSH，不能重复或包含自身。',path:['jumpProfileIds']}).refine(p=>p.protocol==='ftp'?p.authType==='password'&&!!p.ftpSecurity:!p.ftpSecurity,{message:'FTP 需要密码认证并指定传输加密方式。',path:['ftpSecurity']});
 export type Profile = z.infer<typeof profileSchema>;
+export const profileCredentialSchema=z.discriminatedUnion('mode',[
+ z.object({mode:z.literal('keep')}).strict(),z.object({mode:z.literal('remove')}).strict(),
+ z.object({mode:z.literal('save'),password:z.string().min(1).max(16384).refine(v=>!v.includes('\0'))}).strict()
+]);
+export type ProfileCredential=z.infer<typeof profileCredentialSchema>;
 export const tunnelConfigSchema = z.object({
   profileId: id, kind: z.enum(['local', 'remote', 'dynamic']),
   bindHost: z.enum(['127.0.0.1', '::1']),
@@ -66,7 +71,8 @@ export const schemas = {
   'profile.save': z.object({ profile: profileSchema, expectedRevision: z.number().int().nonnegative() }).strict(),
   'group.remove': z.object({ path: z.string().min(1).max(128), members: z.array(z.object({profileId:id,revision:z.number().int().positive()}).strict()).max(10000) }).strict(),
   'profile.delete': z.object({ profileId: id, expectedRevision: z.number().int().positive() }).strict(),
-  'connection.open': z.object({ profileId: id, purpose: z.enum(['terminal', 'files']) }).strict(),
+  'connection.open': z.object({ profileId: id, purpose: z.enum(['terminal', 'files']),fresh:z.boolean().optional() }).strict(),
+  'connection.retain':z.object({connectionId:id}).strict(),
   'connection.release': z.object({ leaseId: id }).strict(),
   'connection.close': z.object({ connectionId: id, generation: z.number().int().positive() }).strict(),
   'auth.respond': z.object({ challengeId: id, response: z.string().max(65536), remember: z.boolean() }).strict(),
@@ -140,8 +146,8 @@ export interface HornetApi {
   rdp:{probe():Promise<{available:boolean;presentation:string}>;open(config:RdpConfig):Promise<{id:string}>;list():Promise<{id:string;state:string;reason?:number}[]>;close(id:string):Promise<void>};
   vnc: { open(profileId: string, host: string, port: number): Promise<{ desktopId: string; url: string; token: string }>; close(desktopId: string): Promise<void> };
   tunnel: { list(): Promise<TunnelSnapshot[]>; create(config: TunnelConfig): Promise<TunnelSnapshot>; stop(tunnelId: string): Promise<void> };
-  profiles: { removeGroup(path:string,members:{profileId:string;revision:number}[]):Promise<void>; list(): Promise<Profile[]>; save(profile: Profile, expectedRevision: number): Promise<Profile>; delete(profileId: string, expectedRevision: number): Promise<void>; import(): Promise<number|null>; export(): Promise<boolean> };
-  connection: { open(profileId: string, purpose: 'terminal'|'files'): Promise<Lease>; release(leaseId: string): Promise<void>; close(connectionId: string, generation: number): Promise<void> };
+  profiles: { credentialStatus(profileId:string):Promise<{saved:boolean}>;removeGroup(path:string,members:{profileId:string;revision:number}[]):Promise<void>; list(): Promise<Profile[]>; save(profile: Profile, expectedRevision: number,credential?:ProfileCredential): Promise<Profile>; delete(profileId: string, expectedRevision: number): Promise<void>; import(): Promise<number|null>; export(): Promise<boolean> };
+  connection: { retain(connectionId:string):Promise<Lease>;open(profileId: string, purpose: 'terminal'|'files',fresh?:boolean): Promise<Lease>; release(leaseId: string): Promise<void>; close(connectionId: string, generation: number): Promise<void> };
   auth: { respond(challengeId: string, response: string, remember: boolean): Promise<void>; cancel(challengeId: string): Promise<void>; trust(challengeId: string, decision: 'accept'|'reject'): Promise<void>; chooseKey(challengeId: string): Promise<boolean>; lock(): Promise<void> };
   terminal: { encoding(terminalId:string,generation:number,encoding?:TerminalEncoding):Promise<TerminalEncoding>;send(terminalId:string,generation:number,seq:number,data:string):Promise<void>; exportText(name:string,text:string):Promise<boolean>;cwd(terminalId:string):Promise<{path:string|null;reason?:string}>; create(connectionId: string, cols: number, rows: number,trackDirectory?:boolean): Promise<{ terminalId: string; generation: number }>; attach(terminalId: string): Promise<void>; write(terminalId: string,generation: number,seq: number,data: string): void; ack(terminalId: string,seq: number): void; resize(terminalId: string,generation: number,cols: number,rows: number): Promise<void>; close(terminalId: string): Promise<void> };
   file: { chmod(connectionId:string,path:string,mode:number):Promise<void>; list(connectionId: string,path: string): Promise<FilePage>; read(connectionId: string,path: string): Promise<{ content: string; hash: string }>; save(connectionId: string,path: string,content: string,expectedHash: string): Promise<{ hash: string }>; choose(direction: 'upload'|'download',name?: string): Promise<{ pathGrantId: string; name: string }|null>; mkdir(connectionId:string,path:string):Promise<void>; rename(connectionId:string,path:string,target:string):Promise<void>; remove(connectionId:string,path:string):Promise<void> };

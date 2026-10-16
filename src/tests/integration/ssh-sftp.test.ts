@@ -25,6 +25,34 @@ async function harness(writeDelay=0,directoryTracking=true,options:Parameters<ty
  return {server,root,db,profile,events,connections,terminals,files,transfers,async close(){await transfers.stop();terminals.stop();await connections.stop();db.close();await server.close();await rm(root,{recursive:true,force:true});}};
 }
 describe('real loopback SSH / SFTP',()=>{
+ it('closes every shell once on remote transport shutdown, including unattached shells, and can reconnect',async()=>{
+  const h=await harness();
+  try{
+   const lease=await h.connections.acquire('a',h.profile.profileId);
+   const first=await h.terminals.create('a',lease.connectionId,80,24),background=await h.terminals.create('a',lease.connectionId,80,24);
+   h.terminals.attach('a',first.terminalId);h.server.disconnect();
+   await waitFor(()=>h.events.filter(e=>e.type==='terminal.closed').length===2);
+   for(const id of [first.terminalId,background.terminalId]){
+    expect(h.events.filter(e=>e.type==='terminal.closed'&&e.terminalId===id)).toHaveLength(1);
+    expect(()=>h.terminals.write('a',id,1,1,'must not execute')).toThrow();
+   }
+   expect(h.events.some(e=>e.type==='connection.state'&&e.connectionId===lease.connectionId&&e.state==='closed')).toBe(true);
+   const next=await h.connections.acquire('a',h.profile.profileId);expect(next.connectionId).not.toBe(lease.connectionId);
+   const terminal=await h.terminals.create('a',next.connectionId,80,24);h.terminals.attach('a',terminal.terminalId);
+   await waitFor(()=>h.events.some(e=>e.type==='terminal.data'&&e.terminalId===terminal.terminalId));
+  }finally{await h.close();}
+ });
+ it('closes paused shells immediately on a ready transport error without waiting for individual channel close events',async()=>{
+  const h=await harness();
+  try{
+   const lease=await h.connections.acquire('a',h.profile.profileId),terminal=await h.terminals.create('a',lease.connectionId,80,24);
+   const client=h.connections.get('a',lease.connectionId).client;
+   expect(()=>client.emit('error',new Error('Keepalive timeout'))).not.toThrow();
+   expect(h.events.filter(e=>e.type==='terminal.closed'&&e.terminalId===terminal.terminalId)).toHaveLength(1);
+   expect(()=>h.terminals.inspect('a',terminal.terminalId)).toThrow();
+   expect(()=>h.connections.get('a',lease.connectionId)).toThrow();
+  }finally{await h.close();}
+ });
  it('verifies uploads remotely without downloading the uploaded bytes and downloads only once',async()=>{
   const h=await harness(0,true,{remoteHash:'supported'});
   try{

@@ -1,5 +1,6 @@
 export type SplitTree={kind:'leaf';id:string}|{kind:'split';id:string;axis:'horizontal'|'vertical';ratio:number;first:SplitTree;second:SplitTree};
 export type Rect={x:number;y:number;width:number;height:number};
+export function replaceLeaf(tree:SplitTree,id:string,nextId:string):SplitTree{return tree.kind==='leaf'?(tree.id===id?{kind:'leaf',id:nextId}:tree):{...tree,first:replaceLeaf(tree.first,id,nextId),second:replaceLeaf(tree.second,id,nextId)};}
 export function splitLeaf(tree:SplitTree,id:string,newId:string,axis:'horizontal'|'vertical'):SplitTree {
  if(tree.kind==='leaf')return tree.id===id?{kind:'split',id:crypto.randomUUID(),axis,ratio:0.5,first:tree,second:{kind:'leaf',id:newId}}:tree;
  return {...tree,first:splitLeaf(tree.first,id,newId,axis),second:splitLeaf(tree.second,id,newId,axis)};

@@ -1,7 +1,7 @@
 import { t as tr } from './i18n';
 import { useBroadcast } from './broadcast';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useStore,openView,hasRemoteFiles } from './store';
+import { useStore,openView,hasRemoteFiles,isTerminalClosed } from './store';
 import { FileView } from './FileView';
 import { QuickCommands } from './QuickCommands';
 import { TerminalView } from './TerminalView';
@@ -11,6 +11,7 @@ export function TerminalWorkspace({splitActive,renderTabs}:{splitActive:boolean;
  const broadcast=useBroadcast();
  const s=useStore(),panes=s.views.filter(v=>v.kind==='terminal');
  const view=panes.find(v=>v.id===s.active)??panes[0],active=view?.id??'';
+ const disconnected=view?isTerminalClosed(view,s):false;
  const [commands,setCommands]=useState(false);
  useEffect(()=>{const show=()=>setCommands(true);window.addEventListener('hornet:quick-commands',show);return()=>window.removeEventListener('hornet:quick-commands',show);},[]);
  const [requests,setRequests]=useState<Record<string,number>>({});
@@ -19,6 +20,7 @@ export function TerminalWorkspace({splitActive,renderTabs}:{splitActive:boolean;
  const grid=useRef<HTMLDivElement>(null);
  useEffect(()=>{
   if(!follow||!view||s.active!==view.id||!hasRemoteFiles(view))return;
+  if(disconnected){setFollowStatus(tr('已断开'));setTarget(undefined);return;}
   let cancelled=false,timer:ReturnType<typeof setTimeout>;
   setFollowStatus(tr("正在获取目录…"));setTarget(undefined);
   const id=view.terminalId!;
@@ -31,7 +33,7 @@ export function TerminalWorkspace({splitActive,renderTabs}:{splitActive:boolean;
    finally{if(!cancelled)timer=setTimeout(poll,800);}
   };
   void poll();return()=>{cancelled=true;clearTimeout(timer);};
- },[follow,active,s.active,view?.terminalId]);
+ },[follow,active,s.active,view?.terminalId,disconnected]);
  function changeRatio(id:string,ratio:number){const tree=useStore.getState().terminalLayout;if(tree)s.setTerminalLayout(setRatio(tree,id,ratio));}
  const host=useRef<HTMLDivElement>(null),[visible,setVisible]=useState(true);
  const [width,setWidth]=useState(()=>{try{const saved=Number(localStorage.getItem('hornet.fileSidebar.width'));return saved>=240&&saved<=520?saved:300;}catch{return 300;}});

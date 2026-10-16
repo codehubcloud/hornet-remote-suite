@@ -8,7 +8,7 @@ on:
       version:
         description: 'Version matching src/package.json, without v'
         required: true
-        default: '0.0.10'
+        default: '0.0.11'
 
 permissions:
   contents: read
@@ -125,6 +125,18 @@ jobs:
       - name: Test terminal clipboard and context menu on Linux
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:clipboard:package
+      - name: Test SSH packet loss and disconnected terminal recovery
+        if: runner.os != 'Linux'
+        run: npm run test:terminal-disconnect:package
+      - name: Test SSH packet loss and disconnected terminal recovery on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:terminal-disconnect:package
+      - name: Test session tab commands and saved credentials
+        if: runner.os != 'Linux'
+        run: npm run test:session-tabs:package
+      - name: Test session tab commands and saved credentials on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:session-tabs:package
       - name: Test transfer verification and backend responsiveness in the packaged app
         if: runner.os != 'Linux'
         run: npm run test:transfer-reliability:package
