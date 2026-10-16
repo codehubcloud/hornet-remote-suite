@@ -407,3 +407,11 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 首次 Actions 38830579505 中 macOS 两种架构通过，Windows 与 Linux x64/arm64 的标签菜单回归发现同一个问题：子菜单在右侧空间不足时简单钳位到窗口内，覆盖父菜单的点击位置；hover 已打开子菜单后，父菜单 click 还会将其关闭。publish 已跳过，没有公开 0.0.11 安装包。
 - 修正为右侧空间不足时优先向左展开，并让已展开的父菜单重复点击保持展开。抽出菜单定位逻辑，增加方向与视口约束测试。实际界面回归显式 hover、检查父菜单中心未被遮挡、再 click；以 1024×768 窗口验证颜色及组选项，未使用强制点击或绕过交互检查。
 - 修正后 npm run check 通过：36 个文件 / 179 项测试、TypeScript、语言目录及构建；发布脚本两项通过。Windows 原生 safeStorage 下 test:session-tabs 通过，含窄窗口、重启登录和本地 PowerShell 组。由于该版本尚未公开，更新尚未发布的 v0.0.11 源码标签后重新执行全部平台构建，保留首次失败记录。
+
+## 2026-10-16：0.0.11 公开发布验收
+
+- 私有源码发布标签 v0.0.11 固定在构建提交 `5e1acf725ac2642f5c86e7f5bb48a30298df632e`。修正版 Actions [38832696077](https://github.com/codehubcloud/hornet-remote-suite/actions/runs/38832696077) 全部成功：verify、Windows x64、macOS x64/arm64、Linux x64/arm64 与 publish；首次候选的菜单问题及失败记录保留在上方。
+- 五个平台实际打包程序均通过历史数据库升级、终端复制/粘贴与右键菜单、分屏标签与 Ctrl+滚轮、合并标题栏与透明 Logo、真实 SSH 静默丢包断线恢复、会话标签命令与保存凭据、传输校验及后台无响应退出测试。Windows 另覆盖本地 PowerShell 标签组及原生 safeStorage；macOS/Linux 的无界面凭据测试使用隔离测试密钥存储，不作为这些平台系统钥匙串的人工验收结论。
+- [v0.0.11](https://github.com/codehubcloud/hornet-remote-suite-release/releases/tag/v0.0.11) 已公开并设为 latest，含七个安装包与 SHA256SUMS。逐项核对七个安装包的 GitHub asset SHA-256 digest 与校验清单一致；Windows 安装包 SHA-256：`c4fbd60e2a4c14eaf88222e3e118a17844ab5a1aab9a55c6d135a6e86b73bacd`。
+- GitHub API 确认源码仓库仍为 private；公开仓库 Git 树仅 README.md，安装包通过 Releases 分发。公开下载说明已在提交 `e38d873` 更新为 0.0.11；本验收记录另行提交，不移动已发布标签。
+- 本次没有覆盖用户实际安装目录、数据库或连接配置，没有连接用户既有主机、修改实际系统剪贴板或既有 Xshell 会话。覆盖安装兼容性通过临时历史数据库验收。
