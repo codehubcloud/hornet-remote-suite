@@ -1,6 +1,7 @@
 import { useEffect,useLayoutEffect,useRef,useState } from 'react';
 import { t as tr } from './i18n';
 import { createPortal } from 'react-dom';
+import { menuPosition } from './menu-position';
 export type MenuItem={label:string;literal?:boolean;action?:()=>void;disabled?:boolean;unsupported?:boolean;shortcut?:string;children?:MenuItem[];separator?:boolean;checked?:boolean};
 export type MenuGroup={label:string;access:string;items:MenuItem[]};
 export function MenuBar({groups,reveal}:{groups:MenuGroup[];reveal?:()=>void}){
@@ -24,7 +25,7 @@ export function ContextMenu({items,label,x,y,dismiss}:{items:MenuItem[];label:st
 }
 function Popup({items,label,dismiss,back,move,point}:{items:MenuItem[];label:string;dismiss:()=>void;back?:()=>void;move?:(direction:number)=>void;point?:{x:number;y:number}}){
  const [child,setChild]=useState<number|null>(null),ref=useRef<HTMLDivElement>(null),[position,setPosition]=useState<{left:number;top:number}>();
- useLayoutEffect(()=>{const node=ref.current;if(!node)return;const anchor=node.parentElement!.getBoundingClientRect(),width=node.offsetWidth,height=node.offsetHeight;setPosition({left:Math.max(2,Math.min(point?.x??(back?anchor.right:anchor.left),window.innerWidth-width-2)),top:Math.max(2,Math.min(point?.y??(back?anchor.top:anchor.bottom),window.innerHeight-height-4))});},[label,point?.x,point?.y]);
+ useLayoutEffect(()=>{const node=ref.current;if(!node)return;setPosition(menuPosition(node.parentElement!.getBoundingClientRect(),{width:node.offsetWidth,height:node.offsetHeight},{width:window.innerWidth,height:window.innerHeight},!!back,point));},[label,point?.x,point?.y]);
  useEffect(()=>{ref.current?.querySelector<HTMLButtonElement>(':scope > .menu-entry > button:not(:disabled)')?.focus();},[]);
  return <div ref={ref} style={position} role="menu" aria-label={tr(label)} className={'session-menu-popup reference-popup'+(back?' nested-menu':'')} onKeyDown={e=>{
   if((e.target as HTMLElement).closest('[role=menu]')!==e.currentTarget)return;
@@ -33,5 +34,5 @@ function Popup({items,label,dismiss,back,move,point}:{items:MenuItem[];label:str
   if(e.key==='ArrowLeft'){e.preventDefault();e.stopPropagation();if(back)back();else move?.(-1);}
   if(e.key==='ArrowRight'&&!document.activeElement?.hasAttribute('aria-haspopup')){e.preventDefault();e.stopPropagation();if(!back)move?.(1);}
   if(e.key==='Escape'&&back){e.preventDefault();e.stopPropagation();back();}if(e.key==='Tab')dismiss();
- }}>{items.map((item,i)=><div className="menu-entry" key={item.label+i}>{item.separator&&<div role="separator" className="menu-separator"/>}<button role="menuitem" aria-label={item.literal?item.label:tr(item.label)} disabled={item.disabled} title={item.disabled?tr(item.unsupported?'尚未实现':'当前状态不可用'):undefined} aria-haspopup={item.children?'menu':undefined} aria-expanded={item.children?child===i:undefined} onPointerEnter={()=>setChild(item.children?i:null)} onKeyDown={e=>{if(e.key==='ArrowRight'&&item.children){e.preventDefault();e.stopPropagation();setChild(i);}}} onClick={()=>{if(item.children)setChild(child===i?null:i);else{dismiss();item.action?.();}}}><span className="menu-check" aria-hidden="true">{item.checked?'✓':''}</span><span>{item.literal?item.label:tr(item.label)}</span><kbd>{item.children?'›':item.shortcut??''}</kbd></button>{child===i&&item.children&&<Popup items={item.children} label={item.label} dismiss={dismiss} back={()=>{setChild(null);ref.current?.querySelectorAll<HTMLButtonElement>(':scope > .menu-entry > button')[i]?.focus();}}/>}</div>)}</div>;
+ }}>{items.map((item,i)=><div className="menu-entry" key={item.label+i}>{item.separator&&<div role="separator" className="menu-separator"/>}<button role="menuitem" aria-label={item.literal?item.label:tr(item.label)} disabled={item.disabled} title={item.disabled?tr(item.unsupported?'尚未实现':'当前状态不可用'):undefined} aria-haspopup={item.children?'menu':undefined} aria-expanded={item.children?child===i:undefined} onPointerEnter={()=>setChild(item.children?i:null)} onKeyDown={e=>{if(e.key==='ArrowRight'&&item.children){e.preventDefault();e.stopPropagation();setChild(i);}}} onClick={()=>{if(item.children)setChild(i);else{dismiss();item.action?.();}}}><span className="menu-check" aria-hidden="true">{item.checked?'✓':''}</span><span>{item.literal?item.label:tr(item.label)}</span><kbd>{item.children?'›':item.shortcut??''}</kbd></button>{child===i&&item.children&&<Popup items={item.children} label={item.label} dismiss={dismiss} back={()=>{setChild(null);ref.current?.querySelectorAll<HTMLButtonElement>(':scope > .menu-entry > button')[i]?.focus();}}/>}</div>)}</div>;
 }

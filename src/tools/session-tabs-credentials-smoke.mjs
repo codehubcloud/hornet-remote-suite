@@ -32,7 +32,7 @@ const tab=id=>page.locator('[data-tab-view-id="'+id+'"]');
 const titleMenu=()=>page.getByRole('menu',{name:'终端标题菜单',exact:true});
 const open=async id=>{await tab(id).locator('button').first().click({button:'right'});await expect(titleMenu()).toBeVisible();};
 const item=async(id,label)=>{await open(id);await titleMenu().getByRole('menuitem',{name:label,exact:true}).click();};
-const sub=async(id,parent,child)=>{await open(id);await titleMenu().getByRole('menuitem',{name:parent,exact:true}).click();await page.getByRole('menu',{name:parent,exact:true}).getByRole('menuitem',{name:child,exact:true}).click();};
+const sub=async(id,parent,child)=>{await open(id);const trigger=titleMenu().getByRole('menuitem',{name:parent,exact:true});await trigger.hover();const submenu=page.getByRole('menu',{name:parent,exact:true});await expect(submenu).toBeVisible();const anchor=await trigger.boundingBox(),popup=await submenu.boundingBox();expect(anchor&&popup).toBeTruthy();const center={x:anchor.x+anchor.width/2,y:anchor.y+anchor.height/2};expect(center.x<popup.x||center.x>=popup.x+popup.width||center.y<popup.y||center.y>=popup.y+popup.height).toBe(true);await trigger.click();await expect(submenu).toBeVisible();await submenu.getByRole('menuitem',{name:child,exact:true}).click();};
 try{
  await launch();await quick('tester@127.0.0.1:'+server.port);await page.getByLabel('名称',{exact:true}).fill('Saved fixture');
  await page.getByLabel('连接密码',{exact:true}).fill('test-password');await expect(page.getByRole('checkbox',{name:'保存密码',exact:true})).toBeChecked();
@@ -50,6 +50,7 @@ try{
  await sub(a,'新选项卡组','垂直分割');await expect(page.locator('.terminal-cell:visible')).toHaveCount(2);await expect(tab(b).locator('..')).toContainText('Saved fixture');
  await tab(c).locator('button').first().click();await expect(page.locator('.terminal-cell:visible')).toHaveCount(2);expect(server.shellCount).toBe(3);
  await item(a,'锁');await expect(tab(a).locator('button').last()).toBeDisabled();await page.keyboard.press('Control+Shift+F4');await expect(tab(a)).toHaveCount(1);
+ await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setContentSize(1024,768));
  await sub(a,'设置颜色','蓝色');await expect(tab(a)).toHaveCSS('border-top-color','rgb(57, 153, 219)');
  await item(a,'显示编号');await expect(page.locator('.tab-number')).toHaveCount(0);await item(a,'显示编号');
  await item(a,'显示状态图标');await expect(page.locator('.tab-state-icon')).toHaveCount(0);await item(a,'显示状态图标');
