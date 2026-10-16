@@ -523,3 +523,15 @@ SSH 的 DNS/TCP 建连、跳板转发和握手/服务端认证响应设置独立
 验证：`npm run check`（43 文件 / 213 用例、类型、语言和构建）、`npm run test:release`（2 项）、`npm run package` 的目标 Electron 原生模块验证及包内容审计通过；`npm run test:package` 使用隔离数据，验证历史 LF 数据库及既有配置、沙箱 preload、后台进程、真实回环 SSH/SFTP 和 Windows 原生辅助程序通过。没有运行安装器修改本机安装状态。
 
 本地安装包：`.tools/local-package-20261016/Hornet-Remote-Suite-0.0.13-windows-x64.exe`，104548361 字节；SHA-256：`2b7ebd832f0d7ff090aedd27cbd48c86d9c2175ac057b0fa744d511605eeecef`。它包含最新连接失败提示改动，与之前已验证的 v0.0.13 草稿包是不同产物；本轮未更改标签、草稿附件或公开版本，也未触发 GitHub Actions。
+
+## 2026-10-16：底部会话状态区分连接过程
+
+底部当前终端属性在首次连接及重新连接期间显示“正在连接…”，连接尝试失败显示“连接失败”，成功建立终端后显示“已连接”，已建立的终端断开后显示“已断开”。复用现有八种语言文案。重新连接期间优先显示连接中，避免沿用旧终端的断开状态。
+
+`npm run typecheck`、`npm run test:locales`、`npm run build` 及 `npm run test:connection-failure` 通过。实际 Electron 界面配合本机真实 SSH/TCP 夹具，验证拒绝连接、约 10.2 秒无响应超时、同标签恢复，以及底部连接中、失败、已连接、断开和断开后重连的状态切换。本轮没有重新打包或发布安装包。
+
+## 2026-10-16：包含底部状态修复的本地 Windows 安装包
+
+`npm run test:release`（2 项）、`npm run package`、`npm run test:package` 通过。安装包启动验收使用隔离用户目录，验证历史 LF 数据库和既有配置、沙箱 preload、后台进程、真实 SSH/SFTP 及 Windows 原生辅助程序。连接失败界面验收新增 `HORNET_PACKAGED_EXECUTABLE` 支持，并指向本次打包程序执行 `npm run test:connection-failure`：拒绝连接、约 10.3 秒无响应超时、同标签恢复，以及底部连接中、失败、已连接、断开和重连的状态切换均通过。
+
+安装包：`.tools/local-package-20261016-2330/Hornet-Remote-Suite-0.0.13-windows-x64.exe`，104548872 字节；SHA-256：`57df84cb04be300e3e7cee4c8385039f58c570cf44a80e03ea5564677e87431d`。这是包含底部状态修复的本地构建；未运行安装器更改用户安装状态，未发布公开附件或移动已有版本标签。
