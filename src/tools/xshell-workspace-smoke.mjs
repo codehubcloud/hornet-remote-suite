@@ -20,7 +20,7 @@ try{
  await app.evaluate(({safeStorage,BrowserWindow,session},path)=>{
   // Test-only keyring for headless hosts; Windows keeps native encryption.
   if(process.platform!=='win32'){safeStorage.isEncryptionAvailable=()=>true;safeStorage.getSelectedStorageBackend=()=> 'test-keyring';safeStorage.encryptString=text=>Buffer.from(text).map(b=>b^0xa5);safeStorage.decryptString=data=>Buffer.from(data).map(b=>b^0xa5).toString();}
-  for(const win of BrowserWindow.getAllWindows())win.webContents.setBackgroundThrottling(false);
+  for(const win of BrowserWindow.getAllWindows()){win.webContents.setBackgroundThrottling(false);if(process.platform==='linux')win.showInactive();}
   session.defaultSession.on('will-download',(_event,item)=>item.setSavePath(path));
  },exportPath);
  await page.evaluate(()=>localStorage.setItem('hornet.terminal.commands.v1',JSON.stringify([{id:crypto.randomUUID(),name:'Legacy command',text:'pwd'}])));await page.reload();await page.locator('.app-shell').waitFor();
@@ -101,5 +101,5 @@ try{
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('hornet.terminal.commands.v2')).commands.filter(command=>command.name==='Insert marker'&&command.appearance?.kind==='linear').length)).toBe(2);
  expect(errors).toEqual([]);await expect(page.locator('.error-banner')).toHaveCount(0);
  console.log('Xshell workspace passed: toolbar context toggles/reorder/lock/recovery, legacy command migration, sets/import/export/current-only buttons and shortcuts, property categories/persistence/live styling, terminal type/size/keyboard/directory, packet-loss auto-reconnect without replay, and manual disconnect stops retries.');
-}catch(error){if(page)await page.screenshot({path:'test-results/xshell-workspace-failure.png'}).catch(()=>{});throw error;}
+}catch(error){if(page)await page.screenshot({path:'test-results/xshell-workspace-failure.png',timeout:5000}).catch(()=>{});throw error;}
 finally{if(app)await app.evaluate(({app})=>app.exit(0)).catch(()=>{});await server.close();await rm(data,{recursive:true,force:true,maxRetries:5,retryDelay:200});}
