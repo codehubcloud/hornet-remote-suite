@@ -1020,5 +1020,9 @@ export const english:Record<string,string> = {
   "访问发布页面": "Open Release Page",
   "版本": "Version",
   "平台": "Platform",
-  "重试": "Retry"
+  "重试": "Retry",
+  "正在连接 {host}:{port}…": "Connecting to {host}:{port}…",
+  "连接失败：{error}": "Connection failed: {error}",
+  "正在连接…": "Connecting…",
+  "连接失败": "Connection failed"
 };

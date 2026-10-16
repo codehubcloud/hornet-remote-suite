@@ -37,12 +37,13 @@ it('rejects a changed destination key through a jump host and releases the upstr
  }finally{await connections.stop();db.close();await a.close();await b.close();}
 },20000);
 it('cancels the authentication prompt before the outer IPC deadline and creates no late connection',async()=>{
+ const server=await sshFixture();
  const db=new Storage(':memory:',resolve('packages/storage/schema.sql')),events:HornetEvent[]=[];
  const challenges=new Challenges((_owner,event)=>events.push(event)),connections=new Connections(db,challenges,()=>{},undefined,1000,30);
  try{
-  const p=db.saveProfile({profileId:randomUUID(),name:'no-auth',host:'127.0.0.1',port:22,username:'tester',group:'test',authType:'password',revision:0},0);
+  const p=db.saveProfile({profileId:randomUUID(),name:'no-auth',host:'127.0.0.1',port:server.port,username:'tester',group:'test',authType:'password',revision:0},0);
   await expect(connections.acquire('owner',p.profileId)).rejects.toThrow('取消');expect(events.filter(e=>e.type==='challenge.closed')).toHaveLength(1);expect(connections.hasProfile(p.profileId)).toBe(false);
- }finally{await connections.stop();db.close();}
+ }finally{await connections.stop();db.close();await server.close();}
 });
 it('fails closed when an intermediate hop rejects authentication and frees upstream resources',async()=>{
  const a=await sshFixture(),b=await sshFixture({password:'different'}),db=new Storage(':memory:',resolve('packages/storage/schema.sql'));

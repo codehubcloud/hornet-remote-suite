@@ -341,4 +341,8 @@ export const nativeUi:Record<string,readonly [string,string,string,string,string
  'FTPS · 隐式 TLS':['FTPS · 暗黙的 TLS','FTPS · 암시적 TLS','FTPS · Implizites TLS','FTPS · TLS implicite','FTPS · TLS implícito'],
  'FTP · 明文':['FTP · 暗号化なし','FTP · 암호화되지 않음','FTP · Unverschlüsselt','FTP · Non chiffré','FTP · Sin cifrar'],
  'FTPS · TLS 加密连接':['FTPS · TLS 暗号化接続','FTPS · TLS 암호화 연결','FTPS · TLS-verschlüsselt','FTPS · Chiffré par TLS','FTPS · Cifrado TLS'],
+  "正在连接 {host}:{port}…": ["{host}:{port} に接続しています…","{host}:{port}에 연결 중…","Verbindung mit {host}:{port} wird hergestellt…","Connexion à {host}:{port}…","Conectando a {host}:{port}…"],
+  "连接失败：{error}": ["接続に失敗しました：{error}","연결 실패: {error}","Verbindung fehlgeschlagen: {error}","Échec de la connexion : {error}","Error de conexión: {error}"],
+  "正在连接…": ["接続中…","연결 중…","Verbindung wird hergestellt…","Connexion…","Conectando…"],
+  "连接失败": ["接続失敗","연결 실패","Verbindung fehlgeschlagen","Échec de la connexion","Error de conexión"]
 };

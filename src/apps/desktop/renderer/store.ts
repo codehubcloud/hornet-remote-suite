@@ -8,6 +8,7 @@ import { useBroadcast } from './broadcast';
 import type { HornetApi,Profile,TaskSnapshot,Capability,HornetEvent } from '../../../packages/contracts';
 declare global {interface Window {hornet:HornetApi}}
 export interface View {
+ connectionAttempt?:{state:'connecting'|'failed';error?:string};
  autoReconnectPaused?:boolean;
  tabGroupId?:string;locked?:boolean;tabColor?:string;terminalTitle?:string;
  source?:'local'|'serial';
@@ -76,11 +77,31 @@ export const useStore=create<State>((set)=>({
 }));
 function readTabDisplay(){try{const value=JSON.parse(localStorage.getItem('hornet.tabs.display')??'{}');return {numbers:value.numbers!==false,title:value.title===true,status:value.status!==false};}catch{return {numbers:true,title:false,status:true};}}
 export async function refreshProfiles(){useStore.getState().setProfiles(await window.hornet.profiles.list());}
-export function isTerminalClosed(view:View,state:Pick<State,'closedTerminals'|'connectionStates'>){return !!state.closedTerminals[view.terminalId??'']||['closed','failed'].includes(state.connectionStates[view.connectionId]);}
+export function isTerminalClosed(view:View,state:Pick<State,'closedTerminals'|'connectionStates'>){return view.connectionAttempt?.state==='failed'||!!state.closedTerminals[view.terminalId??'']||['closed','failed'].includes(state.connectionStates[view.connectionId]);}
 export async function openView(profile:Profile,kind:'terminal'|'files'){
  if(profile.protocol==='ftp')kind='files';
- const view=await createRemoteView(profile,kind);useStore.getState().addView(view);
+ if(kind==='terminal'){
+  const id=crypto.randomUUID();
+  useStore.getState().addView({id,kind,profile,connectionId:id,generation:0,connectionAttempt:{state:'connecting'}});
+  await connectTerminalView(id,profile);
+ }else{const view=await createRemoteView(profile,kind);useStore.getState().addView(view);}
  await window.hornet.layout.save({profileIds:[...new Set(useStore.getState().views.filter(v=>!v.source).map(v=>v.profile.profileId))],activeProfileId:profile.profileId}).catch(useStore.getState().fail);
+}
+async function connectTerminalView(id:string,profile:Profile){
+ const state=useStore.getState(),old=state.views.find(v=>v.id===id);if(!old)return;
+ state.clearError();
+ state.setReconnecting(id,true);state.replaceView(id,{...old,profile,connectionAttempt:{state:'connecting'}});
+ try{
+  const next=await createRemoteView(profile,'terminal');
+  const current=useStore.getState().views.find(v=>v.id===id);
+  if(!current){await releaseTerminalView(next);return;}
+  useStore.getState().replaceView(id,{...next,id,title:current.title,tabGroupId:current.tabGroupId,locked:current.locked,tabColor:current.tabColor});
+ }catch(error){
+  const current=useStore.getState().views.find(v=>v.id===id);
+  if(!current)return;
+  useStore.getState().replaceView(id,{...current,connectionAttempt:{state:'failed',error:error instanceof Error?error.message:String(error)}});
+  throw error;
+ }finally{useStore.getState().setReconnecting(id,false);}
 }
 async function createRemoteView(profile:Profile,kind:'terminal'|'files',options:{fresh?:boolean;connectionId?:string}={}):Promise<View>{
  const api=window.hornet;
@@ -128,6 +149,7 @@ export async function newTerminalGroup(id:string,axis:'horizontal'|'vertical'){
 export async function reconnectView(id:string){
  const initial=useStore.getState(),old=initial.views.find(v=>v.id===id);
  if(!old||old.kind!=='terminal'||old.source||initial.reconnecting[id])return;
+ if(old.connectionAttempt){await connectTerminalView(id,initial.profiles.find(p=>p.profileId===old.profile.profileId)??old.profile);return;}
  initial.setReconnecting(id,true);
  let next:View|undefined;
  try{
@@ -146,7 +168,7 @@ export async function disconnectView(id:string){
  try{await window.hornet.terminal.close(view.terminalId);}catch(error){const current=useStore.getState().views.find(v=>v.id===id);if(current?.terminalId===view.terminalId)useStore.getState().replaceView(id,{...current,autoReconnectPaused:view.autoReconnectPaused});throw error;}
 }
 
-export const hasRemoteFiles=(view:View)=>!view.source&&view.profile.protocol!=='telnet';
+export const hasRemoteFiles=(view:View)=>!view.connectionAttempt&&!view.source&&view.profile.protocol!=='telnet';
 export function addDeviceView(session:DeviceTerminal,tabGroupId?:string){
  const profile:Profile={profileId:session.connectionId,name:session.name,host:session.address,port:0,username:'',group:'',authType:'password',revision:0};
  useStore.getState().addView({id:crypto.randomUUID(),kind:'terminal',profile,...session,tabGroupId,terminalIds:[session.terminalId]});

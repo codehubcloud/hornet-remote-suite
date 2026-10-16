@@ -1020,5 +1020,9 @@ export const traditionalChinese:Record<string,string> = {
   "访问发布页面": "造訪發佈頁面",
   "版本": "版本",
   "平台": "平台",
-  "重试": "重試"
+  "重试": "重試",
+  "正在连接 {host}:{port}…": "正在連線 {host}:{port}…",
+  "连接失败：{error}": "連線失敗：{error}",
+  "正在连接…": "正在連線…",
+  "连接失败": "連線失敗"
 };

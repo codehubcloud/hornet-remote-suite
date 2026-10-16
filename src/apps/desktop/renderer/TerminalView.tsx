@@ -1,5 +1,5 @@
 import type { TerminalDisconnect } from '../../../packages/contracts/terminal-disconnect';
-import { disconnectTranscript } from './terminal-disconnect';
+import { disconnectTranscript,disconnectText } from './terminal-disconnect';
 import { ScriptRunner,registerScriptRunner } from './script-runner';
 import { t as tr } from './i18n';
 import { useBroadcast } from './broadcast';
@@ -32,17 +32,17 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
  const [query,setQuery]=useState(''),[result,setResult]=useState('');
  const find=(previous=false)=>{if(!query){terminal.current?.clearSelection();setResult('');return;}const found=previous?search.current?.findPrevious(query):search.current?.findNext(query);setResult(found?tr("已定位匹配"):tr("未找到匹配"));};
  useEffect(()=>{
-  if(!element.current||!view.terminalId)return;
-  const id=view.terminalId;
+  if(!element.current)return;
+  const id=view.terminalId??view.id;
   const prefs=preferences;
-  const term=new Terminal({cursorBlink:prefs.cursorBlink,cursorStyle:prefs.cursorStyle,fontSize:fontSizeRef.current,fontFamily:terminalFonts[prefs.font],scrollback:prefs.scrollback,theme:terminalThemes[prefs.theme],allowProposedApi:false});
+  const term=new Terminal({disableStdin:!!view.connectionAttempt,cursorBlink:!view.connectionAttempt&&prefs.cursorBlink,cursorStyle:prefs.cursorStyle,fontSize:fontSizeRef.current,fontFamily:terminalFonts[prefs.font],scrollback:prefs.scrollback,theme:terminalThemes[prefs.theme],allowProposedApi:false});
   const fit=new FitAddon();term.loadAddon(fit);term.open(element.current);
   terminal.current=term;const addon=new SearchAddon();term.loadAddon(addon);search.current=addon;
   let bellTimer:ReturnType<typeof setTimeout>|undefined;
   const onBell=term.onBell(()=>{if(session.current?.terminal?.bell==='visual'){setBell(true);clearTimeout(bellTimer);bellTimer=setTimeout(()=>setBell(false),180);}});
   const titleChange=term.onTitleChange(title=>useStore.getState().updateTerminal(view.id,{terminalTitle:title.replace(/[\x00-\x1f\x7f]/g,'').slice(0,255)}));
   term.attachCustomKeyEventHandler(e=>{if(e.ctrlKey&&e.shiftKey&&e.code==='KeyF'){if(e.type==='keydown'){setSearchOpen(true);searchInput.current?.focus();}return false;}return true;});
-  let inputSeq=0,ended=false;
+  let inputSeq=0,ended=!!view.connectionAttempt;
   const runner=new ScriptRunner((text,signal)=>send(text,signal));
   const endTerminal=(detail?:TerminalDisconnect)=>{if(ended)return;ended=true;runner.close();term.options.disableStdin=true;term.options.cursorBlink=false;const state=useStore.getState(),current=state.views.find(v=>v.id===view.id)??view;
    const connection=state.connectionDisconnects[view.connectionId];
@@ -123,6 +123,11 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   const el=element.current;
   return()=>{ended=true;inputAvailable.current=()=>false;clearTimeout(bellTimer);onBell.dispose();stopState();unregister();window.removeEventListener('hornet:terminal-action',action);resizeTerminal.current=null;unsubscribe();input.dispose();titleChange.dispose();observer.disconnect();el.removeEventListener('wheel',onWheel,true);el.removeEventListener('paste',onPaste,true);search.current=null;terminal.current=null;term.dispose();};
  },[view.id,view.terminalId,view.generation]);
- useEffect(()=>{const term=terminal.current;if(!term)return;term.options.fontSize=fontSize;term.options.fontFamily=terminalFonts[preferences.font];term.options.theme=terminalThemes[preferences.theme];term.options.scrollback=preferences.scrollback;term.options.cursorStyle=preferences.cursorStyle;term.options.cursorBlink=!closed&&preferences.cursorBlink;resizeTerminal.current?.();},[preferences,fontSize,closed]);
- return <>{closed&&<div className="terminal-disconnected" role="status"><strong>{tr("已断开")}</strong>{!view.source&&<button disabled={reconnecting} onClick={()=>void reconnectView(view.id).catch(useStore.getState().fail)}>{tr("重新连接")}</button>}</div>}{searchOpen&&<form className="terminal-search" onSubmit={e=>{e.preventDefault();find();}}><input ref={searchInput} aria-label={tr("搜索终端内容")} placeholder={tr("搜索终端 · Ctrl+Shift+F")} value={query} onChange={e=>{setQuery(e.target.value);setResult('');}} onKeyDown={e=>{if(e.key==='Escape'){setQuery('');setResult('');closeSearch();}else if(e.key==='Enter'&&e.shiftKey){e.preventDefault();find(true);}}}/><button type="button" onClick={()=>find(true)}>{tr("上一个")}</button><button>{tr("下一个")}</button><span role="status">{result}</span><button type="button" aria-label={tr("关闭终端搜索")} onClick={closeSearch}>×</button></form>}<div className={'terminal-host'+(bell?' terminal-bell':'')} ref={element} onPointerDownCapture={event=>{if(event.button===2){rightClickSelection.current=terminal.current?.getSelection()??'';event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);}else rightClickSelection.current=undefined;}} onContextMenuCapture={event=>{event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);rightClickSelection.current=undefined;}} onKeyDownCapture={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();const box=element.current?.getBoundingClientRect();openMenu((box?.left??0)+20,(box?.top??0)+20);}}}/>{menu&&<TerminalContextMenu view={view} x={menu.x} y={menu.y} canCopy={!!menu.selection} canPaste={!closed&&inputAvailable.current()} choose={choose} close={closeMenu}/>} </>;
+ useEffect(()=>{
+  const attempt=view.connectionAttempt,term=terminal.current;if(!attempt||!term)return;
+  term.reset();term.write(tr('正在连接 {host}:{port}…',{host:disconnectText(view.profile.host),port:view.profile.port})+'\r\n');
+  if(attempt.state==='failed')term.write('\r\n'+tr('连接失败：{error}',{error:disconnectText(attempt.error??'')})+'\r\n\r\n'+tr('选择“重新连接”可建立新的会话。')+'\r\n',()=>{if(terminal.current===term)term.scrollToBottom();});
+ },[view.connectionAttempt,view.profile.host,view.profile.port]);
+ useEffect(()=>{const term=terminal.current;if(!term)return;term.options.fontSize=fontSize;term.options.fontFamily=terminalFonts[preferences.font];term.options.theme=terminalThemes[preferences.theme];term.options.scrollback=preferences.scrollback;term.options.cursorStyle=preferences.cursorStyle;term.options.cursorBlink=!view.connectionAttempt&&!closed&&preferences.cursorBlink;resizeTerminal.current?.();},[preferences,fontSize,closed,view.connectionAttempt]);
+ return <>{view.connectionAttempt?.state==='connecting'&&<div className="terminal-disconnected" role="status"><strong>{tr('正在连接…')}</strong></div>}{closed&&<div className="terminal-disconnected" role="status"><strong>{view.connectionAttempt?tr('连接失败'):tr("已断开")}</strong>{!view.source&&<button disabled={reconnecting} onClick={()=>void reconnectView(view.id).catch(useStore.getState().fail)}>{tr("重新连接")}</button>}</div>}{searchOpen&&<form className="terminal-search" onSubmit={e=>{e.preventDefault();find();}}><input ref={searchInput} aria-label={tr("搜索终端内容")} placeholder={tr("搜索终端 · Ctrl+Shift+F")} value={query} onChange={e=>{setQuery(e.target.value);setResult('');}} onKeyDown={e=>{if(e.key==='Escape'){setQuery('');setResult('');closeSearch();}else if(e.key==='Enter'&&e.shiftKey){e.preventDefault();find(true);}}}/><button type="button" onClick={()=>find(true)}>{tr("上一个")}</button><button>{tr("下一个")}</button><span role="status">{result}</span><button type="button" aria-label={tr("关闭终端搜索")} onClick={closeSearch}>×</button></form>}<div className={'terminal-host'+(bell?' terminal-bell':'')} ref={element} onPointerDownCapture={event=>{if(event.button===2){rightClickSelection.current=terminal.current?.getSelection()??'';event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);}else rightClickSelection.current=undefined;}} onContextMenuCapture={event=>{event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);rightClickSelection.current=undefined;}} onKeyDownCapture={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();const box=element.current?.getBoundingClientRect();openMenu((box?.left??0)+20,(box?.top??0)+20);}}}/>{menu&&<TerminalContextMenu view={view} x={menu.x} y={menu.y} canCopy={!!menu.selection} canPaste={!closed&&inputAvailable.current()} choose={choose} close={closeMenu}/>} </>;
 }

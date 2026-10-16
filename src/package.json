@@ -46,6 +46,7 @@
     "test:terminal-tabs": "node tools/terminal-tabs-smoke.mjs",
     "test:terminal-tabs:package": "node tools/terminal-tabs-smoke.mjs --packaged",
     "test:terminal-disconnect": "node tools/terminal-disconnect-smoke.mjs",
+    "test:connection-failure": "node tools/connection-failure-smoke.mjs",
     "test:terminal-disconnect:package": "node tools/terminal-disconnect-smoke.mjs --packaged",
     "test:session-tabs": "node tools/session-tabs-credentials-smoke.mjs",
     "test:session-tabs:package": "node tools/session-tabs-credentials-smoke.mjs --packaged",

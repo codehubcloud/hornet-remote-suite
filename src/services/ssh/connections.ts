@@ -5,6 +5,7 @@ import type { Profile, HornetEvent, Lease } from '../../packages/contracts';
 import { AppError } from '../../packages/core/errors';
 import type { TerminalDisconnect } from '../../packages/contracts/terminal-disconnect';
 import { Challenges } from '../../packages/security/challenges';
+import { connectSocket,connectionError,networkConnectTimeoutMs } from './connect-socket';
 
 interface Connection {
   upstream?:Lease;socket?:ClientChannel;
@@ -22,7 +23,7 @@ export class Connections {
   private controllers=new Map<AbortController,string>();
   private closedListeners=new Set<(owner:string,connectionId:string,disconnect:TerminalDisconnect)=>void>();
   onClosed(listener:(owner:string,connectionId:string,disconnect:TerminalDisconnect)=>void){this.closedListeners.add(listener);return()=>{this.closedListeners.delete(listener);};}
-  constructor(private store:Storage,public challenges:Challenges,private emit:(owner:string,event:HornetEvent)=>void, private cachedSecret:(owner:string,profile:Profile)=>Promise<string|undefined> = async()=>undefined, private idleMs=60000,private connectTimeoutMs=110000) {}
+  constructor(private store:Storage,public challenges:Challenges,private emit:(owner:string,event:HornetEvent)=>void, private cachedSecret:(owner:string,profile:Profile)=>Promise<string|undefined> = async()=>undefined, private idleMs=60000,private connectTimeoutMs=110000,private networkTimeoutMs=networkConnectTimeoutMs) {}
   private key(owner:string,p:Profile) { return owner+':'+p.profileId+':'+p.revision; }
   async acquire(owner:string,profileId:string):Promise<Lease> {
     if(this.stopped) throw new AppError('IPC006','服务正在停止。');
@@ -114,8 +115,8 @@ export class Connections {
         if(upstream){const parent=this.get(owner,upstream.connectionId);socket=await new Promise<ClientChannel>((resolve,reject)=>{
           let ended=false;const cleanup=()=>{clearTimeout(timer);signal.removeEventListener('abort',cancel);};
           const cancel=()=>{if(ended)return;ended=true;cleanup();reject(new AppError('SSH005','跳板转发已取消或超时。'));};
-          const timer=setTimeout(cancel,30000);signal.addEventListener('abort',cancel,{once:true});
-          try{parent.client.forwardOut('127.0.0.1',0,profile.host,profile.port,(error,channel)=>{cleanup();if(ended){channel?.destroy();return;}ended=true;if(error)reject(new AppError('SSH001','跳板无法连接下一跳：'+profile.name));else{channel.on('error',()=>{});resolve(channel);}});}catch(e){ended=true;cleanup();reject(e);}
+          const timer=setTimeout(()=>{if(ended)return;ended=true;cleanup();reject(new AppError('SSH001',profile.host+':'+profile.port+' · 跳板连接下一跳超时，请检查路由和目标服务。',true));},this.networkTimeoutMs);signal.addEventListener('abort',cancel,{once:true});
+          try{parent.client.forwardOut('127.0.0.1',0,profile.host,profile.port,(error,channel)=>{cleanup();if(ended){channel?.destroy();return;}ended=true;if(error)reject(new AppError('SSH001','跳板无法连接下一跳：'+profile.name+' ('+profile.host+':'+profile.port+')'));else{channel.on('error',()=>{});resolve(channel);}});}catch(e){ended=true;cleanup();reject(e);}
         });}
         let connection:Connection;
         try{connection=await this.connectDirect(owner,profile,signal,profile===p?isolated:true,upstream,socket);}catch(e){socket?.destroy();throw e;}
@@ -135,7 +136,11 @@ export class Connections {
   private async connectDirect(owner:string,p:Profile,signal:AbortSignal,isolated=false,upstream?:Lease,socket?:ClientChannel):Promise<Connection> {
     if((p.protocol??'ssh')!=='ssh')throw new AppError('CAPABILITY_UNAVAILABLE','此功能需要 SSH 连接。');
     const id=randomUUID(), client=new Client();
-    const state=(state:string)=>this.emit(owner,{type:'connection.state',connectionId:id,profileId:p.profileId,generation:1,state});
+    const state=(state:string,error?:string)=>this.emit(owner,{type:'connection.state',connectionId:id,profileId:p.profileId,generation:1,state,error});
+    state('connecting');
+    let transport:ClientChannel|import('node:net').Socket|undefined=socket;
+    try{
+    transport??=await connectSocket(p.host,p.port,signal,this.networkTimeoutMs);
     state('authenticating');
     let password:string|undefined, privateKey:string|undefined, passphrase:string|undefined;
     if(p.authType==='password') password=await abortable(this.cachedSecret(owner,p),signal)??await this.challenges.ask(owner,{kind:'password',profileId:p.profileId,title:'SSH 身份认证',message:p.username+'@'+p.host},signal);
@@ -144,48 +149,54 @@ export class Connections {
       passphrase=await this.challenges.ask(owner,{kind:'passphrase',profileId:p.profileId,title:'私钥口令',message:'无口令的密钥可留空。'},signal);
     }
     state('connecting');
-    return new Promise((resolve,reject)=>{
+    return await new Promise<Connection>((resolve,reject)=>{
       let settled=false, rejectedTrust=false;
+      let networkTimer:ReturnType<typeof setTimeout>|undefined;
+      const pauseNetwork=()=>clearTimeout(networkTimer);
+      const resumeNetwork=()=>{pauseNetwork();if(!settled)networkTimer=setTimeout(()=>fail(new AppError('SSH005',p.host+':'+p.port+' · SSH 握手或认证超时，服务器未响应。',true)),this.networkTimeoutMs);};
       const c:Connection={id,owner,profile:p,client,generation:1,leases:new Set(),isolated,upstream,socket};
-      const fail=(error:AppError)=>{if(!settled){settled=true;clearTimeout(deadline);signal.removeEventListener('abort',cancel);client.destroy();state('failed');reject(error);}};
+      const fail=(error:AppError)=>{if(!settled){settled=true;pauseNetwork();clearTimeout(deadline);signal.removeEventListener('abort',cancel);client.destroy();reject(error);}};
       const cancel=()=>fail(new AppError('SSH005','SSH 连接已取消或超时。'));
       const deadline=setTimeout(()=>fail(new AppError('SSH005','SSH 连接或认证超时。')),120000);
       signal.addEventListener('abort',cancel,{once:true});
       client.on('error',(err:Error & {level?:string})=>{
-        if(!settled)fail(new AppError(rejectedTrust?'SSH003':err.level==='client-authentication'?'SSH002':'SSH001',rejectedTrust?'主机密钥未通过验证。':err.level==='client-authentication'?'SSH 认证失败。':'无法建立 SSH 连接。'));
+        if(!settled)fail(rejectedTrust?new AppError('SSH003','主机密钥未通过验证。'):err.level==='client-authentication'?new AppError('SSH002','SSH 认证失败。'):connectionError(err,p.host,p.port));
         else {this.drop(c,{reason:'error',at:Date.now(),error:err.message.slice(0,1000)});client.destroy();}
       });
       client.on('end',()=>{if(!settled)fail(new AppError('SSH006','SSH 连接提前关闭。'));else{this.drop(c);client.destroy();}});
       client.on('close',()=>{ if(!settled)fail(new AppError('SSH006','SSH 连接提前关闭。'));else this.drop(c); });
       client.on('keyboard-interactive',(_name,_instructions,_lang,prompts,finish)=>{
-        void (async()=>{const replies:string[]=[];for(const prompt of prompts)replies.push(await this.challenges.ask(owner,{kind:'keyboard',profileId:p.profileId,title:'SSH 交互认证',message:prompt.prompt.slice(0,1000),echo:prompt.echo},signal));finish(replies);})().catch(()=>fail(new AppError('IPC006','交互认证取消。')));
+        pauseNetwork();void (async()=>{const replies:string[]=[];for(const prompt of prompts)replies.push(await this.challenges.ask(owner,{kind:'keyboard',profileId:p.profileId,title:'SSH 交互认证',message:prompt.prompt.slice(0,1000),echo:prompt.echo},signal));if(!settled){resumeNetwork();finish(replies);}})().catch(()=>fail(new AppError('IPC006','交互认证取消。')));
       });
       client.once('ready',()=>{
         if(settled)return;
-        settled=true;clearTimeout(deadline);signal.removeEventListener('abort',cancel);password=undefined;privateKey=undefined;passphrase=undefined;
+        settled=true;pauseNetwork();clearTimeout(deadline);signal.removeEventListener('abort',cancel);password=undefined;privateKey=undefined;passphrase=undefined;
         if(this.stopped){client.destroy();reject(new AppError('IPC006','服务已停止。'));return;}
         this.items.set(id,c);state('ready');resolve(c);
       });
       try {
         if(signal.aborted){cancel();return;}
         client.connect({
-          host:p.host,port:p.port,username:p.username,password,privateKey,passphrase,sock:socket,
+          host:p.host,port:p.port,username:p.username,password,privateKey,passphrase,sock:transport,
           agent:p.authType==='agent'?(process.platform==='win32'?'\\\\.\\pipe\\openssh-ssh-agent':process.env.SSH_AUTH_SOCK):undefined,
           tryKeyboard:true,readyTimeout:120000,keepaliveInterval:(p.session?.keepAlive?.intervalSeconds??15)*1000,keepaliveCountMax:p.session?.keepAlive?.maxMissed??3,
           hostVerifier:(key:Buffer,verify:(valid:boolean)=>void)=>{
+            pauseNetwork();
             state('verifying');
             void (async()=>{
               const fingerprint='SHA256:'+createHash('sha256').update(key).digest('base64').replace(/=+$/,'');
               const known=this.store.trust(p.host,p.port);
-              if(known.length){const valid=known.includes(fingerprint);rejectedTrust=!valid;verify(valid);return;}
+              if(known.length){const valid=known.includes(fingerprint);rejectedTrust=!valid;resumeNetwork();verify(valid);return;}
               const answer=await this.challenges.ask(owner,{kind:'trust',profileId:p.profileId,title:'首次连接：核对主机指纹',message:p.host+':'+p.port+'\n'+fingerprint+'\n请通过可信渠道核对，接受后保存。'},signal);
               if(answer!=='accept'){rejectedTrust=true;verify(false);return;}
-              this.store.rememberHost(p.host,p.port,key);verify(true);state('authenticating');
+              this.store.rememberHost(p.host,p.port,key);resumeNetwork();verify(true);state('authenticating');
             })().catch(()=>{rejectedTrust=true;verify(false);});
           }
         });
+        resumeNetwork();
       }catch{fail(new AppError('SSH002','密钥格式、口令或认证配置无效。'));}
     });
+    }catch(error){transport?.destroy();state('failed',error instanceof Error?error.message:'无法建立 SSH 连接。');throw error;}
   }
 }
 function abortable<T>(promise:Promise<T>,signal:AbortSignal):Promise<T>{
