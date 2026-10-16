@@ -1,4 +1,4 @@
-import { app,BrowserWindow,dialog,clipboard,ipcMain,protocol,net,type IpcMainInvokeEvent,type IpcMainEvent } from 'electron';
+import { app,BrowserWindow,dialog,clipboard,ipcMain,protocol,net,screen,type IpcMainInvokeEvent,type IpcMainEvent } from 'electron';
 import { join,basename,resolve,sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readFile,writeFile,stat } from 'node:fs/promises';
@@ -15,6 +15,7 @@ import { Vault } from './vault';
 import { ProfileCredentials } from './profile-credentials';
 import { Backend } from './backend';
 import { ExitController } from './exit-controller';
+import { appInfo,checkUpdates,openHelpLink,openHelpPdf } from './help';
 import { RdpService, nativeCall } from '../../../services/native/host';
 import { rdpConfigSchema } from '../../../packages/contracts/native';
 const rdp=new RdpService();
@@ -75,6 +76,10 @@ async function setupIpc(){
       authorize(event);const m=z.object({method:z.string(),payload:z.unknown()}).strict().parse(raw);
       let data:unknown;
       switch(m.method){
+        case 'help.info':z.object({}).strict().parse(m.payload);data=appInfo();break;
+        case 'help.checkUpdates':z.object({}).strict().parse(m.payload);data=await checkUpdates();break;
+        case 'help.openLink':{const p=z.object({link:z.enum(['website','support','feedback','releases'])}).strict().parse(m.payload);await openHelpLink(p.link);data=null;break;}
+        case 'help.openPdf':{const p=z.object({language:z.enum(['zh-CN','zh-TW','en','ja','ko','de','fr','es'])}).strict().parse(m.payload);await openHelpPdf(p.language);data=null;break;}
         case 'profile.save':{
           const p=z.object({profile:profileSchema,expectedRevision:z.number().int().nonnegative(),credential:profileCredentialSchema.optional()}).strict().parse(m.payload);
           data=await credentials.saveProfile(p.profile,p.expectedRevision,p.credential);break;
@@ -197,6 +202,12 @@ async function bootstrap(){
   vault=new Vault(join(app.getPath('userData'),'credentials','vault.json'));
   backend=new Backend(vault,emit,()=>{void logs.stopAll('local-user').catch(()=>{});});await backend.start(app.getPath('userData'));await setupIpc();
   window=new BrowserWindow({title:'Hornet Remote Suite',titleBarStyle:'hidden',...(process.platform==='darwin'?{trafficLightPosition:{x:12,y:11}}:{titleBarOverlay:{color:'#f0f0f0',symbolColor:'#20252b',height:36}}),icon:join(__dirname,process.platform==='win32'?'icon.ico':'icon.png'),width:1440,height:900,minWidth:1024,minHeight:720,backgroundColor:'#0c1220',show:process.env.HORNET_SMOKE!=='1',webPreferences:{preload:join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  const chromeWindow=window;
+  chromeWindow.on('system-context-menu',(event,point)=>{
+    const dip=screen.screenToDipPoint(point),bounds=chromeWindow.getContentBounds(),x=dip.x-bounds.x,y=dip.y-bounds.y;
+    if(x<0||x>bounds.width||y<0||y>36)return;
+    event.preventDefault();chromeWindow.webContents.send('hornet:chrome-context',{x,y});
+  });
   window.removeMenu();window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_webContents,_permission,callback)=>callback(false));

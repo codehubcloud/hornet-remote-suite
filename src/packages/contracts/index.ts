@@ -5,6 +5,7 @@ import type { TreeRequest,TreePreview,TreeResult } from './file-tree';
 import type { TerminalLog,TerminalLogFormat } from './terminal-log';
 import type { LocalDirectory } from './local-files';
 import { z } from 'zod';
+import { sessionOptionsSchema } from './session-options';
 import { printConfigSchema, printQueueSchema, type PrintQueue, xServerOptionsSchema, xdmcpConfigSchema, type PrintConfig, type PrintStatus, type RdpConfig, type X11Status, type XServerOptions, type XServerEngine, type XdmcpConfig, type XdmcpSession, type XdmcpHost } from './native';
 
 const id = z.string().uuid();
@@ -16,6 +17,7 @@ export const profileSchema = z.object({
   description: z.string().max(2048).optional(), updatedAt: z.number().int().nonnegative().optional(),
   encoding:terminalEncodingSchema.optional(),
   jumpProfileIds:z.array(id).max(4).optional(),
+  session:sessionOptionsSchema.optional(),
   revision: z.number().int().nonnegative(),
 }).strict().refine(p=>p.protocol==='telnet'||p.username.length>0,{message:'连接需要用户名。',path:['username']}).refine(p=>!p.jumpProfileIds?.length||((p.protocol??'ssh')==='ssh'&&!p.jumpProfileIds.includes(p.profileId)&&new Set(p.jumpProfileIds).size===p.jumpProfileIds.length),{message:'跳板链只能用于 SSH，不能重复或包含自身。',path:['jumpProfileIds']}).refine(p=>p.protocol==='ftp'?p.authType==='password'&&!!p.ftpSecurity:!p.ftpSecurity,{message:'FTP 需要密码认证并指定传输加密方式。',path:['ftpSecurity']});
 export type Profile = z.infer<typeof profileSchema>;
@@ -131,7 +133,8 @@ export type HornetEvent =
   | { type: 'service.error'; message: string };
 export interface Layout { profileIds: string[]; activeProfileId?: string }
 export interface HornetApi {
- windowChrome:{platform:string;setColors:(colors:{color:string;symbolColor:string})=>Promise<void>};
+ help:{info():Promise<import('./help').AppInfo>;checkUpdates():Promise<import('./help').UpdateInfo>;openLink(link:import('./help').HelpLink):Promise<void>;openPdf(language:string):Promise<void>};
+ windowChrome:{platform:string;setColors:(colors:{color:string;symbolColor:string})=>Promise<void>;onContextMenu:(listener:(point:{x:number;y:number})=>void)=>()=>void};
  clipboard:{read:()=>Promise<string>;write:(text:string)=>Promise<void>};
   localTerminal:{shells():Promise<{id:'powershell'|'cmd';name:string;path:string}[]>;open(config:LocalTerminalConfig):Promise<DeviceTerminal>};
   serialTerminal:{list():Promise<SerialDevice[]>;open(config:SerialTerminalConfig):Promise<DeviceTerminal>};

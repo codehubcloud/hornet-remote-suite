@@ -7,6 +7,7 @@ import { useBroadcast } from './broadcast';
 import type { HornetApi,Profile,TaskSnapshot,Capability,HornetEvent } from '../../../packages/contracts';
 declare global {interface Window {hornet:HornetApi}}
 export interface View {
+ autoReconnectPaused?:boolean;
  tabGroupId?:string;locked?:boolean;tabColor?:string;terminalTitle?:string;
  source?:'local'|'serial';
  title?:string;id:string;kind:'terminal'|'files'|'editor'|'vnc';profile:Profile;connectionId:string;leaseId?:string;
@@ -43,7 +44,7 @@ export const useStore=create<State>((set)=>({
  renameTerminal:(id,title)=>set(s=>({views:s.views.map(v=>v.id===id&&v.kind==='terminal'?{...v,title}:v)})),
  setTerminalMenu:terminalMenu=>set({terminalMenu}),
  profiles:[],tasks:[],capabilities:[],views:[],active:'home',error:'',challenges:[],connectionStates:{},
- setProfiles:profiles=>set({profiles}),setTasks:tasks=>set({tasks}),setCapabilities:capabilities=>set({capabilities}),
+ setProfiles:profiles=>set(s=>({profiles,views:s.views.map(v=>{const p=profiles.find(p=>p.profileId===v.profile.profileId);return p?{...v,profile:{...v.profile,name:p.name,description:p.description,session:p.session,revision:p.revision}}:v;})})),setTasks:tasks=>set({tasks}),setCapabilities:capabilities=>set({capabilities}),
  setTerminalIds:(id,ids)=>set(s=>({views:s.views.map(v=>v.id===id?{...v,terminalIds:ids}:v)})),
  addView:view=>set(s=>{const current=s.views.find(v=>v.id===s.active&&v.kind==='terminal'),next={...view,tabGroupId:view.tabGroupId??current?.tabGroupId??s.blankGroups[s.active]};const views=[...s.views,next],blankGroups={...s.blankGroups};delete blankGroups[s.active];return {views,blankGroups,blankTabs:s.blankTabs.filter(id=>id!==s.active),terminalLayout:selectTab(views,s.terminalLayout,next.id),active:view.id};}),
  removeView:id=>set(s=>{const view=s.views.find(v=>v.id===id),remaining=s.views.filter(v=>v.id!==id),next=view&&remaining.find(v=>v.kind==='terminal'&&tabGroup(v)===tabGroup(view));return {views:remaining,terminalLayout:removeTab(s.views,s.terminalLayout,id),active:s.active===id?(next?.id??remaining.find(v=>v.kind==='terminal')?.id??'home'):s.active};}),
@@ -75,13 +76,13 @@ async function createRemoteView(profile:Profile,kind:'terminal'|'files',options:
  const api=window.hornet;
  if(profile.protocol==='telnet'){
   if(kind!=='terminal')throw new Error('Telnet 不支持文件传输，请使用 SSH 配置。');
-  const session=await api.telnet.open(profile.profileId,120,36);
+  const session=await api.telnet.open(profile.profileId,profile.session?.terminal?.cols??120,profile.session?.terminal?.rows??36);
   return {id:crypto.randomUUID(),kind,profile,...session,terminalIds:[session.terminalId]};
  }
  const lease=options.connectionId?await api.connection.retain(options.connectionId):await api.connection.open(profile.profileId,kind,options.fresh);
  try{
   if(kind==='terminal'){
-   const terminal=await api.terminal.create(lease.connectionId,120,36,true);
+   const terminal=await api.terminal.create(lease.connectionId,profile.session?.terminal?.cols??120,profile.session?.terminal?.rows??36,true);
    // Keep the view lease for its SFTP sidebar, independent of the shell lease.
    return {id:crypto.randomUUID(),kind,profile,...lease,...terminal,terminalIds:[terminal.terminalId],generation:lease.generation};
   }else return {id:crypto.randomUUID(),kind,profile,...lease};
@@ -127,6 +128,12 @@ export async function reconnectView(id:string){
   await releaseTerminalView(old);
   useStore.getState().replaceView(id,{...next,id,title:old.title,tabGroupId:old.tabGroupId,locked:old.locked,tabColor:old.tabColor});next=undefined;
  }finally{if(next)await releaseTerminalView(next).catch(useStore.getState().fail);useStore.getState().setReconnecting(id,false);}
+}
+
+export async function disconnectView(id:string){
+ const s=useStore.getState(),view=s.views.find(v=>v.id===id);if(!view?.terminalId)return;
+ s.replaceView(id,{...view,autoReconnectPaused:true});
+ try{await window.hornet.terminal.close(view.terminalId);}catch(error){const current=useStore.getState().views.find(v=>v.id===id);if(current?.terminalId===view.terminalId)useStore.getState().replaceView(id,{...current,autoReconnectPaused:view.autoReconnectPaused});throw error;}
 }
 
 export const hasRemoteFiles=(view:View)=>!view.source&&view.profile.protocol!=='telnet';

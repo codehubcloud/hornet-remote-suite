@@ -9,6 +9,7 @@ export async function sshFixture(options:{networkProxy?:boolean;hashDelayMs?:num
  const shellBytes=new Map<number,Buffer>();
  const shellStreams=new Map<number,import('ssh2').ServerChannel>();
  const shellSizes=new Map<number,{cols:number;rows:number}>();
+ const ptyRequests:{term:string;cols:number;rows:number}[]=[];
  const modes=new Map<string,number>(),mtimes=new Map<string,number>();
  const files=new Map<string,Buffer>([['/hello.txt',Buffer.from('hello 世界\n')]]);const clients=new Set<Connection>();let authCount=0,shellCount=0;
  const remoteHashes:string[]=[],readBytes=new Map<string,number>();
@@ -56,7 +57,7 @@ export async function sshFixture(options:{networkProxy?:boolean;hashDelayMs?:num
   });
   client.on('ready',()=>client.on('session',accept=>{
    const session=accept();let shellPid=0,ptySize={cols:80,rows:24};
-   session.on('pty',(accept,_reject,info)=>{ptySize={cols:info.cols,rows:info.rows};accept?.();});
+   session.on('pty',(accept,_reject,info)=>{ptySize={cols:info.cols,rows:info.rows};ptyRequests.push({term:info.term,...ptySize});accept?.();});
    session.on('window-change',(accept,_reject,info)=>{if(shellPid)shellSizes.set(shellPid,{cols:info.cols,rows:info.rows});accept?.();});
    const startShell=(stream:import('ssh2').ServerChannel,token?:string)=>{
     const pid=1000+(++shellCount);shellPid=pid;shellSizes.set(pid,ptySize);shellCwds.set(pid,'/');let input='';
@@ -140,5 +141,5 @@ export async function sshFixture(options:{networkProxy?:boolean;hashDelayMs?:num
   });
   await new Promise<void>(resolve=>proxy!.listen(0,'127.0.0.1',resolve));port=(proxy.address() as {port:number}).port;
  }
- return {setShellTitle(pid:number,title:string){shellStreams.get(pid)?.write("\x1b]2;"+title+"\x07");},port,key,files,directories,mtimes,remoteHashes,readBytes,get shellSizes(){return [...shellSizes.entries()];},get shellBytes(){return [...shellBytes.entries()];},get shellInputs(){return [...shellInputs.entries()];},get shellPaths(){return [...shellCwds.values()];},get authCount(){return authCount;},get shellCount(){return shellCount;},blackhole(){if(!proxy)throw new Error('networkProxy required');for(const link of links)link.blocked=true;},disconnect(){for(const c of clients)c.end();},async close(){for(const link of links){link.front.destroy();link.back.destroy();}for(const c of clients)c.end();if(proxy)await new Promise<void>(resolve=>proxy!.close(()=>resolve()));await new Promise<void>(resolve=>server.close(()=>resolve()));}};
+ return {setShellTitle(pid:number,title:string){shellStreams.get(pid)?.write("\x1b]2;"+title+"\x07");},ptyRequests,port,key,files,directories,mtimes,remoteHashes,readBytes,get shellSizes(){return [...shellSizes.entries()];},get shellBytes(){return [...shellBytes.entries()];},get shellInputs(){return [...shellInputs.entries()];},get shellPaths(){return [...shellCwds.values()];},get authCount(){return authCount;},get shellCount(){return shellCount;},blackhole(){if(!proxy)throw new Error('networkProxy required');for(const link of links)link.blocked=true;},disconnect(){for(const c of clients)c.end();},async close(){for(const link of links){link.front.destroy();link.back.destroy();}for(const c of clients)c.end();if(proxy)await new Promise<void>(resolve=>proxy!.close(()=>resolve()));await new Promise<void>(resolve=>server.close(()=>resolve()));}};
 }

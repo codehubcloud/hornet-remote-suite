@@ -24,12 +24,13 @@ try{
  await commands.getByLabel('命令名称',{exact:true}).fill('Inspect shell');await commands.getByLabel('快速命令内容',{exact:true}).fill('echo tools-fixture\npwd');await commands.getByRole('button',{name:'保存命令',exact:true}).click();
  await commands.getByRole('button',{name:'发送并执行',exact:true}).click();await expect.poll(()=>server.shellInputs.find(([pid])=>pid===1002)?.[1]).toBe('echo tools-fixture\rpwd\r');
  if(server.shellInputs.some(([pid])=>pid===1001))throw new Error('Quick command reached the inactive shell');
+ await commands.getByRole('button',{name:'关闭快速命令',exact:true}).click();
  await menu('工具','选项…');const settings=page.getByRole('dialog',{name:'终端设置',exact:true});
  await settings.getByLabel('终端字号',{exact:true}).fill('18');await settings.getByLabel('终端配色',{exact:true}).selectOption('solarized');await settings.getByLabel('终端光标',{exact:true}).selectOption('bar');await settings.getByRole('button',{name:'应用设置',exact:true}).click();
  await expect(page.locator('.terminal-cell.selected .xterm-scrollable-element')).toHaveCSS('background-color','rgb(0, 43, 54)');
  if(server.shellCount!==2||server.authCount!==1)throw new Error('Settings recreated terminal sessions');
  await menu('编辑','到文本编辑器');await page.getByRole('menuitem',{name:'导出终端文本',exact:true}).click();await expect.poll(async()=>{try{return await readFile(output,'utf8');}catch{return '';}}).toContain('tools-fixture');
- await commands.getByRole('button',{name:'关闭快速命令',exact:true}).click();await menu('工具','快速命令管理器');await commands.getByLabel('已保存命令',{exact:true}).selectOption({label:'Inspect shell'});await expect(commands.getByLabel('快速命令内容',{exact:true})).toHaveValue('echo tools-fixture\npwd');
+ await menu('工具','快速命令管理器');await commands.getByLabel('已保存命令',{exact:true}).selectOption({label:'Inspect shell'});await expect(commands.getByLabel('快速命令内容',{exact:true})).toHaveValue('echo tools-fixture\npwd');
  await page.screenshot({path:'test-results/terminal-tools.png'});
  await commands.getByRole('button',{name:'关闭快速命令',exact:true}).click();
  await page.locator('.tabs').getByRole('button',{name:'关闭 Terminal fixture',exact:true}).first().click();await page.locator('.tabs').getByRole('button',{name:'关闭 Terminal fixture',exact:true}).click();

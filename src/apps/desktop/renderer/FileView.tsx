@@ -14,7 +14,7 @@ export function FileView({view,compact=false,followTarget,onDirectory,uploadSele
  const [operation,setOperation]=useState<{kind:'mkdir'|'rename'|'chmod';file?:FileEntry}|null>(null),[name,setName]=useState('');
  const fail=useStore(s=>s.fail);
  async function load(path:string,quiet=false){const current=++request.current;location.current=path;onDirectory?.(null);setBusy(true);try{const p=await window.hornet.file.list(view.connectionId,path);if(current===request.current){location.current=p.path;setPage(p);setPath(p.path);setSelected([]);onDirectory?.(p.path);setFollowError('');}}catch(e){if(current===request.current){if(quiet)setFollowError(e instanceof Error?e.message:tr("无法跟随目录"));else fail(e);}}finally{if(current===request.current)setBusy(false);}}
- useEffect(()=>{void load('.');return()=>{request.current++;};},[view.connectionId]);
+ useEffect(()=>{void load(view.profile.session?.remoteDirectory??'.');return()=>{request.current++;};},[view.connectionId]);
  useEffect(()=>{if(followTarget)void load(followTarget.path,true);else if(wasFollowing.current){request.current++;setBusy(false);setFollowError('');}wasFollowing.current=Boolean(followTarget);},[followTarget?.path,followTarget?.terminalId]);
  useEffect(()=>{if(refreshKey)void load(location.current);},[refreshKey]);
  async function downloadBatch(){setBatch(true);try{const items=page.entries.filter(f=>selected.includes(f.path));if(items.some(f=>f.kind==='directory')&&downloadSelection){await downloadSelection(items);setSelected([]);return;}for(const file of items.filter(f=>(f.kind==='file'||(f.kind==='directory'&&!!downloadSelection)))){if(downloadTo)await downloadTo(file);}setSelected([]);}catch(e){fail(e);}finally{setBatch(false);}}

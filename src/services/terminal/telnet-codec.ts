@@ -9,7 +9,7 @@ export class TelnetCodec {
  private state:'data'|'iac'|'option'|'sub'|'sub-iac'='data';private command=0;
  private local=new Set<number>();private remote=new Set<number>();private offered=new Set<number>();
  private sub:number[]=[];private afterCR=false;
- constructor(private send:(data:Buffer)=>void,private cols:number,private rows:number){}
+ constructor(private send:(data:Buffer)=>void,private cols:number,private rows:number,private terminalType='XTERM-256COLOR'){}
  get remoteEcho(){return this.remote.has(ECHO);}
  start(){for(const option of [TTYPE,NAWS,BINARY,SGA]){this.offered.add(option);this.send(Buffer.from([IAC,WILL,option]));}}
  private negotiate(command:number,option:number){
@@ -26,7 +26,7 @@ export class TelnetCodec {
  }
  private subnegotiation(){
   if(this.sub.length===2&&this.sub[0]===TTYPE&&this.sub[1]===1&&this.local.has(TTYPE))
-   this.send(Buffer.concat([Buffer.from([IAC,SB,TTYPE,0]),Buffer.from('XTERM-256COLOR','ascii'),Buffer.from([IAC,SE])]));
+   this.send(Buffer.concat([Buffer.from([IAC,SB,TTYPE,0]),Buffer.from(this.terminalType.toUpperCase(),'ascii'),Buffer.from([IAC,SE])]));
   this.sub=[];
  }
  feed(chunk:Buffer):Buffer{

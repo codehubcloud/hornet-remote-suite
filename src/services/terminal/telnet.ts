@@ -18,7 +18,7 @@ export class TelnetTerminals {
   if(this.stopped||this.sessions.size>=32)throw new AppError('TELNET_LIMIT','Telnet 服务正在停止或会话已达 32 个上限。');
   const id=randomUUID(),socket=createConnection({host:profile.host,port:profile.port});
   socket.setNoDelay(true);socket.setKeepAlive(true,30000);
-  const codec=new TelnetCodec(data=>{if(socket.writableLength>262144)throw new AppError('TELNET_LIMIT','Telnet 发送缓冲区已满。');socket.write(data);},cols,rows);
+  const codec=new TelnetCodec(data=>{if(socket.writableLength>262144)throw new AppError('TELNET_LIMIT','Telnet 发送缓冲区已满。');socket.write(data);},cols,rows,profile.session?.terminal?.type);
   const s:Session={text:new TerminalCodec(profile.encoding),id,owner,profile,socket,codec,ready:false,attached:false,seq:0,ack:0,input:0,bytes:0,pending:new Map()};
   this.sessions.set(id,s);
   this.emit(owner,{type:'connection.state',connectionId:id,profileId:profile.profileId,generation:1,state:'connecting'});

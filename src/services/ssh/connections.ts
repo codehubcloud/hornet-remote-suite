@@ -170,7 +170,7 @@ export class Connections {
         client.connect({
           host:p.host,port:p.port,username:p.username,password,privateKey,passphrase,sock:socket,
           agent:p.authType==='agent'?(process.platform==='win32'?'\\\\.\\pipe\\openssh-ssh-agent':process.env.SSH_AUTH_SOCK):undefined,
-          tryKeyboard:true,readyTimeout:120000,keepaliveInterval:15000,keepaliveCountMax:3,
+          tryKeyboard:true,readyTimeout:120000,keepaliveInterval:(p.session?.keepAlive?.intervalSeconds??15)*1000,keepaliveCountMax:p.session?.keepAlive?.maxMissed??3,
           hostVerifier:(key:Buffer,verify:(valid:boolean)=>void)=>{
             state('verifying');
             void (async()=>{

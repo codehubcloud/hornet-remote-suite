@@ -3,7 +3,8 @@ import { useBroadcast } from './broadcast';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStore,openView,hasRemoteFiles,isTerminalClosed } from './store';
 import { FileView } from './FileView';
-import { QuickCommands } from './QuickCommands';
+import { QuickCommandSurface } from './QuickCommandWorkspace';
+import { useQuickCommands } from './quick-commands-store';
 import { TerminalView } from './TerminalView';
 import { layoutRects,setRatio } from './terminal-layout';
 
@@ -12,8 +13,7 @@ export function TerminalWorkspace({splitActive,renderTabs}:{splitActive:boolean;
  const s=useStore(),panes=s.views.filter(v=>v.kind==='terminal');
  const view=panes.find(v=>v.id===s.active)??panes[0],active=view?.id??'';
  const disconnected=view?isTerminalClosed(view,s):false;
- const [commands,setCommands]=useState(false);
- useEffect(()=>{const show=()=>setCommands(true);window.addEventListener('hornet:quick-commands',show);return()=>window.removeEventListener('hornet:quick-commands',show);},[]);
+ const commands=useQuickCommands();
  const [requests,setRequests]=useState<Record<string,number>>({});
  const [follow,setFollow]=useState(false),[followStatus,setFollowStatus]=useState(''),[target,setTarget]=useState<{terminalId:string;path:string}>();
  useEffect(()=>{const search=()=>{const id=useStore.getState().active;setRequests(r=>({...r,[id]:(r[id]??0)+1}));};window.addEventListener('hornet:terminal-search',search);return()=>window.removeEventListener('hornet:terminal-search',search);},[]);
@@ -71,7 +71,8 @@ export function TerminalWorkspace({splitActive,renderTabs}:{splitActive:boolean;
      onKeyDown={e=>{if(['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(e.key)){e.preventDefault();changeRatio(node.id,node.ratio+(['ArrowLeft','ArrowUp'].includes(e.key)?-0.05:0.05));}}}/>;})}
    </div>
    {broadcast.targets.length>1&&<div className="broadcast-banner" role="status"><strong>{tr("键盘广播已开启")}</strong><span>{broadcast.targets.map(t=>t.name).join(" · ")}</span><button onClick={broadcast.stop}>{tr("停止广播")}</button></div>}
-   {commands&&<QuickCommands view={view} close={()=>setCommands(false)}/>}
+   {commands.pane&&<QuickCommandSurface view={view} mode="pane"/>}
+   {commands.bar&&<QuickCommandSurface view={view} mode="bar"/>}
   </div>
  </div>;
 }

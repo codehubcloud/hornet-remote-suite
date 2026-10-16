@@ -1,7 +1,7 @@
 import { ScriptRunner,registerScriptRunner } from './script-runner';
 import { t as tr } from './i18n';
 import { useBroadcast } from './broadcast';
-import { useCallback,useEffect,useRef,useState } from 'react';
+import { useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { SearchAddon } from '@xterm/addon-search';
 import { FitAddon } from '@xterm/addon-fit';
@@ -9,10 +9,12 @@ import { terminalAction,terminalFonts,terminalThemes,useTerminalPreferences,type
 import { TerminalContextMenu,type TerminalContextAction } from './TerminalContextMenu';
 import { isTerminalClosed,reconnectView,useStore,type View } from './store';
 export function TerminalView({view,searchRequested=0}:{view:View;searchRequested?:number}){
- const preferences=useTerminalPreferences(s=>s.value),resizeTerminal=useRef<(()=>void)|null>(null);
+ const globalPreferences=useTerminalPreferences(s=>s.value),preferences=useMemo(()=>({...globalPreferences,...view.profile.session?.appearance}),[globalPreferences,view.profile.session?.appearance]),resizeTerminal=useRef<(()=>void)|null>(null);
+ const session=useRef(view.profile.session);session.current=view.profile.session;
+ const [bell,setBell]=useState(false);
  const [fontSize,setFontSize]=useState(preferences.fontSize),fontSizeRef=useRef(fontSize);fontSizeRef.current=fontSize;
  // A wheel zoom belongs to this view; applying terminal settings resets it.
- useEffect(()=>setFontSize(preferences.fontSize),[preferences]);
+ useEffect(()=>setFontSize(preferences.fontSize),[preferences.fontSize,preferences.font,preferences.theme,preferences.scrollback,preferences.cursorStyle,preferences.cursorBlink]);
  const element=useRef<HTMLDivElement>(null),searchInput=useRef<HTMLInputElement>(null);
  const search=useRef<SearchAddon|null>(null),terminal=useRef<Terminal|null>(null);
  const inputAvailable=useRef<()=>boolean>(()=>false),closed=useStore(s=>isTerminalClosed(view,s)),reconnecting=useStore(s=>!!s.reconnecting[view.id]);
@@ -30,10 +32,12 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
  useEffect(()=>{
   if(!element.current||!view.terminalId)return;
   const id=view.terminalId;
-  const prefs=useTerminalPreferences.getState().value;
+  const prefs=preferences;
   const term=new Terminal({cursorBlink:prefs.cursorBlink,cursorStyle:prefs.cursorStyle,fontSize:fontSizeRef.current,fontFamily:terminalFonts[prefs.font],scrollback:prefs.scrollback,theme:terminalThemes[prefs.theme],allowProposedApi:false});
   const fit=new FitAddon();term.loadAddon(fit);term.open(element.current);
   terminal.current=term;const addon=new SearchAddon();term.loadAddon(addon);search.current=addon;
+  let bellTimer:ReturnType<typeof setTimeout>|undefined;
+  const onBell=term.onBell(()=>{if(session.current?.terminal?.bell==='visual'){setBell(true);clearTimeout(bellTimer);bellTimer=setTimeout(()=>setBell(false),180);}});
   const titleChange=term.onTitleChange(title=>useStore.getState().updateTerminal(view.id,{terminalTitle:title.replace(/[\x00-\x1f\x7f]/g,'').slice(0,255)}));
   term.attachCustomKeyEventHandler(e=>{if(e.ctrlKey&&e.shiftKey&&e.code==='KeyF'){if(e.type==='keydown'){setSearchOpen(true);searchInput.current?.focus();}return false;}return true;});
   let inputSeq=0,ended=false;
@@ -66,13 +70,15 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   };
   const input=term.onData(data=>{
    if(ended||runner.running)return;
+   if(session.current?.terminal?.backspace==='bs'&&data==='\x7f')data='\x08';
+   if(session.current?.terminal?.enter==='crlf'&&data==='\r')data='\r\n';
    void send(data).catch(reportInputFailure);const targets=useBroadcast.getState().targets;
    if(!ended&&targets.some(t=>t.terminalId===id))for(const target of targets)if(target.terminalId!==id)window.dispatchEvent(new CustomEvent<TerminalAction>('hornet:terminal-action',{detail:{viewId:target.viewId,terminalId:target.terminalId,kind:'input',text:data}}));
   });
   const action=(event:Event)=>{const detail=(event as CustomEvent<TerminalAction>).detail;if(detail.viewId!==view.id||detail.terminalId&&detail.terminalId!==id)return;
    if(runner.running&&['input','execute','paste'].includes(detail.kind))return;
    if(detail.kind==='input'&&detail.terminalId===id&&detail.text&&!ended)void send(detail.text).catch(reportInputFailure);
-   if(detail.kind==='execute'){if(ended){useStore.getState().fail(new Error(tr("终端已关闭，命令未发送。")));return;}if(detail.text){void send(detail.text.replace(/[\r\n]+$/,'').replace(/\r\n|\n/g,'\r')+'\r').catch(reportInputFailure);term.focus();}}
+   if(detail.kind==='execute'){if(ended){useStore.getState().fail(new Error(tr("终端已关闭，命令未发送。")));return;}if(detail.text){const text=detail.enter===false?detail.text:detail.text.replace(/[\r\n]+$/,'')+'\r';void send(text.replace(/\r\n|\n/g,'\r')).catch(reportInputFailure);term.focus();}}
    if(detail.kind==='copy'){const text=detail.text??term.getSelection();if(text)void window.hornet.clipboard.write(text).catch(useStore.getState().fail);term.focus();}
    if(detail.kind==='paste'&&!ended)void window.hornet.clipboard.read().then(text=>{if(!ended&&!runner.running&&useStore.getState().active===view.id&&(!/[\r\n]/.test(text)||window.confirm(tr("粘贴多行文本可能执行命令。继续？")))){term.paste(text);term.focus();}}).catch(useStore.getState().fail);
    if(detail.kind==='reset')term.reset();
@@ -102,8 +108,8 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   if(!ended)void window.hornet.terminal.attach(id).then(resize).catch(reportInputFailure);
   term.focus();
   const el=element.current;
-  return()=>{ended=true;inputAvailable.current=()=>false;stopState();unregister();window.removeEventListener('hornet:terminal-action',action);resizeTerminal.current=null;unsubscribe();input.dispose();titleChange.dispose();observer.disconnect();el.removeEventListener('wheel',onWheel,true);el.removeEventListener('paste',onPaste,true);search.current=null;terminal.current=null;term.dispose();};
+  return()=>{ended=true;inputAvailable.current=()=>false;clearTimeout(bellTimer);onBell.dispose();stopState();unregister();window.removeEventListener('hornet:terminal-action',action);resizeTerminal.current=null;unsubscribe();input.dispose();titleChange.dispose();observer.disconnect();el.removeEventListener('wheel',onWheel,true);el.removeEventListener('paste',onPaste,true);search.current=null;terminal.current=null;term.dispose();};
  },[view.id,view.terminalId,view.generation]);
  useEffect(()=>{const term=terminal.current;if(!term)return;term.options.fontSize=fontSize;term.options.fontFamily=terminalFonts[preferences.font];term.options.theme=terminalThemes[preferences.theme];term.options.scrollback=preferences.scrollback;term.options.cursorStyle=preferences.cursorStyle;term.options.cursorBlink=!closed&&preferences.cursorBlink;resizeTerminal.current?.();},[preferences,fontSize,closed]);
- return <>{closed&&<div className="terminal-disconnected" role="status"><strong>{tr("已断开")}</strong>{!view.source&&<button disabled={reconnecting} onClick={()=>void reconnectView(view.id).catch(useStore.getState().fail)}>{tr("重新连接")}</button>}</div>}{searchOpen&&<form className="terminal-search" onSubmit={e=>{e.preventDefault();find();}}><input ref={searchInput} aria-label={tr("搜索终端内容")} placeholder={tr("搜索终端 · Ctrl+Shift+F")} value={query} onChange={e=>{setQuery(e.target.value);setResult('');}} onKeyDown={e=>{if(e.key==='Escape'){setQuery('');setResult('');closeSearch();}else if(e.key==='Enter'&&e.shiftKey){e.preventDefault();find(true);}}}/><button type="button" onClick={()=>find(true)}>{tr("上一个")}</button><button>{tr("下一个")}</button><span role="status">{result}</span><button type="button" aria-label={tr("关闭终端搜索")} onClick={closeSearch}>×</button></form>}<div className="terminal-host" ref={element} onPointerDownCapture={event=>{if(event.button===2){rightClickSelection.current=terminal.current?.getSelection()??'';event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);}else rightClickSelection.current=undefined;}} onContextMenuCapture={event=>{event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);rightClickSelection.current=undefined;}} onKeyDownCapture={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();const box=element.current?.getBoundingClientRect();openMenu((box?.left??0)+20,(box?.top??0)+20);}}}/>{menu&&<TerminalContextMenu view={view} x={menu.x} y={menu.y} canCopy={!!menu.selection} canPaste={!closed&&inputAvailable.current()} choose={choose} close={closeMenu}/>} </>;
+ return <>{closed&&<div className="terminal-disconnected" role="status"><strong>{tr("已断开")}</strong>{!view.source&&<button disabled={reconnecting} onClick={()=>void reconnectView(view.id).catch(useStore.getState().fail)}>{tr("重新连接")}</button>}</div>}{searchOpen&&<form className="terminal-search" onSubmit={e=>{e.preventDefault();find();}}><input ref={searchInput} aria-label={tr("搜索终端内容")} placeholder={tr("搜索终端 · Ctrl+Shift+F")} value={query} onChange={e=>{setQuery(e.target.value);setResult('');}} onKeyDown={e=>{if(e.key==='Escape'){setQuery('');setResult('');closeSearch();}else if(e.key==='Enter'&&e.shiftKey){e.preventDefault();find(true);}}}/><button type="button" onClick={()=>find(true)}>{tr("上一个")}</button><button>{tr("下一个")}</button><span role="status">{result}</span><button type="button" aria-label={tr("关闭终端搜索")} onClick={closeSearch}>×</button></form>}<div className={'terminal-host'+(bell?' terminal-bell':'')} ref={element} onPointerDownCapture={event=>{if(event.button===2){rightClickSelection.current=terminal.current?.getSelection()??'';event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);}else rightClickSelection.current=undefined;}} onContextMenuCapture={event=>{event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);rightClickSelection.current=undefined;}} onKeyDownCapture={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();const box=element.current?.getBoundingClientRect();openMenu((box?.left??0)+20,(box?.top??0)+20);}}}/>{menu&&<TerminalContextMenu view={view} x={menu.x} y={menu.y} canCopy={!!menu.selection} canPaste={!closed&&inputAvailable.current()} choose={choose} close={closeMenu}/>} </>;
 }

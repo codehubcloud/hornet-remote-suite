@@ -8,7 +8,7 @@ on:
       version:
         description: 'Version matching src/package.json, without v'
         required: true
-        default: '0.0.11'
+        default: '0.0.12'
 
 permissions:
   contents: read
@@ -137,6 +137,18 @@ jobs:
       - name: Test session tab commands and saved credentials on Linux
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:session-tabs:package
+      - name: Test quick commands, toolbars and session properties
+        if: runner.os != 'Linux'
+        run: npm run test:xshell-workspace:package
+      - name: Test quick commands, toolbars and session properties on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:xshell-workspace:package
+      - name: Test help, PDF and update checks
+        if: runner.os != 'Linux'
+        run: npm run test:help:package
+      - name: Test help, PDF and update checks on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:help:package
       - name: Test transfer verification and backend responsiveness in the packaged app
         if: runner.os != 'Linux'
         run: npm run test:transfer-reliability:package

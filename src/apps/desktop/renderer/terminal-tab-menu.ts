@@ -1,3 +1,4 @@
+import { disconnectView } from './store';
 import { t as tr } from './i18n';
 import type { MenuItem } from './MenuBar';
 import { closeTerminalTabs,duplicateTerminal,isTerminalClosed,newTerminalGroup,reconnectView,useStore,type View } from './store';
@@ -29,7 +30,7 @@ export function terminalTabItems(view:View):MenuItem[]{
   {label:tr('重命名终端'),separator:true,action:()=>window.dispatchEvent(new CustomEvent('hornet:terminal-rename',{detail:{viewId:view.id}}))},
   ...(['numbers','title','status'] as const).map((key,index)=>({label:tr(['显示编号','显示终端标题','显示状态图标'][index]),checked:s.tabDisplay[key],separator:index===0,action:()=>s.setTabDisplay(key,!s.tabDisplay[key])})),
   {label:tr('设置颜色'),separator:true,children:tabColors.map(([label,color])=>({label:tr(label),checked:(view.tabColor??'')===color,action:()=>s.updateTerminal(view.id,{tabColor:color||undefined})}))},
-  {label:tr('断开'),separator:true,disabled:isTerminalClosed(view,s)||!!s.reconnecting[view.id],action:run(()=>window.hornet.terminal.close(view.terminalId!))},
+  {label:tr('断开'),separator:true,disabled:isTerminalClosed(view,s)||!!s.reconnecting[view.id],action:run(()=>disconnectView(view.id))},
   {label:tr('重新连接'),disabled:!!view.source||!!s.reconnecting[view.id],action:run(()=>reconnectView(view.id))}
  ];
 }

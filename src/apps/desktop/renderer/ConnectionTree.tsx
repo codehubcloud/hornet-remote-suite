@@ -11,13 +11,14 @@ export function groupPaths(profiles:Profile[],extra:string[]){
  return [...paths].sort((a,b)=>a.localeCompare(b));
 }
 interface Group {path:string;name:string;groups:Map<string,Group>;profiles:Profile[]}
-export function ConnectionTree({profiles,groups,query,pending,revealGroup,onCreate,onGroup,onDeleteGroup,onEdit,onClone,onRemove,onConnect}:{
- profiles:Profile[];groups:string[];query:string;pending:boolean;revealGroup?:string;
+export function ConnectionTree({profiles,groups,query,pending,revealGroup,currentProfileId,onCreate,onGroup,onDeleteGroup,onEdit,onClone,onRemove,onConnect}:{
+ profiles:Profile[];groups:string[];query:string;pending:boolean;revealGroup?:string;currentProfileId?:string;
  onCreate:(group:string)=>void;onGroup:(parent:string)=>void;onDeleteGroup:(path:string)=>void;onEdit:(p:Profile)=>void;onClone:(p:Profile)=>void;onRemove:(p:Profile)=>void;onConnect:(p:Profile,kind:'terminal'|'files')=>void;
 }){
  const [closed,setClosed]=useState<string[]>(()=>{try{const v=JSON.parse(localStorage.getItem('hornet.connection.closedGroups')??'[]');return Array.isArray(v)?v.filter(x=>typeof x==='string'):[];}catch{return [];}});
  const [menu,setMenu]=useState<{x:number;y:number;group:string|null;allowDelete:boolean;profile?:Profile}|null>(null);
  const [selected,setSelected]=useState('');
+ useEffect(()=>{if(currentProfileId)setSelected(currentProfileId);},[currentProfileId]);
  const menuRef=useRef<HTMLDivElement>(null),origin=useRef<HTMLElement|null>(null);
  const listRef=useRef<HTMLDivElement>(null);
  useEffect(()=>{if(!revealGroup)return;setClosed(old=>{const next=old.filter(path=>path!==revealGroup&&!revealGroup.startsWith(path+'/'));try{localStorage.setItem('hornet.connection.closedGroups',JSON.stringify(next));}catch{}return next;});

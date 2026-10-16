@@ -1,14 +1,15 @@
-import { EncodingSelect } from './EncodingSelect';
+import { ProfileDialog } from './ProfileDialog';
+import { CurrentSessionProperties } from './CurrentSessionProperties';
+import { QuickCommandHost } from './QuickCommandWorkspace';
+import { AutoReconnect } from './AutoReconnect';
 import { t as tr } from './i18n';
 import { challengeCopy } from './challenge-copy';
 import { useAppearance } from './appearance';
 import { useEffect,useState } from 'react';
 import type { Profile,HornetEvent } from '../../../packages/contracts';
-import { profileSchema } from '../../../packages/contracts';
 import { useStore,refreshProfiles,openView,closeTerminalView,isTerminalClosed,type View } from './store';
 import { ConnectionTree,GroupDialog,groupPath,groupPaths,readGroups } from './ConnectionTree';
 import { SessionCommands } from './SessionCommands';
-import { JumpRouteEditor } from './JumpRouteEditor';
 import { SessionsDialog } from './SessionsDialog';
 import { showStartupSessions } from './session-dialog-preferences';
 import { TaskCenter } from './TaskCenter';
@@ -82,7 +83,7 @@ export function App(){
   <div className="app-body"><aside className="sidebar" style={{display:hostsVisible?'flex':'none'}}>
    <div className="section-heading"><span>{tr("连接管理")}</span><button title={tr("新建分组")} aria-label={tr("新建分组")} onClick={()=>setGroupParent('')}>⊞</button><button title={tr("新建连接")} aria-label={tr("新建连接")} onClick={()=>setForm(fresh())}>＋</button></div>
    <input className="search" aria-label={tr("搜索主机")} placeholder={tr("搜索名称、主机或分组…")} value={query} onChange={e=>setQuery(e.target.value)}/>
-   <ConnectionTree revealGroup={revealGroup} profiles={s.profiles} groups={groups} query={query} pending={pending} onCreate={group=>setForm({...fresh(),group})} onGroup={setGroupParent} onDeleteGroup={path=>void deleteGroup(path)} onEdit={setForm} onClone={p=>setForm({...p,profileId:crypto.randomUUID(),revision:0,name:p.name+tr(" 副本")})} onRemove={p=>void remove(p)} onConnect={(p,kind)=>void connect(p,kind)}/>
+   <ConnectionTree currentProfileId={active?.profile.profileId} revealGroup={revealGroup} profiles={s.profiles} groups={groups} query={query} pending={pending} onCreate={group=>setForm({...fresh(),group})} onGroup={setGroupParent} onDeleteGroup={path=>void deleteGroup(path)} onEdit={setForm} onClone={p=>setForm({...p,profileId:crypto.randomUUID(),revision:0,name:p.name+tr(" 副本")})} onRemove={p=>void remove(p)} onConnect={(p,kind)=>void connect(p,kind)}/>
    <div className="sidebar-bottom"><button onClick={()=>void window.hornet.profiles.import().then(refreshProfiles).catch(s.fail)}>{tr("导入配置")}</button><button onClick={()=>void window.hornet.profiles.export().catch(s.fail)}>{tr("导出配置")}</button></div>
   </aside>
   <main className="workspace">
@@ -96,34 +97,14 @@ export function App(){
    </div>
    <TaskCenter activeId={s.active} quiet={!active}/>
   </main></div>
-  <footer className="statusbar"><span><i className="status-dot"/>{tr("本地工作区")}</span><span>{active?(active.profile.username?active.profile.username+'@':'')+active.profile.host:tr("核心功能不依赖云账号")}</span><span>SSH / SFTP / FTP / FTPS / Telnet · Windows</span></footer>
+  <footer className={'statusbar'+(active?.kind==='terminal'?' has-session-properties':'')}><span className="workspace-status"><i className="status-dot"/>{tr("本地工作区")}</span>{active?.kind==='terminal'?<CurrentSessionProperties edit={p=>{setConnectOnSave(false);setForm(p);}}/>:<><span>{active?(active.profile.username?active.profile.username+'@':'')+active.profile.host:tr("核心功能不依赖云账号")}</span><span>SSH / SFTP / FTP / FTPS / Telnet · Windows</span></>}</footer>
   <TerminalTitleMenu/>
+  <QuickCommandHost/><AutoReconnect/>
   {sessionsOpen&&<SessionsDialog profiles={s.profiles} groups={groups} pending={pending} loading={profilesLoading} suspended={Boolean(form)||groupParent!==null||Boolean(s.challenges[0])} error={s.error} close={()=>setSessionsOpen(false)} create={group=>{setConnectOnSave(false);setForm({...fresh(),group});}} edit={p=>{setConnectOnSave(false);setForm(p);}} clone={p=>{setConnectOnSave(false);setForm({...p,profileId:crypto.randomUUID(),revision:0,name:p.name+tr(' 副本')});}} remove={p=>void remove(p)} connect={p=>{setSessionsOpen(false);void connect(p,'terminal');}} newGroup={setGroupParent} refresh={()=>refreshProfiles().catch(s.fail)}/>}
-  {form&&<ProfileDialog groups={groups} profile={form} connectOnSave={connectOnSave} saved={p=>{if(connectOnSave)void connect(p,'terminal');}} close={()=>{setForm(null);setConnectOnSave(false);}}/>}
+  {form&&<ProfileDialog groups={groups} profile={form} connectOnSave={connectOnSave} saved={(p,shouldConnect)=>{if(shouldConnect)void connect(p,'terminal');}} close={()=>{setForm(null);setConnectOnSave(false);}}/>}
   {groupParent!==null&&<GroupDialog parent={groupParent} groups={groups} close={()=>setGroupParent(null)} save={path=>{const next=[...extraGroups,path];try{localStorage.setItem('hornet.connection.groups',JSON.stringify(next));setExtraGroups(next);setRevealGroup(path);setGroupParent(null);setQuery('');}catch(e){s.fail(e);}}}/>}
   {s.challenges[0]&&<ChallengeDialog key={s.challenges[0].challengeId} challenge={s.challenges[0]}/>}
  </div>;
-}
-function ProfileDialog({profile,groups,close,saved,connectOnSave}:{profile:Profile;groups:string[];close:()=>void;saved:(profile:Profile)=>void;connectOnSave:boolean}){
- const profiles=useStore(s=>s.profiles);
- const [p,setP]=useState(profile),[error,setError]=useState(''),[busy,setBusy]=useState(false);
- const [password,setPassword]=useState(''),[savePassword,setSavePassword]=useState(true),[passwordSaved,setPasswordSaved]=useState(false);
- useEffect(()=>{let active=true;if(profile.revision)void window.hornet.profiles.credentialStatus(profile.profileId).then(status=>{if(active)setPasswordSaved(status.saved);}).catch(()=>{});return()=>{active=false;};},[profile.profileId,profile.revision]);
- const field=(key:keyof Profile,value:string|number)=>setP({...p,[key]:value});
- async function save(){setBusy(true);try{const clean=profileSchema.parse({...p,group:groupPath(p.group)});const credential=clean.protocol==='telnet'||clean.authType!=='password'||!savePassword?{mode:'remove' as const}:password?{mode:'save' as const,password}:{mode:'keep' as const};const result=await window.hornet.profiles.save(clean,profile.revision,credential);setPassword('');await refreshProfiles();close();saved(result);}catch(e){setError(e instanceof Error?e.message:tr("无法保存"));}finally{setBusy(false);}}
- return <div className="modal-backdrop"><form className="modal profile-dialog" onSubmit={e=>{e.preventDefault();void save();}}><div className="modal-heading"><h2>{profile.revision?tr("编辑连接"):tr("新建连接")}</h2><button type="button" disabled={busy} onClick={close}>×</button></div><p className="muted">{tr("用户名保存在连接配置中，密码使用系统加密存储。")}</p>
-  <label>{tr("协议")}<select aria-label={tr("连接协议")} value={p.protocol??'ssh'} onChange={e=>setP({...p,protocol:e.target.value as Profile['protocol'],ftpSecurity:e.target.value==='ftp'?'explicit':undefined,authType:e.target.value==='ftp'?'password':p.authType,jumpProfileIds:e.target.value==='ssh'?p.jumpProfileIds:[],port:[21,22,23,990].includes(p.port)?(e.target.value==='telnet'?23:e.target.value==='ftp'?21:22):p.port})}><option value="ssh">SSH / SFTP</option><option value="ftp">FTP / FTPS</option><option value="telnet">{tr("Telnet（明文）")}</option></select></label>
-  <label>{tr("名称")}<input required autoFocus value={p.name} onChange={e=>field('name',e.target.value)}/></label>
-  <div className="form-row"><label>{tr("主机")}<input required placeholder="192.168.1.10" value={p.host} onChange={e=>field('host',e.target.value)}/></label><label className="port">{tr("端口")}<input required type="number" min={1} max={65535} value={p.port} onChange={e=>field('port',Number(e.target.value))}/></label></div>
-  <label>{p.protocol==='telnet'?tr("用户名备注（不自动登录）"):tr("用户名")}<input required={p.protocol!=='telnet'} value={p.username} onChange={e=>field('username',e.target.value)}/></label>
-  <label>{tr("说明")}<input maxLength={2048} value={p.description??''} onChange={e=>field('description',e.target.value)}/></label>
-  <label>{tr("分组")}<input list="connection-group-options" maxLength={128} placeholder={tr("例如：生产环境/北京/数据库")} value={p.group} onChange={e=>field('group',e.target.value)}/></label><datalist id="connection-group-options">{groups.map(path=><option key={path} value={path}/>)}</datalist><p className="muted">{tr("选择已有分组，或用 / 分隔创建多级子分组。")}</p>
-  {p.protocol==='telnet'?<p className="muted">{tr("Telnet 使用明文连接；用户名和密码在远端登录提示中手动输入，不使用 SSH 凭据库。")}</p>:<label hidden={p.protocol==='ftp'}>{tr("认证方式")}<select value={p.authType} onChange={e=>field('authType',e.target.value)}><option value="password">{tr("密码 / 交互认证")}</option><option value="privateKey">{tr("私钥文件")}</option><option value="agent">{tr("系统 SSH Agent")}</option></select></label>}
-  {p.protocol!=='telnet'&&p.authType==='password'&&<fieldset className="profile-credentials"><legend>{tr('用户身份验证')}</legend><label>{tr('密码')}<input aria-label={tr('连接密码')} type="password" maxLength={16384} autoComplete="new-password" disabled={!savePassword||busy} value={password} onChange={e=>setPassword(e.target.value)}/></label><label className="checkbox"><input type="checkbox" checked={savePassword} disabled={busy} onChange={e=>setSavePassword(e.target.checked)}/>{tr('保存密码')}</label><p className="muted">{passwordSaved?tr('已保存密码，留空保持不变。'):tr('密码留空时，在连接时询问。')}{tr('修改主机、端口或用户名后需重新输入密码。')}</p></fieldset>}
-  {p.protocol==='ftp'?<><label>{tr('FTP 连接安全')}<select aria-label={tr('FTP 连接安全')} value={p.ftpSecurity??'explicit'} onChange={e=>setP({...p,ftpSecurity:e.target.value as Profile['ftpSecurity'],port:[21,990].includes(p.port)?(e.target.value==='implicit'?990:21):p.port})}><option value="explicit">{tr('FTPS · 显式 TLS（推荐）')}</option><option value="implicit">{tr('FTPS · 隐式 TLS')}</option><option value="none">{tr('FTP · 明文')}</option></select></label><p className="muted">{tr('被动模式，UTF-8 文件名。FTPS 严格校验证书；普通 FTP 的密码和文件均为明文。')}</p></>:<EncodingSelect value={p.encoding} change={encoding=>setP({...p,encoding})}/>} 
-  {(p.protocol??'ssh')==='ssh'&&<JumpRouteEditor profile={p} profiles={profiles} change={jumpProfileIds=>setP({...p,jumpProfileIds})}/>}
-  {error&&<p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" onClick={close}>{tr("取消")}</button><button className="primary" disabled={busy}>{connectOnSave?tr("保存并连接"):tr("保存配置")}</button></div>
- </form></div>;
 }
 function ChallengeDialog({challenge:c}:{challenge:Extract<HornetEvent,{type:'challenge'}>}){
  const copy=challengeCopy(c);

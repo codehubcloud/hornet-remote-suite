@@ -27,9 +27,10 @@ export class Terminals {
       }
       let identity=linux?new ShellIdentity():undefined;
       const stream=await new Promise<ClientChannel>((resolve,reject)=>{
+        const term=c.profile.session?.terminal?.type??'xterm-256color';
         const callback=(err:Error|undefined,channel:ClientChannel)=>err?reject(new AppError('SSH004','无法打开远程终端。')):resolve(channel);
-        if(identity)c.client.exec(identity.command,{pty:{term:'xterm-256color',cols,rows}},(error,channel)=>{if(error){identity=undefined;c.client.shell({term:'xterm-256color',cols,rows},callback);}else callback(undefined,channel);});
-        else c.client.shell({term:'xterm-256color',cols,rows},callback);
+        if(identity)c.client.exec(identity.command,{pty:{term,cols,rows}},(error,channel)=>{if(error){identity=undefined;c.client.shell({term,cols,rows},callback);}else callback(undefined,channel);});
+        else c.client.shell({term,cols,rows},callback);
       });
       try{this.connections.get(owner,connectionId);if(stream.destroyed||stream.readableEnded)throw new AppError('SSH006','连接已断开。');}catch(e){stream.destroy();throw e;}
       const s:Session={codec:new TerminalCodec(c.profile.encoding),directoryViaExec,identity,id:randomUUID(),owner,connectionId,leaseId:lease.leaseId,generation:c.generation,stream,attached:false,seq:0,inputSeq:0,ackSeq:0,pending:new Map(),bytes:0};

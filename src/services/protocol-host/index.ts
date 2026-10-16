@@ -1,3 +1,4 @@
+import { sameTransport } from '../../packages/core/profile-settings';
 import { FtpConnections } from '../ftp/connections';
 import { FtpFiles } from '../ftp/files';
 import { FtpTransfers } from '../ftp/transfers';
@@ -86,7 +87,7 @@ async function dispatch(m:Message):Promise<unknown>{
     case 'tunnel.create':return tunnels.create(owner,schemas['tunnel.create'].parse(p));
     case 'tunnel.stop':return tunnels.stop(owner,schemas['tunnel.stop'].parse(p).tunnelId);
     case 'profile.list':return store.profiles();
-    case 'profile.save':{const v=schemas['profile.save'].parse(p);if(connections.hasProfile(v.profile.profileId)||ftp.hasProfile(v.profile.profileId)||telnet.hasProfile(v.profile.profileId))throw new AppError('PROFILE_BUSY','请先关闭正在使用此配置的连接，再修改认证或端点。');return store.saveProfile(v.profile,v.expectedRevision);}
+    case 'profile.save':{const v=schemas['profile.save'].parse(p);if((connections.hasProfile(v.profile.profileId)||ftp.hasProfile(v.profile.profileId)||telnet.hasProfile(v.profile.profileId))&&!sameTransport(store.profile(v.profile.profileId),v.profile))throw new AppError('PROFILE_BUSY','请先关闭正在使用此配置的连接，再修改认证或端点。');return store.saveProfile(v.profile,v.expectedRevision);}
     case 'group.remove':{const v=schemas['group.remove'].parse(p);if(v.members.some(m=>connections.hasProfile(m.profileId)||ftp.hasProfile(m.profileId)||telnet.hasProfile(m.profileId)||transfers.hasProfile(m.profileId)))throw new AppError('PROFILE_BUSY','分组中有正在使用的连接或传输，请先关闭后再删除。');return store.removeGroup(v.path,v.members);}
     case 'profile.delete':{const v=schemas['profile.delete'].parse(p);if(connections.hasProfile(v.profileId)||ftp.hasProfile(v.profileId)||telnet.hasProfile(v.profileId)||transfers.hasProfile(v.profileId))throw new AppError('PROFILE_BUSY','请先关闭此主机的连接和传输。');return store.deleteProfile(v.profileId,v.expectedRevision);}
     case 'profile.import':return store.importProfiles(z.array(profileSchema).max(1000).parse(p));

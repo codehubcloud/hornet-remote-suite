@@ -1,6 +1,6 @@
 {
   "name": "hornet-remote-suite",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "private": true,
   "description": "Unified remote workstation",
   "main": "dist/main.cjs",
@@ -48,7 +48,11 @@
     "test:terminal-disconnect": "node tools/terminal-disconnect-smoke.mjs",
     "test:terminal-disconnect:package": "node tools/terminal-disconnect-smoke.mjs --packaged",
     "test:session-tabs": "node tools/session-tabs-credentials-smoke.mjs",
-    "test:session-tabs:package": "node tools/session-tabs-credentials-smoke.mjs --packaged"
+    "test:session-tabs:package": "node tools/session-tabs-credentials-smoke.mjs --packaged",
+    "test:xshell-workspace": "node tools/xshell-workspace-smoke.mjs",
+    "test:xshell-workspace:package": "node tools/xshell-workspace-smoke.mjs --packaged",
+    "test:help": "node tools/help-smoke.mjs",
+    "test:help:package": "node tools/help-smoke.mjs --packaged"
   },
   "engines": {
     "node": ">=24 <25"
