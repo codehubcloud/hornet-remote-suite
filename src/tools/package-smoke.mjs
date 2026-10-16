@@ -69,8 +69,9 @@ try {
   const metadata = await import('../package.json', { with: { type: 'json' } });
   if (!version.packaged || version.version !== metadata.default.version) throw new Error('Packaged app version mismatch.');
   if (process.platform === 'win32') {
-    const native = await page.evaluate(() => window.hornet.rdp.probe());
-    if (!native.available) throw new Error('Packaged Windows native RDP helper unavailable.');
+    const probeStarted=Date.now(),native = await page.evaluate(() => window.hornet.rdp.probe());
+    console.log('Windows native probe ('+(Date.now()-probeStarted)+' ms): '+JSON.stringify(native));
+    if (!native.available) throw new Error('Packaged Windows native RDP helper unavailable: '+JSON.stringify(native));
     const local = await page.evaluate(() => window.hornet.localTerminal.open({ shell: 'cmd', cols: 80, rows: 24 }));
     if (!local.terminalId) throw new Error('Packaged ConPTY local terminal unavailable.');
     await page.evaluate(id => window.hornet.terminal.close(id), local.terminalId);

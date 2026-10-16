@@ -456,3 +456,5 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 发布前完整 test:xshell-workspace 再次通过，覆盖颜色持久化、属性底部布局、真实网络丢包自动重连与手动断开停止重试；已查看帮助更新对话框截图。
 - 首次候选 9541253 / Actions 38851750923 的 macOS 综合验收发现测试事件缺陷：Playwright dispatchEvent(contextmenu) 使用的通用事件没有鼠标坐标，菜单落在页面底部。已在本机复现，并改为真实右键隐藏菜单后的恢复按钮；仍断言菜单位于标题栏、可点击恢复及重载后恢复。Windows/Linux 原生 system-context-menu 验收路径保留。该失败候选未公开发布。
 - 首次候选的 Linux x64/ARM64 在颜色编辑器截图时等待 compositor 超时，前面的样式/交互断言已通过。新增验收与既有标题栏验收一致，在 Linux Xvfb 中 showInactive 测试窗口以生成可捕获帧，保留实际截图及全部业务断言；帮助验收同步处理。
+- 第二候选 1303310 / Actions 38853248696：macOS ARM64 全部通过；两个 Linux 已通过新增颜色/属性/帮助验收。macOS Intel 的 PDF 仍在生成时，测试默认 5 秒断言先超时，已把断言上限调整为 25 秒以覆盖功能已有的 20 秒有界等待。Windows 本机 RDP 探测在约 15 秒后返回不可用：只将 RDP 探测冷启动限时改为 30 秒，其他系统操作保持原限时；同时等待 child close 而非 exit，确保 stdout 排空后解析，失败保留受控原因并记录耗时。新增 3 项测试覆盖退出后排空、20 秒冷启动成功、30 秒强制截止。该候选未发布。
+- 修正后本机 npm run check 再次通过（38 文件 / 187 测试）；新增 native-host 单测 3/3、类型检查、test:native 与 test:help 均通过。test:native 只初始化 RDP 控件并枚举打印机，未连接远端、未提交打印任务。第二候选两个 Linux 平台最终全部通过，publish 按预期跳过。

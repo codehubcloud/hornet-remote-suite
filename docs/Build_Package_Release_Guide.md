@@ -1,6 +1,6 @@
 # Hornet Remote Suite 编译、打包与发布操作指南
 
-更新日期：2026-10-15。本文依据当前仓库脚本编写，版本以 `src/package.json` 为准。示例中的 `0.0.4` 用于演示操作，正式发布必须使用尚未公开且与源码提交一致的新版本。
+更新日期：2026-10-16。本文依据当前仓库脚本编写，版本以 `src/package.json` 为准。示例中的 `0.0.4` 用于演示操作，正式发布必须使用尚未公开且与源码提交一致的新版本。
 
 ## 1. 仓库与发布范围
 
@@ -97,6 +97,8 @@ npm.cmd run test:clipboard:package
 npm.cmd run test:transfer-reliability:package
 npm.cmd run test:shutdown:package
 npm.cmd run test:titlebar:package
+npm.cmd run test:xshell-workspace:package
+npm.cmd run test:help:package
 ```
 
 `package` 先执行 `build:release`，再使用 electron-builder 构建 NSIS EXE；`--publish never` 禁止打包工具自行发布。只想检查解包后的应用时，使用 `npm.cmd run package:dir`，不会生成安装程序。
@@ -133,6 +135,8 @@ npm run test:transfer-reliability:package
 npm run test:shutdown:package
 npm run test:titlebar:package
 npm run test:terminal-tabs:package
+npm run test:xshell-workspace:package
+npm run test:help:package
 ```
 
 Linux 安装工作流列出的系统依赖后，用 Xvfb 执行验收：
@@ -145,6 +149,8 @@ xvfb-run -a npm run test:transfer-reliability:package
 xvfb-run -a npm run test:shutdown:package
 xvfb-run -a npm run test:titlebar:package
 xvfb-run -a npm run test:terminal-tabs:package
+xvfb-run -a npm run test:xshell-workspace:package
+xvfb-run -a npm run test:help:package
 ```
 
 macOS 解包目录为 `release/mac/` 或 `release/mac-arm64/`，Linux 为 `release/linux-unpacked/` 或 `release/linux-arm64-unpacked/`。测试脚本按本机架构选择程序；使用自定义输出目录时，将 `HORNET_PACKAGED_EXECUTABLE` 设置为实际可执行文件的绝对路径。
@@ -162,6 +168,8 @@ macOS 解包目录为 `release/mac/` 或 `release/mac-arm64/`，Linux 为 `relea
 `test:titlebar:package` 检查透明 Logo、顶端合并菜单、主题与原生窗口按钮配色、拖动区域与菜单可点击区域、窄窗口安全布局及折叠行为。Windows/macOS 同时验证最大化、还原、最小化；Linux 无窗口管理器的 Xvfb 环境只验证窗口尺寸调整与菜单。全部使用临时用户目录。
 
 `test:terminal-tabs:package` 验证分屏标签直接位于窗格顶部、没有全局终端标签与窗格标题重复；覆盖两种方向、重命名、分隔条、文件栏显隐、目录跟随、工作台往返及合并/关闭，检查终端 DOM 实例与远端 Shell 不被重建。五个平台均在实际打包程序中执行。
+
+`test:xshell-workspace:package` 检查工具栏显隐/恢复/排序、快速命令配色及导入导出、每会话属性与底部说明、当前终端定向发送和异常断线自动重连。`test:help:package` 检查 F1 离线帮助、真实 PDF 生成、固定对外链接、新版/当前版本/网络失败重试和真实版本信息。浏览器与 PDF 查看器打开动作使用测试替身，不操作用户真实应用；更新服务器响应由夹具提供。Linux Xvfb 中显示隔离测试窗口以便捕获 compositor 帧。
 
 这些测试使用临时数据和本机回环服务，不连接用户保存的远端主机。它们不能替代安装/卸载、真实远端协议、串口硬件、实体打印机或签名/公证验收；必要的人工安装验收应另行记录。
 

@@ -10,13 +10,13 @@ export function nativeCall(input: object, timeout = 15000): Promise<any> {
     let output = ''; const timer = setTimeout(() => { child.kill(); reject(new Error('系统操作超时。')); }, timeout);
     child.stdin.on('error', () => {});child.stdout.on('data', data => { output += data.toString(); if(output.length > 65536)child.kill(); });
     child.stderr.resume(); child.once('error', e => { clearTimeout(timer); reject(e); });
-    child.once('exit', code => { clearTimeout(timer); try { const value=JSON.parse(output.trim());if(code!==0||value.error)throw new Error('系统操作失败。');resolve(value); }catch(e){reject(e);} });
+    child.once('close', code => { clearTimeout(timer); try { const value=JSON.parse(output.trim());if(code!==0||value.error)throw new Error('系统操作失败。');resolve(value); }catch(e){reject(e);} });
     child.stdin.end(JSON.stringify(input)+'\n');
   });
 }
 export class RdpService {
   private sessions=new Map<string,{child:ChildProcessWithoutNullStreams;state:string;reason?:number}>();
-  async probe(){try{return await nativeCall({op:'rdpProbe'});}catch{return {available:false,presentation:'managed-native-window'};}}
+  async probe(){try{return await nativeCall({op:'rdpProbe'},30000);}catch(e){return {available:false,presentation:'managed-native-window',reason:e instanceof Error&&e.message==='系统操作超时。'?'系统操作超时。':'Windows 原生辅助程序初始化失败。'};}}
   list(){return [...this.sessions].map(([id,s])=>({id,state:s.state,reason:s.reason}));}
   open(input:object){
     if(this.sessions.size>=8)throw new Error('请先关闭现有 RDP 会话。');

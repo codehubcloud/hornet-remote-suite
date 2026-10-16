@@ -1,8 +1,9 @@
-import { _electron as electron,expect } from '@playwright/test';
+import { _electron as electron,expect as baseExpect } from '@playwright/test';
 import { mkdtemp,rm,mkdir,readFile } from 'node:fs/promises';
 import { join,resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { dismissStartupSessions } from './session-dialog-helper.mjs';
+const expect=baseExpect.configure({timeout:25000});
 const data=await mkdtemp(join(tmpdir(),'hornet-help-'));
 const env={...process.env,HORNET_USER_DATA:data,HORNET_SMOKE:'1'};delete env.ELECTRON_RUN_AS_NODE;
 let executable=process.env.HORNET_PACKAGED_EXECUTABLE;
