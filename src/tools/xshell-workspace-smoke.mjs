@@ -32,7 +32,7 @@ try{
  toolbar=await context();await toolbar.getByRole('menuitem',{name:'菜单栏(M)',exact:true}).click();await expect(page.getByRole('navigation',{name:'应用菜单'})).toBeHidden();await page.getByRole('button',{name:'显示菜单栏',exact:true}).click();await expect(page.getByRole('navigation',{name:'应用菜单'})).toBeVisible();
  const titleContext=async()=>{
   if(process.platform==='win32'||process.platform==='linux')await app.evaluate(({BrowserWindow,screen})=>{const win=BrowserWindow.getAllWindows()[0],bounds=win.getContentBounds();win.emit('system-context-menu',{preventDefault(){}},screen.dipToScreenPoint({x:bounds.x+Math.round(bounds.width/2),y:bounds.y+18}));});
-  else await page.locator('.titlebar-drag-space').dispatchEvent('contextmenu',{clientX:600,clientY:18});
+  else await page.getByRole('button',{name:'显示菜单栏',exact:true}).click({button:'right',position:{x:10,y:2}});
   const popup=page.getByRole('menu',{name:'工具栏设置',exact:true});await expect(popup).toBeVisible();return popup;
  };
  // The first row overlaps the native draggable titlebar. Portal menus must

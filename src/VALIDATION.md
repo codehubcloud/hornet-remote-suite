@@ -454,3 +454,4 @@ npm run test:appearance 最终通过：实际 Electron 切换八种语言菜单�
 - 五平台工作流增加 test:xshell-workspace:package 和 test:help:package，必须全部通过后才能公开发布。
 - 新版本 0.0.12，同时包含此前尚未发布的快速命令颜色/渐变、分类会话属性、底部说明栏及工具栏恢复修复。具体发布结果在流程完成后记录。
 - 发布前完整 test:xshell-workspace 再次通过，覆盖颜色持久化、属性底部布局、真实网络丢包自动重连与手动断开停止重试；已查看帮助更新对话框截图。
+- 首次候选 9541253 / Actions 38851750923 的 macOS 综合验收发现测试事件缺陷：Playwright dispatchEvent(contextmenu) 使用的通用事件没有鼠标坐标，菜单落在页面底部。已在本机复现，并改为真实右键隐藏菜单后的恢复按钮；仍断言菜单位于标题栏、可点击恢复及重载后恢复。Windows/Linux 原生 system-context-menu 验收路径保留。该失败候选未公开发布。
