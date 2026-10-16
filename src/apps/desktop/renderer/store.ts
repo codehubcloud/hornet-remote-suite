@@ -1,3 +1,4 @@
+import type { TerminalDisconnect } from '../../../packages/contracts/terminal-disconnect';
 import type { DeviceTerminal } from '../../../packages/contracts/device-terminal';
 import { tileTerminals,type SplitTree } from './terminal-layout';
 import { tabGroup,selectTab,removeTab,createTabGroup,moveTab } from './terminal-tabs';
@@ -19,6 +20,7 @@ interface State {
  tabDisplay:{numbers:boolean;title:boolean;status:boolean};setTabDisplay(key:'numbers'|'title'|'status',value:boolean):void;
  updateTerminal(id:string,patch:Pick<View,'locked'|'tabColor'|'terminalTitle'>):void;
  createTabGroup(id:string,axis:'horizontal'|'vertical'):void;moveTab(id:string,groupId:string):void;
+ terminalDisconnects:Record<string,TerminalDisconnect>;connectionDisconnects:Record<string,TerminalDisconnect & {generation:number}>;
  closedTerminals:Record<string,boolean>;reconnecting:Record<string,boolean>;
  replaceView(id:string,view:View):void;setReconnecting(id:string,value:boolean):void;
  logs:TerminalLog[];setLogs(logs:TerminalLog[]):void;
@@ -35,7 +37,7 @@ export const useStore=create<State>((set)=>({
  tabDisplay:readTabDisplay(),setTabDisplay:(key,value)=>set(s=>{const tabDisplay={...s.tabDisplay,[key]:value};try{localStorage.setItem('hornet.tabs.display',JSON.stringify(tabDisplay));}catch{}return {tabDisplay};}),
  updateTerminal:(id,patch)=>set(s=>({views:s.views.map(v=>v.id===id?{...v,...patch}:v)})),
  createTabGroup:(id,axis)=>set(s=>createTabGroup(s.views,s.terminalLayout,id,axis)),moveTab:(id,groupId)=>set(s=>({...moveTab(s.views,s.terminalLayout,id,groupId),active:id})),
- closedTerminals:{},reconnecting:{},
+ terminalDisconnects:{},connectionDisconnects:{},closedTerminals:{},reconnecting:{},
  replaceView:(id,view)=>set(s=>({views:s.views.map(v=>v.id===id?view:v)})),
  setReconnecting:(id,value)=>set(s=>({reconnecting:{...s.reconnecting,[id]:value}})),
  logs:[],setLogs:logs=>set({logs}),terminalLayout:null,terminalMenu:null,
@@ -50,15 +52,23 @@ export const useStore=create<State>((set)=>({
  removeView:id=>set(s=>{const view=s.views.find(v=>v.id===id),remaining=s.views.filter(v=>v.id!==id),next=view&&remaining.find(v=>v.kind==='terminal'&&tabGroup(v)===tabGroup(view));return {views:remaining,terminalLayout:removeTab(s.views,s.terminalLayout,id),active:s.active===id?(next?.id??remaining.find(v=>v.kind==='terminal')?.id??'home'):s.active};}),
  setActive:active=>set(s=>({active,terminalLayout:selectTab(s.views,s.terminalLayout,active)})),fail:e=>set({error:e instanceof Error?e.message:String(e)}),clearError:()=>set({error:''}),
  event:event=>set(s=>{
-  if(event.type==='terminal.closed'){useBroadcast.getState().remove(event.terminalId);return {closedTerminals:{...s.closedTerminals,[event.terminalId]:true}};}
+  if(event.type==='terminal.closed'){
+   const view=s.views.find(v=>v.terminalId===event.terminalId);
+   if(view&&event.generation!==undefined&&view.generation!==event.generation)return {};
+   useBroadcast.getState().remove(event.terminalId);
+   const connection=view?s.connectionDisconnects[view.connectionId]:undefined;
+   const disconnect=s.terminalDisconnects[event.terminalId]??event.disconnect??(connection?.generation===view?.generation?connection:undefined)??{reason:view?.autoReconnectPaused?'user':'exit',at:Date.now()};
+   return {closedTerminals:{...s.closedTerminals,[event.terminalId]:true},terminalDisconnects:{...s.terminalDisconnects,[event.terminalId]:disconnect}};
+  }
   if(event.type==='challenge')return {challenges:[...s.challenges,event]};
   if(event.type==='challenge.closed')return {challenges:s.challenges.filter(c=>c.challengeId!==event.challengeId)};
   if(event.type==='terminal.log')return {logs:[event.log,...s.logs.filter(l=>l.id!==event.log.id)],error:event.log.state==='failed'?(event.log.error??'终端日志写入失败。'):s.error};
   if(event.type==='task.state')return {tasks:[event.task,...s.tasks.filter(t=>t.taskId!==event.task.taskId)]};
   if(event.type==='connection.state'){
-   const closedTerminals={...s.closedTerminals};
-   if(event.state==='closed'||event.state==='failed')for(const view of s.views)if(view.connectionId===event.connectionId&&view.generation===event.generation&&view.terminalId){closedTerminals[view.terminalId]=true;useBroadcast.getState().remove(view.terminalId);}
-   return {connectionStates:{...s.connectionStates,[event.connectionId]:event.state},closedTerminals};
+   const closedTerminals={...s.closedTerminals},terminalDisconnects={...s.terminalDisconnects},connectionDisconnects={...s.connectionDisconnects};
+   if(event.state==='closed'||event.state==='failed')connectionDisconnects[event.connectionId]??={...event.disconnect??{reason:event.error?'error':'remote',at:Date.now(),error:event.error},generation:event.generation};
+   if(event.state==='closed'||event.state==='failed')for(const view of s.views)if(view.connectionId===event.connectionId&&view.generation===event.generation&&view.terminalId){closedTerminals[view.terminalId]=true;terminalDisconnects[view.terminalId]??=connectionDisconnects[event.connectionId];useBroadcast.getState().remove(view.terminalId);}
+   return {connectionStates:{...s.connectionStates,[event.connectionId]:event.state},closedTerminals,terminalDisconnects,connectionDisconnects};
   }
   if(event.type==='service.error')return {error:event.message};
   return {};

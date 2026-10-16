@@ -1,5 +1,12 @@
 // Application copy only. Never translate user names, paths or terminal output.
 export const english:Record<string,string> = {
+"连接错误：{error}":"Connection error: {error}",
+"已主动断开连接。":"Disconnected by user.",
+"连接异常中断。":"Connection interrupted unexpectedly.",
+"远程主机已关闭连接。":"Connection closed by remote host.",
+"终端会话已结束。":"Terminal session ended.",
+"已断开会话「{name}」，时间 {time}。":"Disconnected from session \"{name}\" at {time}.",
+"选择“重新连接”可建立新的会话。":"Select \"Reconnect\" to start a new session.",
 "按钮外观":"Button appearance",
 "填充方式":"Fill style",
 "跟随主题":"Follow theme",

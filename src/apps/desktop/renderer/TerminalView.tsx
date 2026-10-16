@@ -1,3 +1,5 @@
+import type { TerminalDisconnect } from '../../../packages/contracts/terminal-disconnect';
+import { disconnectTranscript } from './terminal-disconnect';
 import { ScriptRunner,registerScriptRunner } from './script-runner';
 import { t as tr } from './i18n';
 import { useBroadcast } from './broadcast';
@@ -42,7 +44,18 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   term.attachCustomKeyEventHandler(e=>{if(e.ctrlKey&&e.shiftKey&&e.code==='KeyF'){if(e.type==='keydown'){setSearchOpen(true);searchInput.current?.focus();}return false;}return true;});
   let inputSeq=0,ended=false;
   const runner=new ScriptRunner((text,signal)=>send(text,signal));
-  const endTerminal=()=>{if(ended)return;ended=true;runner.close();term.options.disableStdin=true;term.options.cursorBlink=false;term.write(tr("\r\n\u001b[33m[连接已关闭；重新连接会创建新的会话]\u001b[0m\r\n"));};
+  const endTerminal=(detail?:TerminalDisconnect)=>{if(ended)return;ended=true;runner.close();term.options.disableStdin=true;term.options.cursorBlink=false;const state=useStore.getState(),current=state.views.find(v=>v.id===view.id)??view;
+   const connection=state.connectionDisconnects[view.connectionId];
+   const info=state.terminalDisconnects[id]??detail??(connection?.generation===view.generation?connection:undefined)??{reason:'remote',at:Date.now()};
+   // Drain pending host output before inspecting the normal-buffer cursor.
+   term.write('\x18\x1b\\',()=>{
+    if(terminal.current!==term)return;
+    const {cursorX,cursorY}=term.buffer.normal;
+    // DECRST 1049 also restores an old saved cursor on a normal screen. Use
+    // 47 instead and restore the actual normal-buffer position explicitly.
+    const reset='\x1b[?47l\x1b[r\x1b[?6l\x1b[4l\x1b[?7h\x1b[?2026l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b(B\x0f\x1b[0m';
+    term.write(reset+'\x1b['+(cursorY+1)+';'+(cursorX+1)+'H'+disconnectTranscript(info,current.title??current.profile.name,view.source),()=>{if(terminal.current===term)term.scrollToBottom();});
+   });};
   const stopState=useStore.subscribe(state=>{if(isTerminalClosed(view,state))endTerminal();});
   inputAvailable.current=()=>!ended&&!runner.running;
   const unregister=registerScriptRunner(id,runner);
@@ -51,8 +64,8 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
     runner.feed(new Uint8Array(e.data));
     term.write(new Uint8Array(e.data),()=>{if(!ended)window.hornet.terminal.ack(id,e.seq);});
    }
-   if(e.type==='terminal.closed'&&e.terminalId===id)endTerminal();
-   if(e.type==='connection.state'&&e.connectionId===view.connectionId&&e.generation===view.generation&&['closed','failed'].includes(e.state))endTerminal();
+   if(e.type==='terminal.closed'&&e.terminalId===id&&(e.generation===undefined||e.generation===view.generation))endTerminal(e.disconnect);
+   if(e.type==='connection.state'&&e.connectionId===view.connectionId&&e.generation===view.generation&&['closed','failed'].includes(e.state))endTerminal(e.disconnect??{reason:e.error?'error':'remote',at:Date.now(),error:e.error});
   });
   let writes:Promise<void>=Promise.resolve();
   // Reflowing or closing a pane can leave an already queued xterm reply. A

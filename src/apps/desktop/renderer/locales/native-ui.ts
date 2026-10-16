@@ -1,6 +1,13 @@
 // Reviewed interface copy. Detailed protocol help falls back to the English catalog.
 // Columns: Japanese, Korean, German, French, Spanish. Keep user data out of this table.
 export const nativeUi:Record<string,readonly [string,string,string,string,string]>={
+"连接错误：{error}":["接続エラー: {error}","연결 오류: {error}","Verbindungsfehler: {error}","Erreur de connexion : {error}","Error de conexión: {error}"],
+"已主动断开连接。":["ユーザーが接続を切断しました。","사용자가 연결을 끊었습니다.","Verbindung vom Benutzer getrennt.","Connexion interrompue par l’utilisateur.","Conexión cerrada por el usuario."],
+"连接异常中断。":["接続が予期せず切断されました。","연결이 예기치 않게 끊어졌습니다.","Verbindung unerwartet unterbrochen.","Connexion interrompue de façon inattendue.","Conexión interrumpida inesperadamente."],
+"远程主机已关闭连接。":["リモートホストが接続を閉じました。","원격 호스트가 연결을 닫았습니다.","Verbindung vom Remotehost geschlossen.","Connexion fermée par l’hôte distant.","Conexión cerrada por el host remoto."],
+"终端会话已结束。":["ターミナルセッションが終了しました。","터미널 세션이 종료되었습니다.","Terminalsitzung beendet.","Session de terminal terminée.","Sesión de terminal finalizada."],
+"已断开会话「{name}」，时间 {time}。":["セッション「{name}」から {time} に切断しました。","{time}에 세션 「{name}」 연결이 끊어졌습니다.","Sitzung „{name}“ um {time} getrennt.","Session « {name} » déconnectée à {time}.","Sesión «{name}» desconectada a las {time}."],
+"选择“重新连接”可建立新的会话。":["「再接続」を選択すると新しいセッションを開始します。","새 세션을 시작하려면 “다시 연결”을 선택하세요.","Wählen Sie „Erneut verbinden“, um eine neue Sitzung zu starten.","Sélectionnez « Reconnecter » pour ouvrir une nouvelle session.","Seleccione «Reconectar» para iniciar una nueva sesión."],
 "访问发布页面":["リリースページを開く","릴리스 페이지 열기","Release-Seite öffnen","Ouvrir la page de version","Abrir página de versión"],
 "发送反馈意见":["フィードバックを送信","피드백 보내기","Feedback senden","Envoyer un commentaire","Enviar comentarios"],
 "访问技术支持":["テクニカルサポート","기술 지원","Technischer Support","Assistance technique","Soporte técnico"],

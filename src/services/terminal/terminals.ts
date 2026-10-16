@@ -1,3 +1,4 @@
+import type { TerminalDisconnect } from '../../packages/contracts/terminal-disconnect';
 import { TerminalCodec } from './encoding';
 import type { TerminalEncoding } from '../../packages/contracts/terminal-encoding';
 import { randomUUID } from 'node:crypto';
@@ -14,7 +15,7 @@ export class Terminals {
   constructor(private connections:Connections,private emit:(owner:string,event:HornetEvent)=>void) {
     // Transport failure must close every shell, including paused channels that
     // have not delivered their own close event yet.
-    this.unsubscribe=connections.onClosed((owner,connectionId)=>{for(const s of [...this.sessions.values()])if(s.owner===owner&&s.connectionId===connectionId)this.close(owner,s.id);});
+    this.unsubscribe=connections.onClosed((owner,connectionId,disconnect)=>{for(const s of [...this.sessions.values()])if(s.owner===owner&&s.connectionId===connectionId)this.close(owner,s.id,disconnect);});
   }
   async create(owner:string,connectionId:string,cols:number,rows:number,trackDirectory=false) {
     const c=this.connections.get(owner,connectionId), lease=this.connections.retain(owner,connectionId);
@@ -36,9 +37,9 @@ export class Terminals {
       const s:Session={codec:new TerminalCodec(c.profile.encoding),directoryViaExec,identity,id:randomUUID(),owner,connectionId,leaseId:lease.leaseId,generation:c.generation,stream,attached:false,seq:0,inputSeq:0,ackSeq:0,pending:new Map(),bytes:0};
       this.sessions.set(s.id,s);
       stream.on('readable',()=>this.flush(s));
-      stream.on('error',()=>this.close(owner,s.id));
-      stream.on('close',()=>this.close(owner,s.id));
-      stream.on('end',()=>this.close(owner,s.id));
+      stream.on('error',(error:Error)=>this.close(owner,s.id,{reason:'error',at:Date.now(),error:error.message.slice(0,1000)}));
+      stream.on('close',()=>this.close(owner,s.id,{reason:'exit',at:Date.now()}));
+      stream.on('end',()=>this.close(owner,s.id,{reason:'exit',at:Date.now()}));
       return {terminalId:s.id,generation:s.generation};
     }catch(e){this.connections.release(owner,lease.leaseId);throw e;}
   }
@@ -84,6 +85,6 @@ export class Terminals {
     s.inputSeq=seq;s.stream.write(s.codec.encode(data));
   }
   resize(owner:string,id:string,generation:number,cols:number,rows:number){const s=this.get(owner,id);if(s.generation!==generation)throw new AppError('IPC005','终端版本已改变。');s.stream.setWindow(rows,cols,0,0);}
-  close(owner:string,id:string){const s=this.sessions.get(id);if(!s)return;if(s.owner!==owner)throw new AppError('IPC005','无权关闭终端。');this.output(s,s.codec.end());this.sessions.delete(id);s.stream.destroy();this.connections.release(owner,s.leaseId);this.emit(owner,{type:'terminal.closed',terminalId:id});}
+  close(owner:string,id:string,disconnect:TerminalDisconnect={reason:'user',at:Date.now()}){const s=this.sessions.get(id);if(!s)return;if(s.owner!==owner)throw new AppError('IPC005','无权关闭终端。');this.output(s,s.codec.end());this.sessions.delete(id);s.stream.destroy();this.connections.release(owner,s.leaseId);this.emit(owner,{type:'terminal.closed',terminalId:id,generation:s.generation,disconnect});}
   stop(){this.unsubscribe();for(const s of [...this.sessions.values()])this.close(s.owner,s.id);}
 }

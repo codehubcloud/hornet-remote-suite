@@ -1,3 +1,4 @@
+import type { TerminalDisconnect } from '../../packages/contracts/terminal-disconnect';
 import type { TerminalEncoding } from '../../packages/contracts/terminal-encoding';
 import { randomUUID } from 'node:crypto';
 import type { HornetEvent } from '../../packages/contracts';
@@ -35,7 +36,7 @@ export class DeviceTerminals {
    driver.pause();this.state(s,'ready');return descriptor;
   }catch(e){await this.finish(s,e instanceof Error?e.message:'设备终端启动失败。');throw e;}
  }
- private state(s:Session,state:string,error?:string){this.emit(s.owner,{type:'connection.state',connectionId:s.descriptor.connectionId,profileId:s.descriptor.connectionId,generation:1,state,error});}
+ private state(s:Session,state:string,error?:string,disconnect?:TerminalDisconnect){this.emit(s.owner,{type:'connection.state',connectionId:s.descriptor.connectionId,profileId:s.descriptor.connectionId,generation:1,state,error,disconnect});}
  private receive(s:Session,data:Buffer){
   if(s.closing||!data.length)return;
   if(s.queued+s.outstanding+data.length>1048576){void this.finish(s,'终端输出超过缓冲上限，已关闭会话。');return;}
@@ -58,13 +59,14 @@ export class DeviceTerminals {
  }
  resize(owner:string,id:string,generation:number,cols:number,rows:number){const s=this.get(owner,id);if(generation!==1)throw new AppError('IPC005','终端版本已改变。');if(!s.ended)s.driver?.resize(cols,rows);}
  cwd(owner:string,id:string){this.get(owner,id);return {path:null,reason:'本地和串口终端不提供远程 SFTP 目录跟随。'};}
- async close(owner:string,id:string){const s=this.sessions.get(id);if(!s)return;if(s.owner!==owner)throw new AppError('IPC005','无权关闭终端。');await this.finish(s);}
- private finish(s:Session,error?:string):Promise<void>{
+ async close(owner:string,id:string){const s=this.sessions.get(id);if(!s)return;if(s.owner!==owner)throw new AppError('IPC005','无权关闭终端。');await this.finish(s,undefined,'user');}
+ private finish(s:Session,error?:string,reason:'exit'|'user'='exit'):Promise<void>{
   if(s.closing)return s.closing;
   // Defer cleanup so the promise is stored before synchronous driver callbacks.
   s.closing=Promise.resolve().then(async()=>{s.queue=[];s.queued=0;s.pending.clear();
-   this.state(s,error?'failed':'closed',error);if(error)this.emit(s.owner,{type:'service.error',message:error});
-   this.emit(s.owner,{type:'terminal.closed',terminalId:s.descriptor.terminalId});
+   const disconnect:TerminalDisconnect={reason:error?'error':reason,at:Date.now(),error};
+   this.state(s,error?'failed':'closed',error,disconnect);if(error)this.emit(s.owner,{type:'service.error',message:error});
+   this.emit(s.owner,{type:'terminal.closed',terminalId:s.descriptor.terminalId,generation:1,disconnect});
    try{await s.driver?.close();}catch{this.emit(s.owner,{type:'service.error',message:'设备终端释放失败，请核对设备状态。'});}finally{this.sessions.delete(s.descriptor.terminalId);}
   });return s.closing;
  }

@@ -33,7 +33,7 @@ describe('real loopback SSH / SFTP',()=>{
    h.terminals.attach('a',first.terminalId);h.server.disconnect();
    await waitFor(()=>h.events.filter(e=>e.type==='terminal.closed').length===2);
    for(const id of [first.terminalId,background.terminalId]){
-    expect(h.events.filter(e=>e.type==='terminal.closed'&&e.terminalId===id)).toHaveLength(1);
+    expect(h.events.filter(e=>e.type==='terminal.closed'&&e.terminalId===id)).toEqual([expect.objectContaining({disconnect:{reason:'remote',at:expect.any(Number)}})]);
     expect(()=>h.terminals.write('a',id,1,1,'must not execute')).toThrow();
    }
    expect(h.events.some(e=>e.type==='connection.state'&&e.connectionId===lease.connectionId&&e.state==='closed')).toBe(true);
@@ -48,9 +48,19 @@ describe('real loopback SSH / SFTP',()=>{
    const lease=await h.connections.acquire('a',h.profile.profileId),terminal=await h.terminals.create('a',lease.connectionId,80,24);
    const client=h.connections.get('a',lease.connectionId).client;
    expect(()=>client.emit('error',new Error('Keepalive timeout'))).not.toThrow();
-   expect(h.events.filter(e=>e.type==='terminal.closed'&&e.terminalId===terminal.terminalId)).toHaveLength(1);
+   expect(h.events.filter(e=>e.type==='terminal.closed'&&e.terminalId===terminal.terminalId)).toEqual([
+    expect.objectContaining({generation:1,disconnect:{reason:'error',at:expect.any(Number),error:'Keepalive timeout'}})
+   ]);
    expect(()=>h.terminals.inspect('a',terminal.terminalId)).toThrow();
    expect(()=>h.connections.get('a',lease.connectionId)).toThrow();
+  }finally{await h.close();}
+ });
+ it('distinguishes a manual shell disconnect while keeping another shell alive',async()=>{
+  const h=await harness();try{
+   const lease=await h.connections.acquire('a',h.profile.profileId),first=await h.terminals.create('a',lease.connectionId,80,24),second=await h.terminals.create('a',lease.connectionId,80,24);
+   h.terminals.close('a',first.terminalId);h.terminals.close('a',first.terminalId);
+   expect(h.events.filter(e=>e.type==='terminal.closed'&&e.terminalId===first.terminalId)).toEqual([expect.objectContaining({disconnect:{reason:'user',at:expect.any(Number)}})]);
+   expect(h.terminals.inspect('a',second.terminalId)).toEqual({generation:1});
   }finally{await h.close();}
  });
  it('verifies uploads remotely without downloading the uploaded bytes and downloads only once',async()=>{

@@ -3,6 +3,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import type { Storage } from '../../packages/storage/database';
 import type { Profile, HornetEvent, Lease } from '../../packages/contracts';
 import { AppError } from '../../packages/core/errors';
+import type { TerminalDisconnect } from '../../packages/contracts/terminal-disconnect';
 import { Challenges } from '../../packages/security/challenges';
 
 interface Connection {
@@ -19,8 +20,8 @@ export class Connections {
   private routingProfiles=new Map<string,number>();
   private reservedHops=0;
   private controllers=new Map<AbortController,string>();
-  private closedListeners=new Set<(owner:string,connectionId:string)=>void>();
-  onClosed(listener:(owner:string,connectionId:string)=>void){this.closedListeners.add(listener);return()=>{this.closedListeners.delete(listener);};}
+  private closedListeners=new Set<(owner:string,connectionId:string,disconnect:TerminalDisconnect)=>void>();
+  onClosed(listener:(owner:string,connectionId:string,disconnect:TerminalDisconnect)=>void){this.closedListeners.add(listener);return()=>{this.closedListeners.delete(listener);};}
   constructor(private store:Storage,public challenges:Challenges,private emit:(owner:string,event:HornetEvent)=>void, private cachedSecret:(owner:string,profile:Profile)=>Promise<string|undefined> = async()=>undefined, private idleMs=60000,private connectTimeoutMs=110000) {}
   private key(owner:string,p:Profile) { return owner+':'+p.profileId+':'+p.revision; }
   async acquire(owner:string,profileId:string):Promise<Lease> {
@@ -65,15 +66,15 @@ export class Connections {
   close(owner:string,id:string,generation:number) {
     const c=this.get(owner,id);
     if(c.generation!==generation) throw new AppError('IPC005','连接版本已失效。');
-    this.drop(c);c.client.end();
+    this.drop(c,{reason:'user',at:Date.now()});c.client.end();
   }
   hasProfile(id:string) {return this.routingProfiles.has(id)||[...this.items.values()].some(c=>c.profile.profileId===id)||[...this.opening.keys()].some(k=>k.includes(id));}
-  private drop(c:Connection) {
+  private drop(c:Connection,disconnect:TerminalDisconnect={reason:'remote',at:Date.now()}) {
     if(!this.items.has(c.id)) return;
     clearTimeout(c.idle);this.items.delete(c.id);
     for(const id of c.leases)this.leases.delete(id);
-    for(const listener of this.closedListeners)listener(c.owner,c.id);
-    this.emit(c.owner,{type:'connection.state',connectionId:c.id,profileId:c.profile.profileId,generation:c.generation,state:'closed'});
+    for(const listener of this.closedListeners)listener(c.owner,c.id,disconnect);
+    this.emit(c.owner,{type:'connection.state',connectionId:c.id,profileId:c.profile.profileId,generation:c.generation,state:'closed',disconnect});
     c.socket?.destroy();if(c.upstream)this.release(c.owner,c.upstream.leaseId);
   }
   async sftp(owner:string,id:string):Promise<SFTPWrapper> {
@@ -152,7 +153,7 @@ export class Connections {
       signal.addEventListener('abort',cancel,{once:true});
       client.on('error',(err:Error & {level?:string})=>{
         if(!settled)fail(new AppError(rejectedTrust?'SSH003':err.level==='client-authentication'?'SSH002':'SSH001',rejectedTrust?'主机密钥未通过验证。':err.level==='client-authentication'?'SSH 认证失败。':'无法建立 SSH 连接。'));
-        else {this.drop(c);client.destroy();}
+        else {this.drop(c,{reason:'error',at:Date.now(),error:err.message.slice(0,1000)});client.destroy();}
       });
       client.on('end',()=>{if(!settled)fail(new AppError('SSH006','SSH 连接提前关闭。'));else{this.drop(c);client.destroy();}});
       client.on('close',()=>{ if(!settled)fail(new AppError('SSH006','SSH 连接提前关闭。'));else this.drop(c); });

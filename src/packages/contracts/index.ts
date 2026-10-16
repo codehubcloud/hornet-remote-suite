@@ -126,9 +126,9 @@ export type HornetEvent =
   | { type: 'tunnel.state'; tunnel: TunnelSnapshot }
   | { type: 'challenge'; challengeId: string; kind: 'password'|'privateKey'|'passphrase'|'keyboard'|'trust'; profileId: string; title: string; message: string; echo?: boolean }
   | { type: 'challenge.closed'; challengeId: string }
-  | { type: 'connection.state'; connectionId: string; profileId: string; generation: number; state: string; error?: string }
+  | { type: 'connection.state'; connectionId: string; profileId: string; generation: number; state: string; error?: string; disconnect?: import('./terminal-disconnect').TerminalDisconnect }
   | { type: 'terminal.data'; terminalId: string; generation: number; seq: number; data: Uint8Array }
-  | { type: 'terminal.closed'; terminalId: string }
+  | { type: 'terminal.closed'; terminalId: string; generation?:number; disconnect?: import('./terminal-disconnect').TerminalDisconnect }
   | { type: 'task.state'; task: TaskSnapshot }
   | { type: 'service.error'; message: string };
 export interface Layout { profileIds: string[]; activeProfileId?: string }

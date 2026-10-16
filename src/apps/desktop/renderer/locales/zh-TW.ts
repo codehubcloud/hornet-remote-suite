@@ -1,5 +1,12 @@
 // Traditional Chinese application copy; user data is never converted.
 export const traditionalChinese:Record<string,string> = {
+"连接错误：{error}":"連線錯誤：{error}",
+"已主动断开连接。":"已主動中斷連線。",
+"连接异常中断。":"連線異常中斷。",
+"远程主机已关闭连接。":"遠端主機已關閉連線。",
+"终端会话已结束。":"終端工作階段已結束。",
+"已断开会话「{name}」，时间 {time}。":"已中斷工作階段「{name}」，時間 {time}。",
+"选择“重新连接”可建立新的会话。":"選擇「重新連線」可建立新的工作階段。",
 "按钮外观":"按鈕外觀",
 "填充方式":"填滿方式",
 "跟随主题":"跟隨佈景主題",

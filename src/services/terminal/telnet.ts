@@ -23,7 +23,7 @@ export class TelnetTerminals {
   this.sessions.set(id,s);
   this.emit(owner,{type:'connection.state',connectionId:id,profileId:profile.profileId,generation:1,state:'connecting'});
   socket.on('readable',()=>this.flush(s));
-  socket.on('error',()=>this.finish(s,'Telnet 连接失败或已中断。'));
+  socket.on('error',error=>this.finish(s,error.message.slice(0,1000)));
   socket.on('end',()=>{this.flush(s);this.finish(s);});socket.on('close',()=>this.finish(s));
   try{
    await new Promise<void>((resolve,reject)=>{
@@ -58,7 +58,7 @@ export class TelnetTerminals {
  }
  resize(owner:string,id:string,generation:number,cols:number,rows:number){const s=this.get(owner,id);if(generation!==1)throw new AppError('IPC005','终端版本已改变。');try{s.codec.resize(cols,rows);}catch(e){this.finish(s,(e as Error).message);}}
  cwd(owner:string,id:string){this.get(owner,id);return {path:null,reason:'Telnet 不提供 SFTP 目录跟随。'};}
- close(owner:string,id:string){const s=this.sessions.get(id);if(!s)return;if(s.owner!==owner)throw new AppError('IPC005','无权关闭终端。');this.finish(s);}
- private finish(s:Session,error?:string){if(!this.sessions.delete(s.id))return;this.output(s,s.text.end());s.socket.destroy();this.emit(s.owner,{type:'connection.state',connectionId:s.id,profileId:s.profile.profileId,generation:1,state:error?'failed':'closed',error});if(error)this.emit(s.owner,{type:'service.error',message:error});this.emit(s.owner,{type:'terminal.closed',terminalId:s.id});}
+ close(owner:string,id:string){const s=this.sessions.get(id);if(!s)return;if(s.owner!==owner)throw new AppError('IPC005','无权关闭终端。');this.finish(s,undefined,'user');}
+ private finish(s:Session,error?:string,reason:'remote'|'user'='remote'){const disconnect={reason:error?'error' as const:reason,at:Date.now(),error};if(!this.sessions.delete(s.id))return;this.output(s,s.text.end());s.socket.destroy();this.emit(s.owner,{type:'connection.state',connectionId:s.id,profileId:s.profile.profileId,generation:1,state:error?'failed':'closed',error,disconnect});if(error)this.emit(s.owner,{type:'service.error',message:error});this.emit(s.owner,{type:'terminal.closed',terminalId:s.id,generation:1,disconnect});}
  stop(){this.stopped=true;for(const s of [...this.sessions.values()])this.finish(s);}
 }
