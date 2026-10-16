@@ -513,3 +513,13 @@ SSH 的 DNS/TCP 建连、跳板转发和握手/服务端认证响应设置独立
 - npm run test:clipboard：复制粘贴、分屏目标、右键菜单、键盘操作、多行取消及断线输入保护通过。
 
 测试使用隔离临时用户目录和本机夹具。本轮没有构建或发布新安装包，也没有移动已有 v0.0.13 标签；之前 v0.0.13 草稿中的 Windows 包不包含本轮新增功能。
+
+## 2026-10-16：本地依赖恢复与安装包构建
+
+`npm ci` 清理依赖时遇到 `default_app.asar` 文件锁，导致后续找不到 TypeScript、esbuild 和 Playwright。Windows Restart Manager 识别占用者为 VS Code 的辅助进程。没有结束编辑器；在 `.tools/dependency-repair-20261016` 按相同 lockfile 完整安装依赖并校验下载的 Electron 44.4.5 运行时，确认被占用 ASAR 的 SHA-256 与新运行时一致后保留该文件并恢复其他依赖。没有修改用户应用数据。
+
+新增 `prepare:runtime`，本地 `package` / `package:dir` 和 CI 平台构建显式准备 Electron 运行时。打包配置支持 `HORNET_PACKAGE_OUTPUT` 指定独立输出目录；文档补充 PowerShell 外部命令失败停止、文件锁和下载排查。旧 `src/release/win-unpacked/resources/app.asar` 也被占用，本次使用新目录，验收通过 `HORNET_PACKAGED_EXECUTABLE` 指向实际新产物。
+
+验证：`npm run check`（43 文件 / 213 用例、类型、语言和构建）、`npm run test:release`（2 项）、`npm run package` 的目标 Electron 原生模块验证及包内容审计通过；`npm run test:package` 使用隔离数据，验证历史 LF 数据库及既有配置、沙箱 preload、后台进程、真实回环 SSH/SFTP 和 Windows 原生辅助程序通过。没有运行安装器修改本机安装状态。
+
+本地安装包：`.tools/local-package-20261016/Hornet-Remote-Suite-0.0.13-windows-x64.exe`，104548361 字节；SHA-256：`2b7ebd832f0d7ff090aedd27cbd48c86d9c2175ac057b0fa744d511605eeecef`。它包含最新连接失败提示改动，与之前已验证的 v0.0.13 草稿包是不同产物；本轮未更改标签、草稿附件或公开版本，也未触发 GitHub Actions。

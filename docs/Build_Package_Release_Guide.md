@@ -41,6 +41,8 @@
 - Linux 打包及无界面验收所需依赖见工作流的安装步骤：`libarchive-tools`、`libfuse2`、`libgtk-3-0`、`libnss3`、`libasound2-dev`、`xvfb`。
 - 首次安装和打包需要能访问 npm、Electron 及打包工具下载源。不要跨平台复制已安装的 `node_modules`。
 
+重新执行 `npm ci` 前，先退出从本仓库启动的 Hornet、Electron 测试和调试进程。若 `default_app.asar` 仍被占用，VS Code 的辅助进程或 ASAR 查看扩展也可能持有文件；完全退出 VS Code 后，从独立 PowerShell 窗口重试。`npm ci` 会先清理旧依赖，中断后即使 `node_modules` 目录还存在，依赖也可能已不完整。
+
 Windows PowerShell 中使用 `npm.cmd` 和 `npx.cmd`，避免被 PowerShell 的 `.ps1` 执行策略阻止。如果使用仓库本机的便携 Node，可在仓库根目录执行：
 
 ```powershell
@@ -58,8 +60,13 @@ Set-Location src
 
 ```powershell
 npm.cmd ci
+if ($LASTEXITCODE -ne 0) { throw '依赖安装失败，停止编译；先解决文件占用或网络错误，再重新执行 npm ci。' }
+npm.cmd run prepare:runtime
+if ($LASTEXITCODE -ne 0) { throw 'Electron 运行时准备失败，检查下载网络后重试。' }
 npm.cmd run check
+if ($LASTEXITCODE -ne 0) { throw '源码检查失败，停止打包。' }
 npm.cmd run test:release
+if ($LASTEXITCODE -ne 0) { throw '发布配置检查失败，停止运行。' }
 npm.cmd start
 ```
 
@@ -86,7 +93,9 @@ npm.cmd start
 
 ```powershell
 npm.cmd run package
+if ($LASTEXITCODE -ne 0) { throw '打包失败，停止安装包验收。' }
 npm.cmd run test:package
+if ($LASTEXITCODE -ne 0) { throw '安装包验收失败。' }
 $env:HORNET_SMOKE_SCHEMA_EOL = 'crlf'
 try {
     npm.cmd run test:package
@@ -101,9 +110,28 @@ npm.cmd run test:xshell-workspace:package
 npm.cmd run test:help:package
 ```
 
-`package` 先执行 `build:release`，再使用 electron-builder 构建 NSIS EXE；`--publish never` 禁止打包工具自行发布。只想检查解包后的应用时，使用 `npm.cmd run package:dir`，不会生成安装程序。
+`package` 先执行 `prepare:runtime` 确保锁定版本的 Electron 运行时存在，再执行 `build:release`，最后使用 electron-builder 构建 NSIS EXE；`--publish never` 禁止打包工具自行发布。运行时已安装时不会重复下载；安装器按 Electron 包内置的校验摘要验证下载。只想检查解包后的应用时，使用 `npm.cmd run package:dir`，不会生成安装程序。
+
+PowerShell 5.1 不会因为外部命令返回非零退出码自动停止后续命令，设置 `$ErrorActionPreference = 'Stop'` 也不能替代上面的 `$LASTEXITCODE` 检查。某一步失败后，应先解决该错误，不要继续执行打包或验收。
 
 默认输出包括 `release/win-unpacked/Hornet Remote Suite.exe` 和 `release/Hornet-Remote-Suite-<版本>-windows-x64.exe`。NSIS 支持选择安装目录及创建快捷方式，配置中不删除用户应用数据。
+
+若旧打包目录中的 `app.asar` 被占用，且暂时不便退出编辑器，可在 `src` 下为本次打包指定新的输出目录。对应的验收也须指向该目录，避免检查旧程序：
+
+```powershell
+$env:HORNET_PACKAGE_OUTPUT = '..\.tools\local-package'
+try {
+    npm.cmd run package
+    if ($LASTEXITCODE -ne 0) { throw '打包失败。' }
+    $env:HORNET_PACKAGED_EXECUTABLE = (Resolve-Path '..\.tools\local-package\win-unpacked\Hornet Remote Suite.exe').Path
+    npm.cmd run test:package
+    if ($LASTEXITCODE -ne 0) { throw '安装包验收失败。' }
+} finally {
+    Remove-Item Env:HORNET_PACKAGE_OUTPUT,Env:HORNET_PACKAGED_EXECUTABLE -ErrorAction SilentlyContinue
+}
+```
+
+该示例的安装程序位于仓库根目录 `.tools/local-package/`；若该目录也有运行中的程序，应另选新的目录或先关闭对应进程。
 
 ### 5.2 macOS 和 Linux
 
@@ -111,6 +139,7 @@ npm.cmd run test:help:package
 
 ```sh
 npm ci
+npm run prepare:runtime
 npm run check
 npm run test:release
 npm run build:release
@@ -296,7 +325,9 @@ Get-FileHash './Hornet-Remote-Suite-0.0.4-windows-x64.exe' -Algorithm SHA256
 | 原生模块检查失败 | 确认本机 OS/CPU 与目标一致、使用 Node 24，并在该目标重新 npm ci；不要从其他系统复制依赖或禁用检查 |
 | Windows NativeHost 编译失败 | 检查 build.mjs 使用的 Framework64 csc.exe 及系统 .NET 环境 |
 | DEB 打包缺少元数据 | 检查 package.json 的 homepage 和打包配置的 maintainer，不移除当前必需字段 |
-| 文件被占用 / EBUSY | 关闭使用本次构建输出的测试程序或解包应用，再打包；不要删除用户安装目录或用户数据来解决构建输出占用 |
+| 文件被占用 / EBUSY | `node_modules/electron/dist/resources/default_app.asar` 被占用时，先退出本仓库启动的 Hornet、测试或调试进程；若占用来自 VS Code，完全退出编辑器后在独立 PowerShell 中重跑 `npm ci`。构建输出被占用时关闭对应测试程序或解包应用，再打包；不要删除用户安装目录或用户数据 |
+| `tsc` 不是命令，或找不到 `esbuild` / `@playwright/test` | 通常是 `npm ci` 失败后依赖已被部分清理。先解除占用或解决安装错误，再完整执行 `npm ci`，退出码为 0 后继续 `check` 和 `package`；不要通过全局安装这些工具或删除 lockfile 绕过问题 |
+| Electron 运行时下载失败或长时间没有进度 | 检查终端访问 GitHub 下载地址的网络；可在当前 PowerShell 会话设置 `$env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'` 后重试 `npm.cmd run prepare:runtime`。仍使用锁定版本及包内置摘要校验，不关闭校验；结束后可删除该环境变量 |
 | 安装包不完整或含额外文件 | 根据 expectedAssets 清单检查附件名和版本；所有七个目标齐全后才能发布 |
 | GitHub 发布权限错误 | 检查私有仓库 RELEASE_TOKEN 是否配置、过期，以及其对公开仓库的发布权限；不要把令牌打印到日志 |
 | 上传中断 | Release 保持草稿；原提交无需修改时可在同一个 Actions run 中重跑失败任务。发布脚本会删除草稿旧附件，再完整上传 |

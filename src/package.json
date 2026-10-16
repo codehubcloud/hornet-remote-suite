@@ -6,6 +6,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node tools/build.mjs",
+    "prepare:runtime": "node node_modules/electron/install.js",
     "prepare:icons": "node tools/prepare-icons.mjs",
     "start": "node tools/start.mjs",
     "dev": "npm run build && node tools/start.mjs",
@@ -31,8 +32,8 @@
     "test:terminal-automation": "node tools/terminal-automation-smoke.mjs",
     "test:file-sync": "node tools/file-sync-smoke.mjs",
     "build:release": "node tools/build.mjs --release",
-    "package": "npm run build:release && electron-builder --config electron-builder.cjs --publish never",
-    "package:dir": "npm run build:release && electron-builder --config electron-builder.cjs --dir --publish never",
+    "package": "npm run prepare:runtime && npm run build:release && electron-builder --config electron-builder.cjs --publish never",
+    "package:dir": "npm run prepare:runtime && npm run build:release && electron-builder --config electron-builder.cjs --dir --publish never",
     "test:package": "node tools/package-smoke.mjs",
     "test:release": "node --test tests/release/*.test.mjs",
     "test:clipboard": "node tools/terminal-clipboard-smoke.mjs",

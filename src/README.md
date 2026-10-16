@@ -19,7 +19,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\src\run.ps1
 ```powershell
 cd src
 npm ci
-node node_modules/electron/install.js
+npm run prepare:runtime
 npm run dev
 ```
 

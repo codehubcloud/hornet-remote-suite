@@ -88,6 +88,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libarchive-tools libfuse2 libgtk-3-0 libnss3 libasound2-dev xvfb
       - run: npm ci
+      - run: npm run prepare:runtime
       - run: npm run build:release
       - name: Build installers without automatic publishing
         run: npx --no-install electron-builder --config electron-builder.cjs --${{ matrix.platform }} --${{ matrix.arch }} --publish never
