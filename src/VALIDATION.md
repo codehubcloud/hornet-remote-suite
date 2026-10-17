@@ -535,3 +535,11 @@ SSH 的 DNS/TCP 建连、跳板转发和握手/服务端认证响应设置独立
 `npm run test:release`（2 项）、`npm run package`、`npm run test:package` 通过。安装包启动验收使用隔离用户目录，验证历史 LF 数据库和既有配置、沙箱 preload、后台进程、真实 SSH/SFTP 及 Windows 原生辅助程序。连接失败界面验收新增 `HORNET_PACKAGED_EXECUTABLE` 支持，并指向本次打包程序执行 `npm run test:connection-failure`：拒绝连接、约 10.3 秒无响应超时、同标签恢复，以及底部连接中、失败、已连接、断开和重连的状态切换均通过。
 
 安装包：`.tools/local-package-20261016-2330/Hornet-Remote-Suite-0.0.13-windows-x64.exe`，104548872 字节；SHA-256：`57df84cb04be300e3e7cee4c8385039f58c570cf44a80e03ea5564677e87431d`。这是包含底部状态修复的本地构建；未运行安装器更改用户安装状态，未发布公开附件或移动已有版本标签。
+
+## 2026-10-17：首次启动用户使用指引
+
+新增 12 章离线详细操作指引，覆盖安装、连接及保存认证信息、连接状态、终端、标签分屏、文件与同步、快速命令颜色、日志脚本、图形桌面及转发、界面设置、备份升级与排障。正文提供简体中文、繁体中文及英文；其他语言沿用英文正文，导航及控件提供八种界面语言。支持目录、标题与步骤搜索、空结果、翻章、独立正文滚动、焦点约束和 Escape 关闭。帮助 PDF 复用完整指引内容，提供章节目录和步骤列表。
+
+首次使用先显示指引，用户关闭后记录本机已查看状态，再按既有偏好显示会话窗口；后续重启不重复弹出。没有修改会话窗口原有启动偏好。帮助菜单在各工作区提供“用户使用指引”入口，可随时重看。更新既有用户时首次使用本功能也会显示一次。查看指引不连接服务器、不执行示例命令。
+
+验收通过：`npm run typecheck`、`npm run test:locales`、`npm run build`、`npm test`（43 文件 / 213 用例）、`npm run test:help`、`npm run test:sessions-ui`、`npm run test:connection-failure`。实际 Electron 验证首次顺序、搜索/翻章/键盘焦点、关闭及应用重启后不重复、菜单重开、英文与繁体正文、真实 Chromium PDF 生成；既有会话启动偏好、增删改、目录、真实 SSH 及连接状态回归通过。已检查截图 `test-results/user-guide-first-run.png`。测试使用隔离临时用户目录，未修改用户已安装程序及配置。本轮未生成或发布新安装包。

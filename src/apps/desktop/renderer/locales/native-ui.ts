@@ -344,5 +344,17 @@ export const nativeUi:Record<string,readonly [string,string,string,string,string
   "正在连接 {host}:{port}…": ["{host}:{port} に接続しています…","{host}:{port}에 연결 중…","Verbindung mit {host}:{port} wird hergestellt…","Connexion à {host}:{port}…","Conectando a {host}:{port}…"],
   "连接失败：{error}": ["接続に失敗しました：{error}","연결 실패: {error}","Verbindung fehlgeschlagen: {error}","Échec de la connexion : {error}","Error de conexión: {error}"],
   "正在连接…": ["接続中…","연결 중…","Verbindung wird hergestellt…","Connexion…","Conectando…"],
-  "连接失败": ["接続失敗","연결 실패","Verbindung fehlgeschlagen","Échec de la connexion","Error de conexión"]
+  "连接失败": ["接続失敗","연결 실패","Verbindung fehlgeschlagen","Échec de la connexion","Error de conexión"],
+  "用户使用指引": ["ユーザーガイド","사용 안내","Benutzerhandbuch","Guide utilisateur","Guía de usuario"],
+  "欢迎使用 Hornet Remote Suite。按步骤完成第一次连接。": ["Hornet Remote Suite へようこそ。手順に沿って最初の接続を行いましょう。","Hornet Remote Suite에 오신 것을 환영합니다. 단계에 따라 첫 연결을 시작하세요.","Willkommen bei Hornet Remote Suite. Folgen Sie den Schritten für Ihre erste Verbindung.","Bienvenue dans Hornet Remote Suite. Suivez les étapes pour établir votre première connexion.","Bienvenido a Hornet Remote Suite. Siga los pasos para establecer su primera conexión."],
+  "离线使用指引，可随时从帮助菜单重新打开。": ["ヘルプメニューからいつでも開けるオフラインガイドです。","도움말 메뉴에서 언제든 다시 열 수 있는 오프라인 안내입니다.","Dieses Offline-Handbuch lässt sich jederzeit über das Hilfemenü öffnen.","Un guide hors ligne accessible à tout moment depuis le menu Aide.","Una guía sin conexión que puede volver a abrir desde el menú Ayuda."],
+  "关闭使用指引": ["ガイドを閉じる","사용 안내 닫기","Benutzerhandbuch schließen","Fermer le guide","Cerrar guía"],
+  "搜索使用指引": ["ガイドを検索","사용 안내 검색","Benutzerhandbuch durchsuchen","Rechercher dans le guide","Buscar en la guía"],
+  "搜索章节或操作步骤…": ["章や操作手順を検索…","장 또는 사용 단계 검색…","Kapitel oder Anweisungen suchen…","Rechercher un chapitre ou une instruction…","Buscar capítulos o instrucciones…"],
+  "指引目录": ["ガイドの目次","안내 목차","Inhaltsverzeichnis","Sommaire du guide","Contenido de la guía"],
+  "第 {current} / {total} 章": ["第 {current} / {total} 章","{current} / {total}장","Kapitel {current} / {total}","Chapitre {current} / {total}","Capítulo {current} / {total}"],
+  "没有找到相关内容，请尝试其他关键词。": ["該当する内容がありません。別の検索語をお試しください。","일치하는 내용이 없습니다. 다른 검색어를 사용하세요.","Keine passenden Inhalte. Versuchen Sie einen anderen Suchbegriff.","Aucun résultat. Essayez un autre terme.","No hay resultados. Pruebe otro término."],
+  "上一章": ["前の章","이전 장","Vorheriges Kapitel","Chapitre précédent","Capítulo anterior"],
+  "下一章": ["次の章","다음 장","Nächstes Kapitel","Chapitre suivant","Capítulo siguiente"],
+  "开始使用": ["使い始める","시작하기","Loslegen","Commencer","Comenzar"]
 };

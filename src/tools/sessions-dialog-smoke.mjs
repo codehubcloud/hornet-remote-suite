@@ -4,6 +4,7 @@ import { join,resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
+import { dismissStartupGuide } from './session-dialog-helper.mjs';
 await mkdir('test-results',{recursive:true});
 await build({entryPoints:['tests/fixtures/ssh-server.ts'],outfile:'test-results/sessions-fixture.cjs',bundle:true,platform:'node',format:'cjs',external:['ssh2']});
 const server=await createRequire(import.meta.url)(resolve('test-results/sessions-fixture.cjs')).sshFixture();
@@ -13,6 +14,7 @@ let app;
 try{
  app=await electron.launch({args:['.'],env,timeout:30000});const page=await app.firstWindow();page.setDefaultTimeout(15000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await dismissStartupGuide(page);
  const dialog=page.getByRole('dialog',{name:'会话',exact:true});
  await expect(dialog).toBeVisible();await expect(dialog.getByRole('checkbox')).toBeChecked();
  await page.keyboard.press('Alt+s');await expect(dialog.getByRole('checkbox')).not.toBeChecked();await page.keyboard.press('Alt+s');await expect(dialog.getByRole('checkbox')).toBeChecked();

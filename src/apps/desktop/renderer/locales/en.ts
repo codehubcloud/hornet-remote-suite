@@ -1024,5 +1024,17 @@ export const english:Record<string,string> = {
   "正在连接 {host}:{port}…": "Connecting to {host}:{port}…",
   "连接失败：{error}": "Connection failed: {error}",
   "正在连接…": "Connecting…",
-  "连接失败": "Connection failed"
+  "连接失败": "Connection failed",
+  "用户使用指引": "User Guide",
+  "欢迎使用 Hornet Remote Suite。按步骤完成第一次连接。": "Welcome to Hornet Remote Suite. Follow the steps to make your first connection.",
+  "离线使用指引，可随时从帮助菜单重新打开。": "An offline guide you can reopen from the Help menu at any time.",
+  "关闭使用指引": "Close User Guide",
+  "搜索使用指引": "Search User Guide",
+  "搜索章节或操作步骤…": "Search chapters or instructions…",
+  "指引目录": "Guide Contents",
+  "第 {current} / {total} 章": "Chapter {current} / {total}",
+  "没有找到相关内容，请尝试其他关键词。": "No matching content. Try another search term.",
+  "上一章": "Previous Chapter",
+  "下一章": "Next Chapter",
+  "开始使用": "Get Started"
 };

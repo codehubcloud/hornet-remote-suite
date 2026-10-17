@@ -1,6 +1,7 @@
 import { describe,it,expect,vi } from 'vitest';
 import { checkForUpdates,newerVersion,helpLinks,helpBase } from '../../packages/core/help';
 import { manualHtml,manualSections } from '../../packages/core/help-content';
+import { userGuideSections } from '../../packages/core/user-guide';
 const release=(tag_name='v0.0.12',extra={})=>new Response(JSON.stringify({tag_name,draft:false,prerelease:false,body:'release notes',...extra}));
 describe('application help and release checks',()=>{
  it('compares numeric stable versions without offering downgrades',()=>{
@@ -19,5 +20,11 @@ describe('application help and release checks',()=>{
  it('ships an offline guide covering commands, files, session settings and support without executable content',()=>{
   expect(manualSections('zh-CN')).toHaveLength(8);expect(manualSections('de')[0].title).toBe('Connections and authentication');
   const html=manualHtml('en','<script>');expect(html).toContain('&lt;script&gt;');expect(html).not.toContain('<script>');expect(html).toContain("default-src 'none'");expect(html).toContain('Quick commands');
+  for(const language of ['zh-CN','zh-TW','en','ja','ko','de','fr','es']){
+   const sections=userGuideSections(language),pdf=manualHtml(language,'0.0.13');
+   expect(sections).toHaveLength(12);expect(new Set(sections.map(s=>s.id)).size).toBe(sections.length);
+   for(const section of sections){expect(section.steps.length).toBeGreaterThanOrEqual(3);expect(pdf).toContain(`id="guide-${section.id}"`);expect(pdf).toContain(section.title);}
+  }
+  expect(userGuideSections('zh-TW')[0].title).toContain('安裝');expect(userGuideSections('en')[0].title).toContain('Installation');
  });
 });
