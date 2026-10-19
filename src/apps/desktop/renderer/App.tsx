@@ -13,6 +13,7 @@ import { SessionCommands } from './SessionCommands';
 import { SessionsDialog } from './SessionsDialog';
 import { showStartupSessions } from './session-dialog-preferences';
 import { UserGuideDialog } from './UserGuideDialog';
+import { UserTour } from './UserTour';
 import { acknowledgeUserGuide,showFirstRunGuide } from './user-guide-preferences';
 import { TaskCenter } from './TaskCenter';
 import { TerminalTitleMenu,showTerminalMenu } from './TerminalTitleMenu';
@@ -34,6 +35,8 @@ export function App(){
  const [sessionsOpen,setSessionsOpen]=useState(showStartupSessions),[profilesLoading,setProfilesLoading]=useState(true);
  const [guide,setGuide]=useState<'startup'|'manual'|null>(()=>showFirstRunGuide()?'startup':null);
  function closeGuide(){acknowledgeUserGuide();setGuide(null);}
+ const [tourOpen,setTourOpen]=useState(false);
+ function startTour(){acknowledgeUserGuide();setGuide(null);setTourOpen(true);}
  const [connectOnSave,setConnectOnSave]=useState(false);
  const [revealGroup,setRevealGroup]=useState('');
  const [extraGroups,setExtraGroups]=useState(readGroups),[groupParent,setGroupParent]=useState<string|null>(null);
@@ -83,7 +86,7 @@ export function App(){
   {common&&<button className="chrome-toggle" onClick={toggleChrome} aria-expanded={!collapsed} title={collapsed?tr("展开工具栏"):tr("折叠工具栏")} aria-label={collapsed?tr("展开工具栏"):tr("折叠工具栏")}>{collapsed?'⌄':'⌃'}</button>}
  </nav>;}
  return <div className={collapsed?"app-shell chrome-collapsed":"app-shell"}>
-  <SessionCommands recent={recent} edit={p=>{setConnectOnSave(false);setForm(p);}} hostsVisible={hostsVisible} toggleHosts={()=>{if(active?.kind==='terminal')setShowHosts(!showHosts);else setHostsHidden(!hostsHidden);}} openTool={openTool} toolTabs={toolTabs} closeTool={closeTool} create={fields=>{setConnectOnSave(Boolean(fields));setForm({...fresh(),...fields});}} connect={p=>void connect(p,'terminal')} close={close} hosts={()=>setSessionsOpen(true)} userGuide={()=>setGuide('manual')} toggleChrome={toggleChrome} collapsed={collapsed} pending={pending}/>
+  <SessionCommands recent={recent} edit={p=>{setConnectOnSave(false);setForm(p);}} hostsVisible={hostsVisible} toggleHosts={()=>{if(active?.kind==='terminal')setShowHosts(!showHosts);else setHostsHidden(!hostsHidden);}} openTool={openTool} toolTabs={toolTabs} closeTool={closeTool} create={fields=>{setConnectOnSave(Boolean(fields));setForm({...fresh(),...fields});}} connect={p=>void connect(p,'terminal')} close={close} hosts={()=>setSessionsOpen(true)} userGuide={()=>setGuide('manual')} userTour={startTour} toggleChrome={toggleChrome} collapsed={collapsed} pending={pending}/>
   <div className="app-body"><aside className="sidebar" style={{display:hostsVisible?'flex':'none'}}>
    <div className="section-heading"><span>{tr("连接管理")}</span><button title={tr("新建分组")} aria-label={tr("新建分组")} onClick={()=>setGroupParent('')}>⊞</button><button title={tr("新建连接")} aria-label={tr("新建连接")} onClick={()=>setForm(fresh())}>＋</button></div>
    <input className="search" aria-label={tr("搜索主机")} placeholder={tr("搜索名称、主机或分组…")} value={query} onChange={e=>setQuery(e.target.value)}/>
@@ -103,9 +106,10 @@ export function App(){
   </main></div>
   <footer className={'statusbar'+(active?.kind==='terminal'?' has-session-properties':'')}><span className="workspace-status"><i className="status-dot"/>{tr("本地工作区")}</span>{active?.kind==='terminal'?<CurrentSessionProperties edit={p=>{setConnectOnSave(false);setForm(p);}}/>:<><span>{active?(active.profile.username?active.profile.username+'@':'')+active.profile.host:tr("核心功能不依赖云账号")}</span><span>SSH / SFTP / FTP / FTPS / Telnet · Windows</span></>}</footer>
   <TerminalTitleMenu/>
-  {guide&&<UserGuideDialog firstRun={guide==='startup'} close={closeGuide}/>}
+  {guide&&<UserGuideDialog firstRun={guide==='startup'} close={closeGuide} tour={startTour}/>}
+  {tourOpen&&<UserTour close={()=>setTourOpen(false)} manual={()=>{setTourOpen(false);setGuide('manual');}}/>}
   <QuickCommandHost/><AutoReconnect/>
-  {sessionsOpen&&!guide&&<SessionsDialog profiles={s.profiles} groups={groups} pending={pending} loading={profilesLoading} suspended={Boolean(form)||groupParent!==null||Boolean(s.challenges[0])} error={s.error} close={()=>setSessionsOpen(false)} create={group=>{setConnectOnSave(false);setForm({...fresh(),group});}} edit={p=>{setConnectOnSave(false);setForm(p);}} clone={p=>{setConnectOnSave(false);setForm({...p,profileId:crypto.randomUUID(),revision:0,name:p.name+tr(' 副本')});}} remove={p=>void remove(p)} connect={p=>{setSessionsOpen(false);void connect(p,'terminal');}} newGroup={setGroupParent} refresh={()=>refreshProfiles().catch(s.fail)}/>}
+  {sessionsOpen&&!guide&&!tourOpen&&<SessionsDialog profiles={s.profiles} groups={groups} pending={pending} loading={profilesLoading} suspended={Boolean(form)||groupParent!==null||Boolean(s.challenges[0])} error={s.error} close={()=>setSessionsOpen(false)} create={group=>{setConnectOnSave(false);setForm({...fresh(),group});}} edit={p=>{setConnectOnSave(false);setForm(p);}} clone={p=>{setConnectOnSave(false);setForm({...p,profileId:crypto.randomUUID(),revision:0,name:p.name+tr(' 副本')});}} remove={p=>void remove(p)} connect={p=>{setSessionsOpen(false);void connect(p,'terminal');}} newGroup={setGroupParent} refresh={()=>refreshProfiles().catch(s.fail)}/>}
   {form&&<ProfileDialog groups={groups} profile={form} connectOnSave={connectOnSave} saved={(p,shouldConnect)=>{if(shouldConnect)void connect(p,'terminal');}} close={()=>{setForm(null);setConnectOnSave(false);}}/>}
   {groupParent!==null&&<GroupDialog parent={groupParent} groups={groups} close={()=>setGroupParent(null)} save={path=>{const next=[...extraGroups,path];try{localStorage.setItem('hornet.connection.groups',JSON.stringify(next));setExtraGroups(next);setRevealGroup(path);setGroupParent(null);setQuery('');}catch(e){s.fail(e);}}}/>}
   {s.challenges[0]&&<ChallengeDialog key={s.challenges[0].challengeId} challenge={s.challenges[0]}/>}

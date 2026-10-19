@@ -3,7 +3,7 @@ import { userGuideSections } from '../../../packages/core/user-guide';
 import { useAppearance } from './appearance';
 import { t } from './i18n';
 
-export function UserGuideDialog({firstRun,close}:{firstRun:boolean;close:()=>void}){
+export function UserGuideDialog({firstRun,close,tour}:{firstRun:boolean;close:()=>void;tour:()=>void}){
  const language=useAppearance(s=>s.value.language),sections=userGuideSections(language);
  const [selected,setSelected]=useState(sections[0].id),[query,setQuery]=useState(''),[pdfBusy,setPdfBusy]=useState(false),[pdfError,setPdfError]=useState(false);
  const root=useRef<HTMLElement>(null),search=useRef<HTMLInputElement>(null),article=useRef<HTMLElement>(null),closeRef=useRef(close);closeRef.current=close;
@@ -29,6 +29,6 @@ export function UserGuideDialog({firstRun,close}:{firstRun:boolean;close:()=>voi
   <div className="user-guide-body"><nav aria-label={t('指引目录')}>{filtered.map((s,i)=><button key={s.id} type="button" aria-current={current?.id===s.id?'page':undefined} onClick={()=>setSelected(s.id)}>{i+1}. {s.title}</button>)}</nav>
    <article ref={article} tabIndex={0} aria-label={current?.title??t('用户使用指引')}>{current?<><p className="muted">{t('第 {current} / {total} 章',{current:index+1,total:filtered.length})}</p><h3>{current.title}</h3><ol>{current.steps.map((step,i)=><li key={i}>{step}</li>)}</ol></>:<p role="status">{t('没有找到相关内容，请尝试其他关键词。')}</p>}</article></div>
   {pdfError&&<p role="alert">{t('无法打开帮助 PDF，请检查系统 PDF 查看器后重试。')}</p>}
-  <div className="modal-actions"><button disabled={pdfBusy} onClick={()=>void openPdf()}>{pdfBusy?t('正在生成并打开帮助 PDF…'):t('打开帮助PDF')}</button><span className="user-guide-page-actions"><button disabled={index<=0} onClick={()=>setSelected(filtered[index-1].id)}>{t('上一章')}</button><button disabled={index<0||index>=filtered.length-1} onClick={()=>setSelected(filtered[index+1].id)}>{t('下一章')}</button></span><button className="primary" onClick={close}>{firstRun?t('开始使用'):t('关闭')}</button></div>
+  <div className="modal-actions"><button disabled={pdfBusy} onClick={()=>void openPdf()}>{pdfBusy?t('正在生成并打开帮助 PDF…'):t('打开帮助PDF')}</button><button onClick={tour}>{t('开始分步引导')}</button><span className="user-guide-page-actions"><button disabled={index<=0} onClick={()=>setSelected(filtered[index-1].id)}>{t('上一章')}</button><button disabled={index<0||index>=filtered.length-1} onClick={()=>setSelected(filtered[index+1].id)}>{t('下一章')}</button></span><button className="primary" onClick={close}>{firstRun?t('开始使用'):t('关闭')}</button></div>
  </section></div>;
 }

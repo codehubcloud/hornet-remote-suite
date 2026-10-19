@@ -1036,5 +1036,22 @@ export const english:Record<string,string> = {
   "没有找到相关内容，请尝试其他关键词。": "No matching content. Try another search term.",
   "上一章": "Previous Chapter",
   "下一章": "Next Chapter",
-  "开始使用": "Get Started"
+  "开始使用": "Get Started",
+  "分步使用引导": "Guided Tour",
+  "开始分步引导": "Start Guided Tour",
+  "上一步": "Back",
+  "完成引导": "Finish Tour",
+  "跳过引导": "Skip Tour",
+  "第 {current} / {total} 步": "Step {current} / {total}",
+  "该区域当前隐藏，结束引导后可从顶部菜单或工具栏打开。": "This area is currently hidden. Open it from the top menu or toolbar after the tour.",
+  "接下来会逐一介绍常用操作区域。点击“下一步”继续，也可以随时返回或跳过；引导不会连接服务器或执行命令。": "This tour introduces the main areas of the app. Click Next to continue, or go back or skip at any time. The tour does not connect to servers or execute commands.",
+  "从这里新建连接，填写主机、端口、用户名和密码，也可以选择私钥。保存后可重复使用；首次连接请核对服务器指纹。": "Create a connection here with a host, port, username and password, or choose a private key. Save it for future use, and verify the server fingerprint on first connection.",
+  "左侧保存并管理已有连接，可分组、搜索和编辑。双击会话打开连接，Alt＋O 可打开会话窗口。": "Manage saved connections on the left. Group, search and edit profiles, or double-click one to connect. Alt + O opens the sessions window.",
+  "在地址栏输入会话名称或 user@host:port 快速连接。Alt＋D 可聚焦地址栏，例如 tester@192.168.1.10:22。": "Enter a saved session name or user@host:port in the address bar. Alt + D focuses it; for example, tester@192.168.1.10:22.",
+  "连接成功后在这里操作终端。选中文字可右键复制，Ctrl＋Shift＋V 粘贴，Ctrl＋滚轮调整字号；底部状态区分连接中、已连接和已断开。": "Your terminal appears here after connecting. Select text and right-click to copy, use Ctrl + Shift + V to paste, and Ctrl + wheel to resize the font. The footer distinguishes connecting, connected and disconnected states.",
+  "SSH 连接后可打开 SFTP 文件栏上传下载。任务中心显示传输及校验进度，请等待最终完成状态；覆盖或同步前核对方向与目标目录。": "After SSH connects, use the SFTP sidebar to upload and download. Task Center shows transfer and verification progress; wait for completion. Check the direction and destination before overwriting or syncing files.",
+  "在“查看 → 快速命令”管理常用命令，添加按钮并设置颜色。发送前核对当前终端，勾选回车会立即执行命令。": "Manage commands under View → Quick Commands, add buttons and set their colors. Check the active terminal before sending. Enabling Enter executes the command immediately.",
+  "从这里切换界面语言和主题。终端字体与配色可单独设置；右键顶部区域可以调整工具栏的显示与隐藏。": "Change the interface language and theme here. Terminal fonts and colors are separate settings. Right-click the top area to show or hide toolbars.",
+  "帮助菜单可以重新打开分步引导、查阅详细使用指引和离线 PDF，也提供检查更新、技术支持和反馈入口。": "The Help menu reopens this tour and provides the detailed guide, offline PDF, update checks, technical support and feedback.",
+  "引导完成！现在可以新建你的第一个连接。需要复习时，从“帮助 → 分步使用引导”重新开始，或打开详细用户使用指引。": "You are ready to create your first connection. Revisit Help → Guided Tour whenever you need a refresher, or open the detailed User Guide."
 };
