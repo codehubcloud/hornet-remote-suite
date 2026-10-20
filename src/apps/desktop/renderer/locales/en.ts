@@ -100,6 +100,8 @@ export const english:Record<string,string> = {
 "隐藏密码":"Hide password",
 "保存密码":"Save password",
 "已保存密码，留空保持不变。":"A password is saved. Leave blank to keep it.",
+"已保存密码，点击眼睛查看；留空保持不变。":"A password is saved. Click the eye to view it; leave blank to keep it.",
+"无法显示已保存密码。":"The saved password could not be displayed.",
 "密码留空时，在连接时询问。":"Leave blank to be prompted when connecting.",
 "修改主机、端口或用户名后需重新输入密码。":"Enter the password again after changing the host, port or username.",
 "复制SSH渠道":"Duplicate SSH channel",

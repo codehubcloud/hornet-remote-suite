@@ -8,7 +8,7 @@ on:
       version:
         description: 'Version matching src/package.json, without v'
         required: true
-        default: '0.0.14'
+        default: '0.0.15'
 
 permissions:
   contents: read
@@ -45,6 +45,8 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run test:release
+      - name: Test Windows installer running-app choices and resumed setup
+        run: npm run test:installer
 
   build:
     needs: verify
@@ -95,6 +97,12 @@ jobs:
       - name: Test actual packaged application
         if: runner.os != 'Linux'
         run: npm run test:package
+      - name: Test Windows installer startup confirmation with the packaged app
+        if: runner.os == 'Windows'
+        env:
+          HORNET_PACKAGED_EXECUTABLE: '${{ github.workspace }}/src/release/win-unpacked/Hornet Remote Suite.exe'
+          HORNET_INSTALLER_EXECUTABLE: '${{ github.workspace }}/src/release/Hornet-Remote-Suite-${{ needs.verify.outputs.version }}-windows-x64.exe'
+        run: npm run test:installer:startup
       - name: Test upgrade from the legacy Windows database
         if: runner.os != 'Linux'
         env:
@@ -138,6 +146,12 @@ jobs:
       - name: Test session tab commands and saved credentials on Linux
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:session-tabs:package
+      - name: Test saved password masking and explicit reveal in the packaged app
+        if: runner.os != 'Linux'
+        run: npm run test:profile-password:package
+      - name: Test saved password masking and explicit reveal on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:profile-password:package
       - name: Test quick commands, toolbars and session properties
         if: runner.os != 'Linux'
         run: npm run test:xshell-workspace:package

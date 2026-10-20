@@ -89,6 +89,10 @@ async function setupIpc(){
           const profile=(await backend.call<Profile[]>('profile.list')).find(p=>p.profileId===profileId);
           data={saved:!!profile&&vault.has(profile)};break;
         }
+        case 'profile.revealPassword':{
+          const p=z.object({profileId:z.string().uuid(),expectedRevision:z.number().int().nonnegative()}).strict().parse(m.payload);
+          data=await credentials.revealPassword(p.profileId,p.expectedRevision);break;
+        }
         case 'windowChrome.colors':{
           const color=z.string().regex(/^#[0-9a-f]{6}$/i);
           const colors=z.object({color,symbolColor:color}).strict().parse(m.payload);

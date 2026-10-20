@@ -27,6 +27,7 @@ module.exports = {
   win: { icon:'build/icons/icon.ico', artifactName: 'Hornet-Remote-Suite-${version}-windows-${arch}.${ext}', target: [{ target: 'nsis', arch: ['x64'] }] },
   nsis: {
     oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
+    include: 'build/installer.nsh', runAfterFinish: true,
     createDesktopShortcut: true, createStartMenuShortcut: true,
     shortcutName: 'Hornet Remote Suite', deleteAppDataOnUninstall: false,
     installerIcon:'build/icons/icon.ico',uninstallerIcon:'build/icons/icon.ico',installerHeaderIcon:'build/icons/icon.ico',

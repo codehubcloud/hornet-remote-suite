@@ -62,10 +62,17 @@ try{
  const setGlobalFont=async size=>{await appMenu('工具','选项…');const settings=page.getByRole('dialog',{name:'终端设置',exact:true});await settings.getByLabel('终端字号',{exact:true}).fill(String(size));await settings.getByRole('button',{name:'应用设置',exact:true}).click();await expect(font(first)).toHaveCSS('font-size',size+'px');await expect(font(second)).toHaveCSS('font-size',size+'px');};
  await setGlobalFont(18);await setGlobalFont(14);await checkIdentity();
  await titleMenu(tab(second),'重命名终端');await page.getByLabel('终端标题',{exact:true}).fill('Secondary terminal');await page.getByRole('button',{name:'保存标题',exact:true}).click();await expect(tab(second)).toContainText('Secondary terminal');
- // Switching the focused split must still switch the directory browser.
- await page.getByRole('button',{name:'跟随终端',exact:true}).click();
+ // Following starts enabled without a click; disabling keeps manual browsing.
+ const follow=page.getByRole('button',{name:'跟随终端',exact:true});
+ await expect(follow).toHaveAttribute('aria-pressed','true');
  await first.locator('.xterm-helper-textarea').focus();await page.keyboard.type("cd '/tmp/space dir'");await page.keyboard.press('Enter');
  await expect(page.locator('.terminal-file-view:visible').getByLabel('远端路径',{exact:true})).toHaveValue('/tmp/space dir');
+ await follow.click();await expect(follow).toHaveAttribute('aria-pressed','false');
+ await first.locator('.xterm-helper-textarea').focus();await page.keyboard.type('cd /tmp');await page.keyboard.press('Enter');
+ await expect.poll(()=>server.shellPaths[0]).toBe('/tmp');
+ await expect(page.locator('.terminal-file-view:visible').getByLabel('远端路径',{exact:true})).toHaveValue('/tmp/space dir');
+ await follow.click();await expect(follow).toHaveAttribute('aria-pressed','true');
+ await expect(page.locator('.terminal-file-view:visible').getByLabel('远端路径',{exact:true})).toHaveValue('/tmp');
  await tab(second).locator('button').first().click();await expect(page.locator('.terminal-file-view:visible').getByLabel('远端路径',{exact:true})).toHaveValue('/');
  await first.getByRole('button',{name:'隐藏文件栏',exact:true}).click();await expect(page.locator('.terminal-files')).toBeHidden();await expect(first.getByRole('button',{name:'◈ 工作台',exact:true})).toBeVisible();await expect(page.locator('.tabs [data-tab-view-id]')).toHaveCount(2);await checkIdentity();
  await first.getByRole('button',{name:'显示文件栏',exact:true}).click();await expect(page.locator('.terminal-files>.tabs')).toBeVisible();

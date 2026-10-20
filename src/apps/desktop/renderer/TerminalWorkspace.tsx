@@ -15,7 +15,7 @@ export function TerminalWorkspace({splitActive,renderTabs}:{splitActive:boolean;
  const disconnected=view?isTerminalClosed(view,s):false;
  const commands=useQuickCommands();
  const [requests,setRequests]=useState<Record<string,number>>({});
- const [follow,setFollow]=useState(false),[followStatus,setFollowStatus]=useState(''),[target,setTarget]=useState<{terminalId:string;path:string}>();
+ const [follow,setFollow]=useState(true),[followStatus,setFollowStatus]=useState(''),[target,setTarget]=useState<{terminalId:string;path:string}>();
  useEffect(()=>{const search=()=>{const id=useStore.getState().active;setRequests(r=>({...r,[id]:(r[id]??0)+1}));};window.addEventListener('hornet:terminal-search',search);return()=>window.removeEventListener('hornet:terminal-search',search);},[]);
  const grid=useRef<HTMLDivElement>(null);
  useEffect(()=>{

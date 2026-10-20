@@ -1,6 +1,6 @@
 # Hornet Remote Suite 编译、打包与发布操作指南
 
-更新日期：2026-10-16。本文依据当前仓库脚本编写，版本以 `src/package.json` 为准。示例中的 `0.0.4` 用于演示操作，正式发布必须使用尚未公开且与源码提交一致的新版本。
+更新日期：2026-10-20。本文依据当前仓库脚本编写，版本以 `src/package.json` 为准。示例中的 `0.0.4` 用于演示操作，正式发布必须使用尚未公开且与源码提交一致的新版本。
 
 ## 1. 仓库与发布范围
 
@@ -23,6 +23,11 @@
 | [src/package-lock.json](../src/package-lock.json) | 锁定依赖及应用版本 |
 | [src/tools/build.mjs](../src/tools/build.mjs) | 编译主进程、preload、后台服务、界面及 Windows 原生辅助程序 |
 | [src/electron-builder.cjs](../src/electron-builder.cjs) | 安装包格式、运行文件和解包配置 |
+| [src/build/installer.nsh](../src/build/installer.nsh) | Windows 安装时检测、确认关闭运行中的应用及成功后自动重开 |
+| [src/build/installer-processes.ps1](../src/build/installer-processes.ps1) | 按安装记录、完整路径及产品信息识别旧目录或解压目录中运行的程序 |
+| [src/build/installer-files-in-use.ps1](../src/build/installer-files-in-use.ps1) | Windows“正在使用的文件”原生对话框、程序列表和安装选项 |
+| [src/build/installer-files-in-use.json](../src/build/installer-files-in-use.json) | 安装占用提示及延后安装提示的八种语言文案 |
+| [src/tools/installer-smoke.ps1](../src/tools/installer-smoke.ps1) | 使用独立模拟应用验证实际 NSIS 安装流程 |
 | [src/tools/verify-native.cjs](../src/tools/verify-native.cjs) | 在目标 Electron 中验证原生适配器 |
 | [src/tools/audit-package.cjs](../src/tools/audit-package.cjs) | 检查包内文件范围和必要运行文件 |
 | [.github/workflows/release.yml](../.github/workflows/release.yml) | 检查、五平台构建、打包验收和跨仓库发布 |
@@ -132,6 +137,22 @@ try {
 ```
 
 该示例的安装程序位于仓库根目录 `.tools/local-package/`；若该目录也有运行中的程序，应另选新的目录或先关闭对应进程。
+
+#### Windows 安装时关闭与重开应用
+
+安装器使用 `src/build/installer.nsh` 和 `src/build/installer-processes.ps1` 检测正在运行的应用。Hornet 正在运行时，打开安装器即显示“正在使用的文件”原生窗口，列出占用文件的程序、进程编号和路径，无需先点击“下一步”或“安装”。用户可以选择：
+
+- **自动关闭应用程序，并在安装完成后重新打开**（默认）：点击确定后关闭对应程序，再继续安装；安装成功后自动重新打开一次，无需再点击完成页的运行选项。关闭应用会结束当前连接和传输，请先完成重要操作。
+- **不关闭应用程序（重启并登录后继续安装）**：保留当前程序及文件，把安装包缓存到 `%LOCALAPPDATA%\Hornet Remote Suite\Installer\<应用 GUID>\pending.exe`，登记当前用户的 `RunOnce` 后退出，状态码为 `3010`。下次登录会打开缓存安装包的正常交互向导，成功安装后重开应用并清除待安装登记。不会立即强制重启电脑。
+- **取消**或关闭窗口：退出本次安装，保留原应用。
+
+选择目录和安装模式后，在实际覆盖前再次检查，防止用户在安装期间又启动应用。对话框支持安装器的八种语言。延后安装的命令限制为 260 个字符，目标目录及安装模式单独保存在 `HKCU\Software\<应用 GUID>\PendingInstall`；缓存或登记失败会提示错误，成功安装会清理该登记。`RunOnce` 的 Windows 行为参见 [Microsoft 文档](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys)。
+
+应用原本未运行时，保留正常安装向导及完成页的“运行 Hornet Remote Suite”复选框，由用户选择是否启动。进程检测或关闭失败时提示重试或取消，不直接继续覆盖。静默 `/S` 安装遇到运行中的应用返回非零状态，不擅自关闭。安装目录通过环境变量传递，支持空格和单引号；检测覆盖目标目录及安装记录中的旧目录，目录外的同名程序还需匹配 Hornet 的产品名称和发布者信息，支持从解压目录运行的真实程序，不仅按文件名结束进程。
+
+在 Windows 桌面会话中运行 `npm.cmd run test:installer` 可验证安装器生命周期。测试用小型模拟应用及独立 appId、临时目录，实际编译并操作 NSIS 安装器，覆盖未运行时的正常完成页、打开即提示、取消保护、静默拒绝、确认关闭和成功后自动重开；还覆盖延后安装的单选项、原程序保持运行、缓存完整性、RunOnce 登记、3010 状态码及模拟下次登录恢复安装后的自动重开与登记清理。测试也覆盖解压目录运行及更换安装目录，检查目录前缀相同但产品信息不同的另一个应用仍在运行。测试不重启电脑，不覆盖或修改用户安装的 Hornet，结束后卸载临时应用并清理其独立注册信息。
+
+设置 `HORNET_PACKAGED_EXECUTABLE` 为实际打包程序、`HORNET_INSTALLER_EXECUTABLE` 为待测安装包后，运行 `npm.cmd run test:installer:startup` 可验证真实 Electron 与生产安装器：使用隔离数据启动程序，打开指向另一临时目录的安装器，不点击下一步/安装，检查关闭提示并只点击取消，确认原程序仍运行且没有安装新文件。此验证不会确认关闭或覆盖用户安装的程序。
 
 ### 5.2 macOS 和 Linux
 

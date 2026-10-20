@@ -1,4 +1,4 @@
-import { useEffect,useId,useState } from 'react';
+import { useEffect,useId,useRef,useState } from 'react';
 import { t as tr } from './i18n';
 import { useAppearance } from './appearance';
 import { useStore,refreshProfiles } from './store';
@@ -20,9 +20,19 @@ export function ProfileDialog({profile,groups,close,saved,connectOnSave}:{profil
  const [p,setP]=useState(profile),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const [password,setPassword]=useState(''),[savePassword,setSavePassword]=useState(true),[passwordSaved,setPasswordSaved]=useState(false);
  const [showPassword,setShowPassword]=useState(false),passwordInputId=useId();
- useEffect(()=>setShowPassword(false),[p.protocol,p.authType,savePassword]);
+ const [revealedPassword,setRevealedPassword]=useState<string|null>(null),[passwordEdited,setPasswordEdited]=useState(false),[revealing,setRevealing]=useState(false),revealGeneration=useRef(0);
+ useEffect(()=>{setShowPassword(false);setRevealedPassword(null);setRevealing(false);return()=>{revealGeneration.current++;};},[p.protocol,p.authType,p.host,p.port,p.username,p.ftpSecurity,savePassword]);
  useEffect(()=>{let active=true;if(profile.revision)void window.hornet.profiles.credentialStatus(profile.profileId).then(status=>{if(active)setPasswordSaved(status.saved);}).catch(()=>{});return()=>{active=false;};},[profile.profileId,profile.revision]);
  const field=(key:keyof Profile,value:string|number)=>setP({...p,[key]:value});
+ const savedPasswordAvailable=passwordSaved&&!passwordEdited&&(p.protocol??'ssh')===(profile.protocol??'ssh')&&p.authType===profile.authType&&p.host===profile.host&&p.port===profile.port&&p.username===profile.username&&p.ftpSecurity===profile.ftpSecurity;
+ async function togglePassword(){
+  if(showPassword){setShowPassword(false);setRevealedPassword(null);return;}
+  if(!savedPasswordAvailable){setShowPassword(true);return;}
+  const generation=++revealGeneration.current;setRevealing(true);setError('');
+  try{const result=await window.hornet.profiles.revealPassword(profile.profileId,profile.revision);if(revealGeneration.current===generation){setRevealedPassword(result.password);setShowPassword(true);}}
+  catch(e){if(revealGeneration.current===generation)setError(e instanceof Error?e.message:tr('无法显示已保存密码。'));}
+  finally{if(revealGeneration.current===generation)setRevealing(false);}
+ }
  const session=p.session??{},appearance={...defaults,...session.appearance},terminal=session.terminal??{},keepAlive=session.keepAlive??{intervalSeconds:15,maxMissed:3},reconnect=session.reconnect??{enabled:false,intervalSeconds:30,limitMinutes:0};
  const option=<K extends keyof SessionOptions>(key:K,value:SessionOptions[K])=>setP(old=>({...old,session:{...old.session,[key]:value}}));
  const style=<K extends keyof TerminalPreferences>(key:K,value:TerminalPreferences[K])=>option('appearance',{...session.appearance,[key]:value});
@@ -38,8 +48,8 @@ export function ProfileDialog({profile,groups,close,saved,connectOnSave}:{profil
   <fieldset className="profile-credentials"><legend>{tr('用户身份验证')}</legend>
    <label>{p.protocol==='telnet'?tr("用户名备注（不自动登录）"):tr("用户名")}<input required={p.protocol!=='telnet'} autoComplete="username" value={p.username} onChange={e=>field('username',e.target.value)}/></label>
    {p.protocol!=='telnet'&&p.authType==='password'&&<>
-    <label htmlFor={passwordInputId}>{tr('密码')}</label><div className="profile-password-input"><input id={passwordInputId} aria-label={tr('连接密码')} type={showPassword?'text':'password'} maxLength={16384} autoComplete="new-password" disabled={!savePassword||busy} value={password} onChange={e=>setPassword(e.target.value)}/><button type="button" disabled={!savePassword||busy} aria-label={showPassword?tr('隐藏密码'):tr('显示密码')} title={showPassword?tr('隐藏密码'):tr('显示密码')} aria-pressed={showPassword} onClick={()=>setShowPassword(value=>!value)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>{showPassword&&<path d="m3 3 18 18"/>}</svg></button></div>
-    <label className="checkbox"><input type="checkbox" checked={savePassword} disabled={busy} onChange={e=>setSavePassword(e.target.checked)}/>{tr('保存密码')}</label><p className="muted">{passwordSaved?tr('已保存密码，留空保持不变。'):tr('密码留空时，在连接时询问。')}{tr('修改主机、端口或用户名后需重新输入密码。')}</p>
+    <label htmlFor={passwordInputId}>{tr('密码')}</label><div className="profile-password-input"><input id={passwordInputId} aria-label={tr('连接密码')} type={showPassword?'text':'password'} maxLength={16384} autoComplete="new-password" disabled={!savePassword||busy||revealing} placeholder={savedPasswordAvailable?'••••••••':undefined} value={revealedPassword??password} onChange={e=>{setPasswordEdited(true);setRevealedPassword(null);setPassword(e.target.value);}}/><button type="button" disabled={!savePassword||busy||revealing} aria-label={showPassword?tr('隐藏密码'):tr('显示密码')} title={showPassword?tr('隐藏密码'):tr('显示密码')} aria-pressed={showPassword} aria-busy={revealing} onClick={()=>void togglePassword()}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>{showPassword&&<path d="m3 3 18 18"/>}</svg></button></div>
+    <label className="checkbox"><input type="checkbox" checked={savePassword} disabled={busy} onChange={e=>setSavePassword(e.target.checked)}/>{tr('保存密码')}</label><p className="muted">{passwordSaved?tr('已保存密码，点击眼睛查看；留空保持不变。'):tr('密码留空时，在连接时询问。')}{tr('修改主机、端口或用户名后需重新输入密码。')}</p>
    </>}
   </fieldset>
   {p.protocol!=='telnet'&&<label hidden={p.protocol==='ftp'}>{tr('认证方式')}<select aria-label={tr('认证方式')} value={p.authType} onChange={e=>field('authType',e.target.value)}><option value="password">{tr('密码 / 交互认证')}</option><option value="privateKey">{tr('私钥文件')}</option><option value="agent">{tr('系统 SSH Agent')}</option></select></label>}

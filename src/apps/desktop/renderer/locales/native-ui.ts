@@ -44,6 +44,8 @@ export const nativeUi:Record<string,readonly [string,string,string,string,string
 "保存密码":["パスワードを保存","비밀번호 저장","Passwort speichern","Enregistrer le mot de passe","Guardar contraseña"],
 "连接密码":["接続パスワード","연결 비밀번호","Verbindungspasswort","Mot de passe de connexion","Contraseña de conexión"],
 "显示密码":["パスワードを表示","비밀번호 표시","Passwort anzeigen","Afficher le mot de passe","Mostrar contraseña"],
+"已保存密码，点击眼睛查看；留空保持不变。":["パスワードは保存済みです。目のアイコンで表示できます。空欄のままにすると変更されません。","비밀번호가 저장되어 있습니다. 눈 아이콘으로 확인할 수 있으며, 비워 두면 유지됩니다.","Ein Passwort ist gespeichert. Zum Anzeigen auf das Auge klicken; leer lassen, um es beizubehalten.","Un mot de passe est enregistré. Cliquez sur l’œil pour l’afficher ; laissez le champ vide pour le conserver.","Hay una contraseña guardada. Pulse el ojo para verla; deje el campo vacío para conservarla."],
+"无法显示已保存密码。":["保存済みパスワードを表示できません。","저장된 비밀번호를 표시할 수 없습니다.","Das gespeicherte Passwort konnte nicht angezeigt werden.","Impossible d’afficher le mot de passe enregistré.","No se ha podido mostrar la contraseña guardada."],
 "隐藏密码":["パスワードを非表示","비밀번호 숨기기","Passwort ausblenden","Masquer le mot de passe","Ocultar contraseña"],
 "用户身份验证":["ユーザー認証","사용자 인증","Benutzerauthentifizierung","Authentification utilisateur","Autenticación de usuario"],
 "复制SSH渠道":["SSH チャネルを複製","SSH 채널 복제","SSH-Kanal duplizieren","Dupliquer le canal SSH","Duplicar canal SSH"],

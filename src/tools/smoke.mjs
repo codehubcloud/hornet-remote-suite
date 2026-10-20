@@ -194,7 +194,7 @@ try{
  await page.getByRole('button',{name:'关闭终端搜索',exact:true}).click();
  await page.locator('.tabs .tab').filter({hasText:'主终端'}).click({button:'right'});
  await page.getByRole('menuitem',{name:'水平分割',exact:true}).click();
- await sidebar.getByRole('button',{name:'跟随终端',exact:true}).click();
+ await expect(sidebar.getByRole('button',{name:'跟随终端',exact:true})).toHaveAttribute('aria-pressed','true');
  async function command(pane,text){await pane.locator('.xterm-helper-textarea').focus();await page.keyboard.type(text);await page.keyboard.press('Enter');}
  await command(first,"cd '/tmp/space dir'");
  await expect(sidebar.locator('.terminal-file-view:visible').getByLabel('远端路径',{exact:true})).toHaveValue('/tmp/space dir');

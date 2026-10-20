@@ -46,3 +46,25 @@ it('binds staged credentials to the endpoint and accepts legacy encrypted entrie
  const entries=JSON.parse(readFileSync(h.file,'utf8'));entries[saved.profileId+':1']=entries[saved.profileId+':1'].value;
  const {writeFileSync}=await import('node:fs');writeFileSync(h.file,JSON.stringify(entries));expect(new Vault(h.file).get(saved)).toBe('original');
 });
+it('reveals only the current saved revision without exporting or rewriting credentials',async()=>{
+ const h=fixture(),saved=await h.manager.saveProfile(h.profile,0,{mode:'save',password:'original'}),encrypted=readFileSync(h.file,'utf8');
+ await expect(h.manager.revealPassword(saved.profileId,saved.revision)).resolves.toEqual({password:'original'});
+ expect(readFileSync(h.file,'utf8')).toBe(encrypted);expect(saved).not.toHaveProperty('password');
+ await expect(h.manager.revealPassword(saved.profileId,0)).rejects.toMatchObject({code:'PROFILE_CONFLICT'});
+ await expect(h.manager.revealPassword('missing',1)).rejects.toMatchObject({code:'PROFILE_CONFLICT'});
+ h.vault.lock();await expect(h.manager.revealPassword(saved.profileId,1)).rejects.toMatchObject({code:'VAULT_UNAVAILABLE'});
+ expect(readFileSync(h.file,'utf8')).toBe(encrypted);
+});
+it('waits for in-flight saves before revealing and does not expose staged secrets',async()=>{
+ const h=fixture(),saved=await h.manager.saveProfile(h.profile,0,{mode:'save',password:'original'});
+ let fail!:(error:Error)=>void;
+ h.save.mockImplementationOnce(()=>new Promise((_resolve,reject)=>{fail=reject;}));
+ const blocked=h.manager.saveProfile({...saved,name:'Blocked'},1,{mode:'save',password:'transient'});
+ await vi.waitFor(()=>expect(fail).toBeTypeOf('function'));
+ let finished=false;const reveal=h.manager.revealPassword(saved.profileId,1).then(value=>{finished=true;return value;});
+ await Promise.resolve();expect(finished).toBe(false);
+ const rejected=expect(blocked).rejects.toThrow('save failed');fail(new Error('save failed'));await rejected;
+ await expect(reveal).resolves.toEqual({password:'original'});
+ vi.mocked(safeStorage.isEncryptionAvailable).mockReturnValue(false);
+ await expect(h.manager.revealPassword(saved.profileId,1)).rejects.toMatchObject({code:'VAULT_UNAVAILABLE'});
+});
