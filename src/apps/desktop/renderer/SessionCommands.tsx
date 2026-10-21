@@ -18,13 +18,14 @@ import { DeviceTerminalDialog } from './DeviceTerminalDialog';
 import { useEffect,useRef,useState } from 'react';
 import { useStore,refreshProfiles,openView,reconnectView,hasRemoteFiles,isTerminalClosed,type View } from './store';
 import type { Profile } from '../../../packages/contracts';
+import type { UpdateInfo } from '../../../packages/contracts/help';
 import { TerminalLogPanel } from './TerminalLogPanel';
 import { terminalTabItems } from './terminal-tab-menu';
 import { TerminalSettings } from './TerminalSettings';
 import { terminalAction } from './terminal-preferences';
 import { parseQuickAddress } from './quick-connect';
 
-export function SessionCommands({recent,toggleHosts,hostsVisible,openTool,toolTabs,closeTool,create,connect,edit,close,hosts,userGuide,userTour,toggleChrome,collapsed,pending}:{recent:string[];toggleHosts:()=>void;hostsVisible:boolean;openTool:(tool:SuiteTool)=>void;toolTabs:SuiteTool[];closeTool:(tool:SuiteTool)=>void;create:(fields?:Partial<Profile>)=>void;connect:(p:Profile)=>void;edit:(p:Profile)=>void;close:(v:View)=>Promise<boolean>;hosts:()=>void;userGuide:()=>void;userTour:()=>void;toggleChrome:()=>void;collapsed:boolean;pending:boolean}){
+export function SessionCommands({recent,autoUpdate,toggleHosts,hostsVisible,openTool,toolTabs,closeTool,create,connect,edit,close,hosts,userGuide,userTour,toggleChrome,collapsed,pending}:{recent:string[];autoUpdate:UpdateInfo|null;toggleHosts:()=>void;hostsVisible:boolean;openTool:(tool:SuiteTool)=>void;toolTabs:SuiteTool[];closeTool:(tool:SuiteTool)=>void;create:(fields?:Partial<Profile>)=>void;connect:(p:Profile)=>void;edit:(p:Profile)=>void;close:(v:View)=>Promise<boolean>;hosts:()=>void;userGuide:()=>void;userTour:()=>void;toggleChrome:()=>void;collapsed:boolean;pending:boolean}){
  const s=useStore(),active=s.views.find(v=>v.id===s.active),terminal=active?.kind==='terminal';
  const chrome=useChromePreferences(),quickCommands=useQuickCommands(),[toolbarMenu,setToolbarMenu]=useState<{x:number;y:number}|null>(null),toolbarDrag=useRef('');
  useEffect(()=>window.hornet.windowChrome.onContextMenu(point=>setToolbarMenu(point)),[]);
@@ -45,6 +46,7 @@ export function SessionCommands({recent,toggleHosts,hostsVisible,openTool,toolTa
  const activeLog=s.logs.find(l=>l.terminalId===active?.terminalId&&['starting','recording','stopping'].includes(l.state));
  async function startLog(format:'text'|'raw'|'recording'){if(!active?.terminalId||logBusy)return;setLogBusy(true);try{await window.hornet.terminalLogs.start(active.terminalId,format);}catch(e){s.fail(e);}finally{setLogBusy(false);}}
  const [address,setAddress]=useState(''),[help,setHelp]=useState<HelpPage|null>(null);
+ useEffect(()=>{if(autoUpdate)setHelp('updates');},[autoUpdate]);
  const input=useRef<HTMLInputElement>(null);
  const search=()=>window.dispatchEvent(new Event('hornet:terminal-search'));
  const rename=()=>window.dispatchEvent(new Event('hornet:terminal-rename'));
@@ -142,7 +144,7 @@ export function SessionCommands({recent,toggleHosts,hostsVisible,openTool,toolTa
   {appearanceOpen&&<AppearanceDialog close={()=>setAppearanceOpen(false)}/>}
   {device&&<DeviceTerminalDialog kind={device} close={()=>setDevice(null)}/>}
   {logPanel&&<TerminalLogPanel close={()=>setLogPanel(false)}/>}
-  {help&&<HelpDialog page={help} close={()=>setHelp(null)}/>}
+  {help&&<HelpDialog page={help} close={()=>setHelp(null)} initialUpdate={autoUpdate??undefined}/>}
   {settings&&<TerminalSettings close={()=>setSettings(false)}/>}
  </div>;
 }

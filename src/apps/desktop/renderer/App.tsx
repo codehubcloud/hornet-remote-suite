@@ -7,6 +7,7 @@ import { challengeCopy } from './challenge-copy';
 import { useAppearance } from './appearance';
 import { useEffect,useState } from 'react';
 import type { Profile,HornetEvent } from '../../../packages/contracts';
+import type { UpdateInfo } from '../../../packages/contracts/help';
 import { useStore,refreshProfiles,openView,closeTerminalView,isTerminalClosed,type View } from './store';
 import { ConnectionTree,GroupDialog,groupPath,groupPaths,readGroups } from './ConnectionTree';
 import { SessionCommands } from './SessionCommands';
@@ -34,6 +35,7 @@ export function App(){
  function closeTool(tool:SuiteTool){setToolTabs(tabs=>tabs.filter(t=>t!==tool));if(useStore.getState().active===tool)useStore.getState().setActive('home');}
  const [sessionsOpen,setSessionsOpen]=useState(showStartupSessions),[profilesLoading,setProfilesLoading]=useState(true);
  const [guide,setGuide]=useState<'startup'|'manual'|null>(()=>showFirstRunGuide()?'startup':null);
+ const [autoUpdate,setAutoUpdate]=useState<UpdateInfo|null>(null);
  function closeGuide(){acknowledgeUserGuide();setGuide(null);}
  const [tourOpen,setTourOpen]=useState(false);
  function startTour(){acknowledgeUserGuide();setGuide(null);setTourOpen(true);}
@@ -47,6 +49,26 @@ export function App(){
   void Promise.all([refreshProfiles().finally(()=>setProfilesLoading(false)),window.hornet.terminalLogs.list().then(s.setLogs),window.hornet.task.list().then(s.setTasks),window.hornet.capabilities().then(s.setCapabilities),window.hornet.layout.load().then(v=>setRecent(v.profileIds))]).catch(s.fail);
   return stop;
  },[]);
+ useEffect(()=>{
+  if(profilesLoading||guide||tourOpen||sessionsOpen||form||groupParent!==null||s.challenges.length)return;
+  let live=true;
+  const timer=window.setTimeout(()=>{
+   void (async()=>{
+    try{
+     const key='hornet.update.last-check',now=Date.now();
+     if(now-Number(localStorage.getItem(key)||0)<12*60*60*1000)return;
+     const update=await window.hornet.help.checkUpdates();
+     if(!live)return;
+     localStorage.setItem(key,String(now));
+     if(!update.available)return;
+     const notified='hornet.update.last-notified';
+     if(localStorage.getItem(notified)===update.latest)return;
+     localStorage.setItem(notified,update.latest);setAutoUpdate(update);
+    }catch{/* Automatic update checks stay quiet when offline. */}
+   })();
+  },1500);
+  return()=>{live=false;window.clearTimeout(timer);};
+ },[profilesLoading,guide,tourOpen,sessionsOpen,form,groupParent,s.challenges.length]);
  async function connect(p:Profile,kind:'terminal'|'files'){setPending(true);try{await openView(p,kind);setRecent(ids=>[p.profileId,...ids.filter(id=>id!==p.profileId)].slice(0,20));}catch(e){s.fail(e);}finally{setPending(false);}}
  async function close(v:View):Promise<boolean>{
   if(v.kind==='terminal'){try{await closeTerminalView(v.id);return true;}catch(e){s.fail(e);return false;}}
@@ -86,7 +108,7 @@ export function App(){
   {common&&<button className="chrome-toggle" onClick={toggleChrome} aria-expanded={!collapsed} title={collapsed?tr("展开工具栏"):tr("折叠工具栏")} aria-label={collapsed?tr("展开工具栏"):tr("折叠工具栏")}>{collapsed?'⌄':'⌃'}</button>}
  </nav>;}
  return <div className={collapsed?"app-shell chrome-collapsed":"app-shell"}>
-  <SessionCommands recent={recent} edit={p=>{setConnectOnSave(false);setForm(p);}} hostsVisible={hostsVisible} toggleHosts={()=>{if(active?.kind==='terminal')setShowHosts(!showHosts);else setHostsHidden(!hostsHidden);}} openTool={openTool} toolTabs={toolTabs} closeTool={closeTool} create={fields=>{setConnectOnSave(Boolean(fields));setForm({...fresh(),...fields});}} connect={p=>void connect(p,'terminal')} close={close} hosts={()=>setSessionsOpen(true)} userGuide={()=>setGuide('manual')} userTour={startTour} toggleChrome={toggleChrome} collapsed={collapsed} pending={pending}/>
+  <SessionCommands recent={recent} autoUpdate={autoUpdate} edit={p=>{setConnectOnSave(false);setForm(p);}} hostsVisible={hostsVisible} toggleHosts={()=>{if(active?.kind==='terminal')setShowHosts(!showHosts);else setHostsHidden(!hostsHidden);}} openTool={openTool} toolTabs={toolTabs} closeTool={closeTool} create={fields=>{setConnectOnSave(Boolean(fields));setForm({...fresh(),...fields});}} connect={p=>void connect(p,'terminal')} close={close} hosts={()=>setSessionsOpen(true)} userGuide={()=>setGuide('manual')} userTour={startTour} toggleChrome={toggleChrome} collapsed={collapsed} pending={pending}/>
   <div className="app-body"><aside className="sidebar" style={{display:hostsVisible?'flex':'none'}}>
    <div className="section-heading"><span>{tr("连接管理")}</span><button title={tr("新建分组")} aria-label={tr("新建分组")} onClick={()=>setGroupParent('')}>⊞</button><button title={tr("新建连接")} aria-label={tr("新建连接")} onClick={()=>setForm(fresh())}>＋</button></div>
    <input className="search" aria-label={tr("搜索主机")} placeholder={tr("搜索名称、主机或分组…")} value={query} onChange={e=>setQuery(e.target.value)}/>
