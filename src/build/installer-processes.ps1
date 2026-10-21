@@ -10,7 +10,11 @@ try {
     foreach ($root in @($env:HORNET_INSTALL_DIRECTORY,$env:HORNET_INSTALL_PREVIOUS_USER,$env:HORNET_INSTALL_PREVIOUS_MACHINE)) {
         if ($root) { [void]$roots.Add([IO.Path]::GetFullPath($root).TrimEnd('\')) }
     }
-    $processes = @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop)
+    # Query only the two executable names we need. Enumerating every process
+    # can exceed NSIS's bounded 15-second probe on busy Windows runners and
+    # incorrectly present the installer error/retry dialog on a cold install.
+    $appExecutable = $env:HORNET_INSTALL_EXECUTABLE.Replace("'", "''")
+    $processes = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = '$appExecutable' OR Name = 'NativeHost.exe'" -ErrorAction Stop)
     $matched = New-Object 'System.Collections.Generic.List[object]'
     $identityCache = @{}
     foreach ($process in $processes) {
