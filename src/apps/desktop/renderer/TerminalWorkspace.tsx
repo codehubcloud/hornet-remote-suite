@@ -46,7 +46,7 @@ export function TerminalWorkspace({splitActive,renderTabs}:{splitActive:boolean;
  return <div className="terminal-workspace" ref={host}>
   <aside className="terminal-files" aria-label={tr("终端远程文件")} style={{width,display:filesVisible?'flex':'none'}}>
    {splitActive&&filesVisible&&renderTabs('')}
-   <div className="terminal-files-heading"><strong>{tr("远程文件 · SFTP")}</strong><button aria-pressed={follow} title={tr("跟随当前选中的终端目录（Linux）")} onClick={()=>{setFollow(!follow);if(follow)setTarget(undefined);}}>{tr("跟随终端")}</button><button onClick={()=>setVisible(false)} aria-label={tr("隐藏远程文件")}>‹</button></div>
+   <div className="terminal-files-heading"><strong>{tr("远程文件 · SFTP")}</strong><span className="follow-controls"><input type="checkbox" aria-label={tr("跟随终端")} checked={follow} onChange={e=>{setFollow(e.target.checked);if(!e.target.checked)setTarget(undefined);}}/><button aria-pressed={follow} title={tr("跟随当前选中的终端目录（Linux）")} onClick={()=>{setFollow(!follow);if(follow)setTarget(undefined);}}>{tr("跟随终端")}</button></span><button onClick={()=>setVisible(false)} aria-label={tr("隐藏远程文件")}>‹</button></div>
    {follow&&<div className="follow-status" role="status">{followStatus}</div>}
    <div className="workspace-file-views">{panes.filter(p=>hasRemoteFiles(p)).map(p=><div key={p.id+":"+p.connectionId} className="terminal-file-view" style={{display:p.id===active?'flex':'none'}}><FileView view={p} compact followTarget={follow&&p.id===active&&target?.terminalId===p.terminalId?target:undefined}/></div>)}</div>{hasRemoteFiles(view)&&<div className="task-dock-slot"/>}
   </aside>

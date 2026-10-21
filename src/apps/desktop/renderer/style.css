@@ -6,7 +6,7 @@
 .terminal-workspace{display:flex;flex:1;min-height:0;min-width:0;overflow:hidden}
 .terminal-files{flex-shrink:0;flex-direction:column;min-height:0;background:var(--c-101c2b)}
 .terminal-files-heading,.terminal-tools,.terminal-search{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--c-27394c)}
-.terminal-files-heading{justify-content:space-between}.terminal-tools span{color:var(--c-8faac4);font-size:12px}
+.terminal-files-heading{justify-content:space-between}.follow-controls{display:flex;align-items:center;gap:4px}.follow-controls input[type=checkbox]{width:auto;margin:0}.terminal-tools span{color:var(--c-8faac4);font-size:12px}
 .terminal-pane{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
 .file-splitter{width:5px;flex-shrink:0;cursor:col-resize;background:var(--c-27394c);touch-action:none}.file-splitter:hover,.file-splitter:focus{background:var(--c-38d9c4)}
 .terminal-search input{width:230px;min-width:100px}.terminal-search{flex-wrap:wrap}.terminal-search span{font-size:12px;color:var(--c-8faac4)}

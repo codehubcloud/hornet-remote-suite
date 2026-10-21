@@ -64,7 +64,11 @@ try{
  await titleMenu(tab(second),'重命名终端');await page.getByLabel('终端标题',{exact:true}).fill('Secondary terminal');await page.getByRole('button',{name:'保存标题',exact:true}).click();await expect(tab(second)).toContainText('Secondary terminal');
  // Following starts enabled without a click; disabling keeps manual browsing.
  const follow=page.getByRole('button',{name:'跟随终端',exact:true});
+ const followCheckbox=page.getByRole('checkbox',{name:'跟随终端',exact:true});
+ await expect(followCheckbox).toBeChecked();
  await expect(follow).toHaveAttribute('aria-pressed','true');
+ await followCheckbox.click();await expect(followCheckbox).not.toBeChecked();await expect(follow).toHaveAttribute('aria-pressed','false');
+ await follow.click();await expect(followCheckbox).toBeChecked();await expect(follow).toHaveAttribute('aria-pressed','true');
  await first.locator('.xterm-helper-textarea').focus();await page.keyboard.type("cd '/tmp/space dir'");await page.keyboard.press('Enter');
  await expect(page.locator('.terminal-file-view:visible').getByLabel('远端路径',{exact:true})).toHaveValue('/tmp/space dir');
  await follow.click();await expect(follow).toHaveAttribute('aria-pressed','false');
