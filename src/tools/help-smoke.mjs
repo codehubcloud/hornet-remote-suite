@@ -8,6 +8,8 @@ const data=await mkdtemp(join(tmpdir(),'hornet-help-'));
 const env={...process.env,HORNET_USER_DATA:data,HORNET_SMOKE:'1'};delete env.ELECTRON_RUN_AS_NODE;
 let executable=process.env.HORNET_PACKAGED_EXECUTABLE;
 if(!executable&&process.argv.includes('--packaged'))executable=process.platform==='win32'?resolve('release/win-unpacked/Hornet Remote Suite.exe'):process.platform==='darwin'?resolve('release',process.arch==='arm64'?'mac-arm64':'mac','Hornet Remote Suite.app/Contents/MacOS/Hornet Remote Suite'):resolve('release',process.arch==='arm64'?'linux-arm64-unpacked':'linux-unpacked','hornet-remote-suite');
+const updateArch=process.arch==='arm64'?'arm64':'x64';
+const updateAssetName=process.platform==='win32'?'Hornet-Remote-Suite-9.0.0-windows-x64.exe':process.platform==='darwin'?`Hornet-Remote-Suite-9.0.0-macos-${updateArch}.dmg`:`Hornet-Remote-Suite-9.0.0-linux-${updateArch==='x64'?'amd64':'arm64'}.deb`;
 let app;await mkdir('test-results',{recursive:true});
 try{
  app=await electron.launch({...(executable?{executablePath:executable}:{}),args:executable?(process.platform==='linux'?['--no-sandbox']:[]):process.platform==='linux'?['--no-sandbox','.']:['.'],env,timeout:60000});
@@ -48,7 +50,7 @@ try{
    if(value.startsWith('https://api.github.com/repos/codehubcloud/hornet-remote-suite-release/')){if(globalThis.__helpUpdateMode==='error')return Promise.resolve(new Response('',{status:503}));const version=globalThis.__helpUpdateMode==='current'?globalThis.__helpCurrent:'9.0.0',base='https://github.com/codehubcloud/hornet-remote-suite-release/releases/download/v'+version+'/',asset=fixture.assetName.replace('9.0.0',version),assets=[{name:asset,browser_download_url:base+asset},{name:'SHA256SUMS',browser_download_url:base+'SHA256SUMS'}];return Promise.resolve(new Response(JSON.stringify({tag_name:'v'+version,draft:false,prerelease:false,body:'Verified release notes',assets})));}
    if(value.endsWith('/SHA256SUMS'))return Promise.resolve(new Response(fixture.digest+'  '+fixture.assetName+'\n'));
    if(value.includes(fixture.assetName.replace('9.0.0',globalThis.__helpUpdateMode==='current'?globalThis.__helpCurrent:'9.0.0')))return Promise.resolve(new Response(Uint8Array.from(fixture.payload)));return original(url,options);};
- },{assetName:'Hornet-Remote-Suite-9.0.0-windows-x64.exe',payload:[72,79,82,78,69,84,45,85,80,68,65,84,69],digest:'a7041c68010df800c93ae6773c6ef5174d659b5e66d54f17f9527e23d96ff110'});
+ },{assetName:updateAssetName,payload:[72,79,82,78,69,84,45,85,80,68,65,84,69],digest:'a7041c68010df800c93ae6773c6ef5174d659b5e66d54f17f9527e23d96ff110'});
  const info=await page.evaluate(()=>window.hornet.help.info());await app.evaluate((_e,version)=>{globalThis.__helpCurrent=version;},info.version);
  const menu=async item=>{await page.getByRole('navigation',{name:'应用菜单',exact:true}).getByRole('button',{name:'帮助',exact:true}).click();await page.getByRole('menuitem',{name:item,exact:true}).click();};
  await menu('分步使用引导');await expect(tour).toHaveAttribute('data-tour-step','0');await tour.getByRole('button',{name:'跳过引导',exact:true}).click();await expect(tour).toHaveCount(0);
