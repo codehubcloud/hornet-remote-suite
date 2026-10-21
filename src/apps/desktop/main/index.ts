@@ -15,7 +15,7 @@ import { Vault } from './vault';
 import { ProfileCredentials } from './profile-credentials';
 import { Backend } from './backend';
 import { ExitController } from './exit-controller';
-import { appInfo,checkUpdates,openHelpLink,openHelpPdf } from './help';
+import { appInfo,checkUpdates,downloadUpdate,installUpdate,openHelpLink,openHelpPdf } from './help';
 import { RdpService, nativeCall } from '../../../services/native/host';
 import { rdpConfigSchema } from '../../../packages/contracts/native';
 const rdp=new RdpService();
@@ -78,6 +78,8 @@ async function setupIpc(){
       switch(m.method){
         case 'help.info':z.object({}).strict().parse(m.payload);data=appInfo();break;
         case 'help.checkUpdates':z.object({}).strict().parse(m.payload);data=await checkUpdates();break;
+        case 'help.downloadUpdate':z.object({}).strict().parse(m.payload);data=await downloadUpdate(progress=>{if(window&&!window.isDestroyed())window.webContents.send('hornet:event',{type:'update.progress',...progress});});break;
+        case 'help.installUpdate':z.object({}).strict().parse(m.payload);await installUpdate();data=null;break;
         case 'help.openLink':{const p=z.object({link:z.enum(['website','support','feedback','releases'])}).strict().parse(m.payload);await openHelpLink(p.link);data=null;break;}
         case 'help.openPdf':{const p=z.object({language:z.enum(['zh-CN','zh-TW','en','ja','ko','de','fr','es'])}).strict().parse(m.payload);await openHelpPdf(p.language);data=null;break;}
         case 'profile.save':{

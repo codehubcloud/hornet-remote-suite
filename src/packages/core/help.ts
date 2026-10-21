@@ -16,7 +16,9 @@ export async function checkForUpdates(current:string,fetcher:typeof fetch):Promi
  const chunks:Uint8Array[]=[];let size=0;
  try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>262144)throw new Error('Update response too large');chunks.push(value);}}finally{await reader.cancel().catch(()=>{});}
  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
- const release=z.object({tag_name:z.string(),draft:z.literal(false),prerelease:z.literal(false),body:z.string().max(131072).nullable().optional()}).parse(JSON.parse(new TextDecoder().decode(bytes)));
+ const release=z.object({tag_name:z.string(),draft:z.literal(false),prerelease:z.literal(false),body:z.string().max(131072).nullable().optional(),assets:z.array(z.object({name:z.string(),browser_download_url:z.string().url()})).optional()}).parse(JSON.parse(new TextDecoder().decode(bytes)));
  const latest=version.parse(release.tag_name.replace(/^v/,''));
- return {current,latest,available:newerVersion(latest,current),url:helpBase+'/releases/tag/v'+latest,notes:release.body??''};
+ const arch=process.arch==='arm64'?'arm64':'x64';
+ const asset=process.platform==='win32'?`Hornet-Remote-Suite-${latest}-windows-x64.exe`:process.platform==='darwin'?`Hornet-Remote-Suite-${latest}-macos-${arch}.dmg`:process.platform==='linux'?`Hornet-Remote-Suite-${latest}-linux-${arch==='x64'?'amd64':'arm64'}.deb`:'';
+ return {current,latest,available:newerVersion(latest,current),url:helpBase+'/releases/tag/v'+latest,notes:release.body??'',installerAvailable:!!asset&&!!release.assets?.some(item=>item.name===asset&&item.browser_download_url===helpBase+'/releases/download/v'+latest+'/'+asset)};
 }

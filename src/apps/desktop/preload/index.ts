@@ -14,7 +14,7 @@ function clipboardCall<T>(method:string,payload:unknown={}):Promise<T>{
  clipboardSequence=request.catch(()=>{});return request;
 }
 const api:HornetApi={
- help:{info:()=>local('help.info'),checkUpdates:()=>local('help.checkUpdates'),openLink:link=>local('help.openLink',{link}),openPdf:language=>local('help.openPdf',{language})},
+ help:{info:()=>local('help.info'),checkUpdates:()=>local('help.checkUpdates'),downloadUpdate:()=>local('help.downloadUpdate'),installUpdate:()=>local('help.installUpdate'),openLink:link=>local('help.openLink',{link}),openPdf:language=>local('help.openPdf',{language})},
  windowChrome:{platform:process.platform,setColors:colors=>local('windowChrome.colors',colors),onContextMenu:listener=>{const handler=(_event:unknown,point:{x:number;y:number})=>{if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y))listener({x:point.x,y:point.y});};ipcRenderer.on('hornet:chrome-context',handler);return()=>{ipcRenderer.removeListener('hornet:chrome-context',handler);};}},
  clipboard:{read:()=>clipboardCall('clipboard.read'),write:text=>clipboardCall('clipboard.write',{text})},
  localTerminal:{shells:()=>call('localTerminal.shells'),open:config=>call('localTerminal.open',config)},

@@ -1055,5 +1055,14 @@ export const traditionalChinese:Record<string,string> = {
   "在“查看 → 快速命令”管理常用命令，添加按钮并设置颜色。发送前核对当前终端，勾选回车会立即执行命令。": "在「檢視 → 快速指令」管理常用指令，新增按鈕及設定顏色。傳送前核對目前終端；勾選 Enter 會立即執行指令。",
   "从这里切换界面语言和主题。终端字体与配色可单独设置；右键顶部区域可以调整工具栏的显示与隐藏。": "從這裡切換介面語言及主題。終端字型與配色可分別設定；右鍵頂部區域可顯示或隱藏工具列。",
   "帮助菜单可以重新打开分步引导、查阅详细使用指引和离线 PDF，也提供检查更新、技术支持和反馈入口。": "幫助選單可重新開啟逐步導覽、查閱詳細指引及離線 PDF，亦提供更新檢查、技術支援與意見回饋。",
-  "引导完成！现在可以新建你的第一个连接。需要复习时，从“帮助 → 分步使用引导”重新开始，或打开详细用户使用指引。": "導覽完成！現在可以新增第一個連線。需要複習時，從「幫助 → 逐步操作導覽」重新開始，或開啟詳細使用者操作指引。"
+  "引导完成！现在可以新建你的第一个连接。需要复习时，从“帮助 → 分步使用引导”重新开始，或打开详细用户使用指引。": "導覽完成！現在可以新增第一個連線。需要複習時，從「幫助 → 逐步操作導覽」重新開始，或開啟詳細使用者操作指引。",
+  "Download update": "下載更新",
+  "Downloading...": "正在下載…",
+  "Install update": "安裝更新",
+  "Starting installer...": "正在啟動安裝程式…",
+  "Update downloaded: {name} ({size})": "已下載更新套件：{name} ({size})",
+  "Downloading update: {received}{total}": "正在下載更新：{received}{total}",
+  "Update download progress": "更新下載進度",
+  "The installer is verified after download. Click Install when ready.": "安裝套件下載後會先驗證，驗證通過後再點擊安裝。",
+  "No direct installer is available for this platform. Visit the release page.": "此平台沒有可直接下載的安裝套件，請前往發佈頁面。",
 };

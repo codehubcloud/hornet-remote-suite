@@ -9,7 +9,7 @@ describe('application help and release checks',()=>{
  });
  it('queries only the public repository with a bounded request and constructs a trusted release URL',async()=>{
   const fetcher=vi.fn<typeof fetch>(async()=>release('v0.0.12',{html_url:'https://untrusted.example'}));
-  const result=await checkForUpdates('0.0.11',fetcher as typeof fetch);expect(result).toEqual({current:'0.0.11',latest:'0.0.12',available:true,url:helpBase+'/releases/tag/v0.0.12',notes:'release notes'});
+  const result=await checkForUpdates('0.0.11',fetcher as typeof fetch);expect(result).toEqual({current:'0.0.11',latest:'0.0.12',available:true,url:helpBase+'/releases/tag/v0.0.12',notes:'release notes',installerAvailable:false});
   expect(fetcher.mock.calls[0][0]).toContain('/hornet-remote-suite-release/releases/latest');expect(fetcher.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
   expect(Object.values(helpLinks).every(url=>url.startsWith(helpBase))).toBe(true);
  });

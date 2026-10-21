@@ -130,10 +130,11 @@ export type HornetEvent =
   | { type: 'terminal.data'; terminalId: string; generation: number; seq: number; data: Uint8Array }
   | { type: 'terminal.closed'; terminalId: string; generation?:number; disconnect?: import('./terminal-disconnect').TerminalDisconnect }
   | { type: 'task.state'; task: TaskSnapshot }
+  | { type:'update.progress';receivedBytes:number;totalBytes:number|null;state:'downloading'|'downloaded' }
   | { type: 'service.error'; message: string };
 export interface Layout { profileIds: string[]; activeProfileId?: string }
 export interface HornetApi {
- help:{info():Promise<import('./help').AppInfo>;checkUpdates():Promise<import('./help').UpdateInfo>;openLink(link:import('./help').HelpLink):Promise<void>;openPdf(language:string):Promise<void>};
+ help:{info():Promise<import('./help').AppInfo>;checkUpdates():Promise<import('./help').UpdateInfo>;downloadUpdate():Promise<import('./help').UpdateDownload>;installUpdate():Promise<void>;openLink(link:import('./help').HelpLink):Promise<void>;openPdf(language:string):Promise<void>};
  windowChrome:{platform:string;setColors:(colors:{color:string;symbolColor:string})=>Promise<void>;onContextMenu:(listener:(point:{x:number;y:number})=>void)=>()=>void};
  clipboard:{read:()=>Promise<string>;write:(text:string)=>Promise<void>};
   localTerminal:{shells():Promise<{id:'powershell'|'cmd';name:string;path:string}[]>;open(config:LocalTerminalConfig):Promise<DeviceTerminal>};

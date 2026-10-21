@@ -1055,5 +1055,14 @@ export const english:Record<string,string> = {
   "在“查看 → 快速命令”管理常用命令，添加按钮并设置颜色。发送前核对当前终端，勾选回车会立即执行命令。": "Manage commands under View → Quick Commands, add buttons and set their colors. Check the active terminal before sending. Enabling Enter executes the command immediately.",
   "从这里切换界面语言和主题。终端字体与配色可单独设置；右键顶部区域可以调整工具栏的显示与隐藏。": "Change the interface language and theme here. Terminal fonts and colors are separate settings. Right-click the top area to show or hide toolbars.",
   "帮助菜单可以重新打开分步引导、查阅详细使用指引和离线 PDF，也提供检查更新、技术支持和反馈入口。": "The Help menu reopens this tour and provides the detailed guide, offline PDF, update checks, technical support and feedback.",
-  "引导完成！现在可以新建你的第一个连接。需要复习时，从“帮助 → 分步使用引导”重新开始，或打开详细用户使用指引。": "You are ready to create your first connection. Revisit Help → Guided Tour whenever you need a refresher, or open the detailed User Guide."
+  "引导完成！现在可以新建你的第一个连接。需要复习时，从“帮助 → 分步使用引导”重新开始，或打开详细用户使用指引。": "You are ready to create your first connection. Revisit Help → Guided Tour whenever you need a refresher, or open the detailed User Guide.",
+  "Download update": "Download update",
+  "Downloading...": "Downloading...",
+  "Install update": "Install update",
+  "Starting installer...": "Starting installer...",
+  "Update downloaded: {name} ({size})": "Update downloaded: {name} ({size})",
+  "Downloading update: {received}{total}": "Downloading update: {received}{total}",
+  "Update download progress": "Update download progress",
+  "The installer is verified after download. Click Install when ready.": "The installer is verified after download. Click Install when ready.",
+  "No direct installer is available for this platform. Visit the release page.": "No direct installer is available for this platform. Visit the release page.",
 };
