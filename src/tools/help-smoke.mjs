@@ -51,9 +51,8 @@ try{
    if(value.endsWith('/SHA256SUMS'))return Promise.resolve(new Response(fixture.digest+'  '+fixture.assetName+'\n'));
    if(value.includes(fixture.assetName.replace('9.0.0',globalThis.__helpUpdateMode==='current'?globalThis.__helpCurrent:'9.0.0'))){const bytes=Uint8Array.from(fixture.payload),body=new ReadableStream({async start(controller){controller.enqueue(bytes.slice(0,4));await new Promise(resolve=>setTimeout(resolve,450));controller.enqueue(bytes.slice(4));controller.close();}});return Promise.resolve(new Response(body,{headers:{'content-length':String(bytes.length)}}));}return original(url,options);};
  },{assetName:updateAssetName,payload:[72,79,82,78,69,84,45,85,80,68,65,84,69],digest:'a7041c68010df800c93ae6773c6ef5174d659b5e66d54f17f9527e23d96ff110'});
- // Verify the once-per-release background check opens the same update flow
- // after startup dialogs have been dismissed, without requiring menu input.
- await page.evaluate(()=>{localStorage.setItem('hornet.update.last-check','0');localStorage.removeItem('hornet.update.last-notified');});
+ // Verify startup checks are not skipped just because a check ran recently.
+ await page.evaluate(()=>{localStorage.setItem('hornet.update.last-check',String(Date.now()));localStorage.removeItem('hornet.update.last-notified');});
  await page.reload();
  const autoModal=page.locator('.help-dialog');
  await expect.poll(()=>app.evaluate(()=>globalThis.__helpRequests.filter(url=>url.startsWith('https://api.github.com/repos/codehubcloud/hornet-remote-suite-release/')).length)).toBeGreaterThan(0);

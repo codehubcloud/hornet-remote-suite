@@ -56,7 +56,8 @@ export function App(){
    void (async()=>{
     try{
      const key='hornet.update.last-check',now=Date.now();
-     if(now-Number(localStorage.getItem(key)||0)<12*60*60*1000)return;
+     // Check on every launch so a recently checked older version cannot hide
+     // a newly published release from the user.
      const update=await window.hornet.help.checkUpdates();
      if(!live)return;
      localStorage.setItem(key,String(now));
