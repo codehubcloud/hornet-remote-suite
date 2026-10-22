@@ -16,6 +16,8 @@ $startupName = 'HornetSetup-' + $fixtureGuid
 $oldRunOncePath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
 $oldRunOnceName = '!HornetSetup-' + $fixtureGuid
 $fixtureCache = Join-Path $env:LOCALAPPDATA ($fixtureName + '\Installer\' + $fixtureGuid)
+$previousDiagnostics = $env:HORNET_INSTALLER_DIAGNOSTICS
+$env:HORNET_INSTALLER_DIAGNOSTICS = Join-Path $fixtureRoot 'process-probe.log'
 Add-Type -ReferencedAssemblies System.Drawing,Accessibility @'
 using System;
 using System.Collections.Generic;
@@ -324,8 +326,10 @@ public class FixtureApp {
     Write-Output 'Portable and changed-directory install passed: immediate confirmation, cancel protection, confirmed close and reopen from the new target.'
 } catch {
     Write-Host ('Installer lifecycle failure: ' + $_.Exception.Message)
+    if (Test-Path -LiteralPath $env:HORNET_INSTALLER_DIAGNOSTICS) { Get-Content -LiteralPath $env:HORNET_INSTALLER_DIAGNOSTICS | Write-Host }
     throw
 } finally {
+    $env:HORNET_INSTALLER_DIAGNOSTICS = $previousDiagnostics
     if (Test-Path -LiteralPath $startupPath) { Remove-ItemProperty -LiteralPath $startupPath -Name $startupName -ErrorAction SilentlyContinue }
     if (Test-Path -LiteralPath $oldRunOncePath) { Remove-ItemProperty -LiteralPath $oldRunOncePath -Name $oldRunOnceName -ErrorAction SilentlyContinue }
     $pendingState='HKCU:\Software\'+$fixtureGuid+'\PendingInstall'

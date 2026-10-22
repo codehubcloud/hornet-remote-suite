@@ -1,6 +1,12 @@
 param([Parameter(Mandatory=$true)][ValidateSet('Detect','Close','Prompt','DeferredNotice','ScheduleFailed')][string]$Mode)
 $ErrorActionPreference = 'Stop'
+function Write-ProbeDiagnostic([string]$Message) {
+    if ($env:HORNET_INSTALLER_DIAGNOSTICS) {
+        [IO.File]::AppendAllText($env:HORNET_INSTALLER_DIAGNOSTICS, ([DateTime]::UtcNow.ToString('o')+' '+$Mode+' '+$Message+[Environment]::NewLine))
+    }
+}
 try {
+    Write-ProbeDiagnostic 'started'
     if ($Mode -in @('DeferredNotice','ScheduleFailed')) {
         $result=& (Join-Path $PSScriptRoot 'installer-files-in-use.ps1') -Action $Mode
         exit $result
@@ -44,6 +50,7 @@ try {
         }
     }
     if ($Mode -eq 'Detect') {
+        Write-ProbeDiagnostic ('matched='+$matched.Count)
         if ($matched.Count -gt 0) { exit 0 }
         exit 1
     }
@@ -59,6 +66,7 @@ try {
     }
     exit 0
 } catch {
+    Write-ProbeDiagnostic ($_.Exception.ToString())
     # Detection failures must not silently permit an overwrite.
     [Console]::Error.WriteLine('Installer process check failed: '+$_.Exception.Message)
     exit 2
