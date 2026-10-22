@@ -34,7 +34,7 @@ export function SessionCommands({recent,autoUpdate,toggleHosts,hostsVisible,open
  const [hexOpen,setHexOpen]=useState(false);
  const [fullscreen,setFullscreen]=useState(false);
  useEffect(()=>{let mounted=true;void window.hornet.windowChrome.getFullscreen().then(value=>{if(mounted)setFullscreen(value);}).catch(s.fail);const stop=window.hornet.windowChrome.onFullscreen(setFullscreen);return()=>{mounted=false;stop();};},[]);
- const toggleFullscreen=()=>void window.hornet.windowChrome.setFullscreen(!fullscreen).catch(s.fail);
+ const toggleFullscreen=()=>void window.hornet.windowChrome.toggleFullscreen().catch(s.fail);
  const chrome=useChromePreferences(),quickCommands=useQuickCommands(),[toolbarMenu,setToolbarMenu]=useState<{x:number;y:number}|null>(null),toolbarDrag=useRef('');
  useEffect(()=>window.hornet.windowChrome.onContextMenu(point=>setToolbarMenu(point)),[]);
  const changeChrome:typeof chrome.change=patch=>{try{chrome.change(patch);}catch(e){s.fail(e);}};
@@ -118,7 +118,7 @@ export function SessionCommands({recent,autoUpdate,toggleHosts,hostsVisible,open
   {label:'帮助',access:'H',items:helpItems}
  ];
  useEffect(()=>{const key=(event:KeyboardEvent)=>{
-  if(event.key==='Escape'){setHelp(null);if(fullscreen)void window.hornet.windowChrome.setFullscreen(false).catch(s.fail);return;}
+  if(event.key==='Escape'){setHelp(null);void window.hornet.windowChrome.setFullscreen(false).catch(s.fail);return;}
   if(document.querySelector('.modal-backdrop'))return;
   let action:(()=>void)|undefined;
   if(event.code==='F11'&&!event.ctrlKey&&!event.altKey&&!event.shiftKey)action=toggleFullscreen;

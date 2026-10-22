@@ -1,4 +1,5 @@
 import { app,BrowserWindow,dialog,clipboard,ClipboardItem,ipcMain,protocol,net,screen,type IpcMainInvokeEvent,type IpcMainEvent } from 'electron';
+import { FullscreenController } from './fullscreen';
 import { plainRtf } from './rtf';
 import { join,basename,resolve,sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -23,6 +24,7 @@ const rdp=new RdpService();
 protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);
 if(process.env.HORNET_USER_DATA)app.setPath('userData',process.env.HORNET_USER_DATA);
 let window:BrowserWindow|undefined,backend:Backend,vault:Vault;
+let fullscreen:FullscreenController;
 const taskCache=new Map<string,TaskSnapshot>();
 const grants=new PathGrants();
 const localFiles=new LocalFiles(grants);
@@ -105,7 +107,8 @@ async function setupIpc(){
           await new Promise<void>((resolve,reject)=>{printWindow.webContents.print({silent:false,landscape:doc.landscape,pageSize:doc.pageSize,printBackground:false},(success,reason)=>{if(success||/cancel/i.test(reason))resolve();else reject(new Error(reason));});});}finally{if(!printWindow.isDestroyed())printWindow.destroy();}data=null;break;
         }
         case 'windowChrome.getFullscreen':z.object({}).strict().parse(m.payload);data=window?.isFullScreen()??false;break;
-        case 'windowChrome.setFullscreen':{const {value}=z.object({value:z.boolean()}).strict().parse(m.payload);window?.setFullScreen(value);data=null;break;}
+        case 'windowChrome.setFullscreen':{const {value}=z.object({value:z.boolean()}).strict().parse(m.payload);fullscreen.set(value);data=null;break;}
+        case 'windowChrome.toggleFullscreen':z.object({}).strict().parse(m.payload);fullscreen.toggle();data=null;break;
         case 'windowChrome.colors':{
           const color=z.string().regex(/^#[0-9a-f]{6}$/i);
           const colors=z.object({color,symbolColor:color}).strict().parse(m.payload);
@@ -226,8 +229,9 @@ async function bootstrap(){
     if(x<0||x>bounds.width||y<0||y>36)return;
     event.preventDefault();chromeWindow.webContents.send('hornet:chrome-context',{x,y});
   });
-  window.on('enter-full-screen',()=>window?.webContents.send('hornet:fullscreen',true));
-  window.on('leave-full-screen',()=>window?.webContents.send('hornet:fullscreen',false));
+  fullscreen=new FullscreenController(()=>window?.isFullScreen()??false,value=>window?.setFullScreen(value));
+  const fullscreenChanged=()=>{window?.webContents.send('hornet:fullscreen',window.isFullScreen());setImmediate(()=>fullscreen.completed());};
+  window.on('enter-full-screen',fullscreenChanged);window.on('leave-full-screen',fullscreenChanged);
   window.removeMenu();window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_webContents,_permission,callback)=>callback(false));
