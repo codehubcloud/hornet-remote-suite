@@ -41,5 +41,5 @@ export class Vault {
   lock(){this.locked=true;}
   private flush(){mkdirSync(dirname(this.file),{recursive:true});writeFileSync(this.file+'.tmp',JSON.stringify(this.entries),{mode:0o600});renameSync(this.file+'.tmp',this.file);}
 }
-function sameCredentialIdentity(a:Profile,b:Profile){return a.profileId===b.profileId&&a.host===b.host&&a.port===b.port&&a.username===b.username&&(a.protocol??'ssh')===(b.protocol??'ssh')&&a.authType===b.authType&&a.ftpSecurity===b.ftpSecurity;}
-function credentialIdentity(p:Profile){return createHash('sha256').update(JSON.stringify([p.protocol??'ssh',p.host,p.port,p.username,p.authType,p.ftpSecurity??''])).digest('hex');}
+function sameCredentialIdentity(a:Profile,b:Profile){return a.profileId===b.profileId&&a.host===b.host&&a.port===b.port&&a.username===b.username&&(a.protocol??'ssh')===(b.protocol??'ssh')&&a.authType===b.authType&&a.ftpSecurity===b.ftpSecurity&&(a.session?.s3??false)===(b.session?.s3??false);}
+function credentialIdentity(p:Profile){return createHash('sha256').update(JSON.stringify([p.protocol??'ssh',p.host,p.port,p.username,p.authType,p.ftpSecurity??'',p.session?.s3??false])).digest('hex');}

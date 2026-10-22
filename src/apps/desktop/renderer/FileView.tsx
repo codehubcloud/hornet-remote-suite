@@ -4,7 +4,7 @@ import { useEffect,useRef,useState } from 'react';
 import type { FileEntry,FilePage } from '../../../packages/contracts';
 import { useStore,type View } from './store';
 export function FileView({view,compact=false,followTarget,onDirectory,uploadSelected,downloadTo,downloadSelection,refreshKey=0}:{view:View;compact?:boolean;followTarget?:{terminalId:string;path:string};onDirectory?:(path:string|null)=>void;uploadSelected?:()=>Promise<void>;downloadTo?:(file:FileEntry)=>Promise<void>;downloadSelection?:(files:FileEntry[])=>Promise<void>;refreshKey?:number}){
- const ftp=view.profile.protocol==='ftp';
+ const ftp=view.profile.protocol==='ftp',s3=!!view.profile.session?.s3;
  const [selected,setSelected]=useState<string[]>([]),[batch,setBatch]=useState(false);
  const request=useRef(0),wasFollowing=useRef(false),location=useRef('.');
  const [followError,setFollowError]=useState('');
@@ -13,11 +13,12 @@ export function FileView({view,compact=false,followTarget,onDirectory,uploadSele
  const [path,setPath]=useState('.'),[busy,setBusy]=useState(false);
  const [operation,setOperation]=useState<{kind:'mkdir'|'rename'|'chmod';file?:FileEntry}|null>(null),[name,setName]=useState('');
  const fail=useStore(s=>s.fail);
+ const selectable=(file:FileEntry)=>file.kind==='file'||(!s3&&file.kind==='directory'&&!!downloadSelection);
  async function load(path:string,quiet=false){const current=++request.current;location.current=path;onDirectory?.(null);setBusy(true);try{const p=await window.hornet.file.list(view.connectionId,path);if(current===request.current){location.current=p.path;setPage(p);setPath(p.path);setSelected([]);onDirectory?.(p.path);setFollowError('');}}catch(e){if(current===request.current){if(quiet)setFollowError(e instanceof Error?e.message:tr("无法跟随目录"));else fail(e);}}finally{if(current===request.current)setBusy(false);}}
  useEffect(()=>{void load(view.profile.session?.remoteDirectory??'.');return()=>{request.current++;};},[view.connectionId]);
  useEffect(()=>{if(followTarget)void load(followTarget.path,true);else if(wasFollowing.current){request.current++;setBusy(false);setFollowError('');}wasFollowing.current=Boolean(followTarget);},[followTarget?.path,followTarget?.terminalId]);
  useEffect(()=>{if(refreshKey)void load(location.current);},[refreshKey]);
- async function downloadBatch(){setBatch(true);try{const items=page.entries.filter(f=>selected.includes(f.path));if(items.some(f=>f.kind==='directory')&&downloadSelection){await downloadSelection(items);setSelected([]);return;}for(const file of items.filter(f=>(f.kind==='file'||(f.kind==='directory'&&!!downloadSelection)))){if(downloadTo)await downloadTo(file);}setSelected([]);}catch(e){fail(e);}finally{setBatch(false);}}
+ async function downloadBatch(){setBatch(true);try{const items=page.entries.filter(f=>selected.includes(f.path));if(!s3&&items.some(f=>f.kind==='directory')&&downloadSelection){await downloadSelection(items);setSelected([]);return;}for(const file of items.filter(f=>f.kind==='file'||(!s3&&f.kind==='directory'&&!!downloadSelection))){if(downloadTo)await downloadTo(file);}setSelected([]);}catch(e){fail(e);}finally{setBatch(false);}}
  async function upload(){
   if(uploadSelected){await uploadSelected();return;}
   try{const grant=await window.hornet.file.choose('upload');if(!grant)return;
@@ -49,11 +50,11 @@ export function FileView({view,compact=false,followTarget,onDirectory,uploadSele
    refresh:busy?undefined:()=>void load(page.path),up:busy?undefined:()=>void load(page.path+'/..'),
    mkdir:busy?undefined:()=>{setName('');setOperation({kind:'mkdir'});},
    upload:busy?undefined:()=>void upload(),download:busy||batch||!selected.length?undefined:()=>void downloadBatch(),
-   selectAll:busy?undefined:()=>setSelected(page.entries.filter(f=>f.kind==='file'||f.kind==='directory'&&!!downloadSelection).map(f=>f.path)),
+   selectAll:busy?undefined:()=>setSelected(page.entries.filter(f=>f.kind==='file'||!s3&&f.kind==='directory'&&!!downloadSelection).map(f=>f.path)),
    search:()=>filterInput.current?.focus(),
    rename:busy||!one?undefined:()=>{setName(one.name);setOperation({kind:'rename',file:one});},
    remove:busy||!one?undefined:()=>void remove(one),
-   chmod:ftp||busy||!one||one.kind==='link'?undefined:()=>{setName((one.mode&0o777).toString(8).padStart(3,'0'));setOperation({kind:'chmod',file:one});}
+   chmod:ftp||s3||busy||!one||one.kind==='link'?undefined:()=>{setName((one.mode&0o777).toString(8).padStart(3,'0'));setOperation({kind:'chmod',file:one});}
   });
  });
  useEffect(()=>()=>{if(!compact)useWorkspaceCommands.getState().remove(view.id);},[view.id,compact]);
@@ -67,17 +68,17 @@ export function FileView({view,compact=false,followTarget,onDirectory,uploadSele
    <button type="button" className="primary" onClick={()=>void upload()}>{tr("↑ 上传文件")}</button>
   </form>
   {downloadTo&&<div className="file-batch"><button disabled={batch||!selected.length} onClick={()=>void downloadBatch()}>{tr("← 下载所选（")}{selected.length}）</button></div>}
-  <div className="file-summary"><span>{ftp?(view.profile.ftpSecurity==='none'?'FTP':'FTPS'):'SFTP'} · {view.profile.username}@{view.profile.host}</span><span>{busy?tr("正在读取…"):page.entries.length+tr(" 个条目")}{page.truncated?tr(" · 仅显示前10000项"):''}</span></div>
+  <div className="file-summary"><span>{s3?'AWS S3':ftp?(view.profile.ftpSecurity==='none'?'FTP':'FTPS'):'SFTP'} · {s3?view.profile.host:view.profile.username+'@'+view.profile.host}</span><span>{busy?tr("正在读取…"):page.entries.length+tr(" 个条目")}{page.truncated?tr(" · 仅显示前10000项"):''}</span></div>
   <input ref={filterInput} className="file-filter" aria-label={tr("筛选当前目录")} placeholder={tr("筛选当前目录…")} value={filter} onChange={e=>setFilter(e.target.value)}/>
-  <div className="table-scroll"><table><thead><tr>{downloadTo&&<th><input type="checkbox" aria-label={tr("选择全部远端文件")} checked={page.entries.some(f=>(f.kind==='file'||(f.kind==='directory'&&!!downloadSelection)))&&page.entries.filter(f=>(f.kind==='file'||(f.kind==='directory'&&!!downloadSelection))).every(f=>selected.includes(f.path))} onChange={e=>setSelected(e.target.checked?page.entries.filter(f=>(f.kind==='file'||(f.kind==='directory'&&!!downloadSelection))).map(f=>f.path):[])}/></th>}<th>{tr("名称")}</th><th>{tr("大小")}</th><th>{tr("修改时间")}</th><th>{tr("权限")}</th><th>{tr("操作")}</th></tr></thead><tbody>
+  <div className="table-scroll"><table><thead><tr>{downloadTo&&<th><input type="checkbox" aria-label={tr("选择全部远端文件")} checked={page.entries.some(selectable)&&page.entries.filter(selectable).every(f=>selected.includes(f.path))} onChange={e=>setSelected(e.target.checked?page.entries.filter(selectable).map(f=>f.path):[])}/></th>}<th>{tr("名称")}</th><th>{tr("大小")}</th><th>{tr("修改时间")}</th><th>{tr("权限")}</th><th>{tr("操作")}</th></tr></thead><tbody>
    {page.entries.filter(file=>file.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase())).map(file=><tr key={file.path} onDoubleClick={()=>file.kind==='directory'?void load(file.path):file.kind==='file'&&!ftp?void edit(file):undefined}>
-    {downloadTo&&<td>{(file.kind==='file'||(file.kind==='directory'&&!!downloadSelection))&&<input type="checkbox" aria-label={tr("选择远端文件 ")+file.name} checked={selected.includes(file.path)} onChange={e=>setSelected(old=>e.target.checked?[...old,file.path]:old.filter(p=>p!==file.path))}/>}</td>}
+    {downloadTo&&<td>{selectable(file)&&<input type="checkbox" aria-label={tr("选择远端文件 ")+file.name} checked={selected.includes(file.path)} onChange={e=>setSelected(old=>e.target.checked?[...old,file.path]:old.filter(p=>p!==file.path))}/>}</td>}
     <td><span className={file.kind==='directory'?'folder-icon':'file-icon'}>{file.kind==='directory'?'▰':file.kind==='link'?'↗':'▤'}</span>{file.name}</td>
     <td>{file.kind==='directory'?'—':formatBytes(file.size)}</td><td>{file.modified?formatDate(file.modified):'—'}</td><td className="mono">{file.mode?(file.mode&0o777).toString(8):'—'}</td>
-    <td>{file.kind==='directory'?<><button onClick={()=>void load(file.path)}>{tr("打开")}</button>{downloadSelection&&<button onClick={()=>void download(file)}>{tr("下载目录")}</button>}</>:file.kind==='file'?<><button onClick={()=>void download(file)}>{tr("下载")}</button>{!ftp&&<button onClick={()=>void edit(file)}>{tr("编辑")}</button>}</>:<span className="muted">{file.kind==='link'?tr("符号链接"):tr("特殊文件")}</span>}<button onClick={()=>{setName(file.name);setOperation({kind:'rename',file});}}>{tr("重命名")}</button><button onClick={()=>void remove(file)}>{tr("删除")}</button>{!ftp&&file.kind!=='link'&&<button onClick={()=>{setName((file.mode&0o777).toString(8).padStart(3,'0'));setOperation({kind:'chmod',file});}}>{tr("权限")}</button>}</td>
+    <td>{file.kind==='directory'?<><button onClick={()=>void load(file.path)}>{tr("打开")}</button>{!s3&&downloadSelection&&<button onClick={()=>void download(file)}>{tr("下载目录")}</button>}</>:file.kind==='file'?<><button onClick={()=>void download(file)}>{tr("下载")}</button>{!ftp&&<button onClick={()=>void edit(file)}>{tr("编辑")}</button>}</>:<span className="muted">{file.kind==='link'?tr("符号链接"):tr("特殊文件")}</span>}{(!s3||file.kind==='file')&&<button onClick={()=>{setName(file.name);setOperation({kind:'rename',file});}}>{tr("重命名")}</button>}<button onClick={()=>void remove(file)}>{tr("删除")}</button>{!ftp&&!s3&&file.kind!=='link'&&<button onClick={()=>{setName((file.mode&0o777).toString(8).padStart(3,'0'));setOperation({kind:'chmod',file});}}>{tr("权限")}</button>}</td>
    </tr>)}
   </tbody></table>{!busy&&!page.entries.length&&<div className="empty">{tr("此目录为空")}</div>}</div>
-  <p className="footnote">{ftp?tr("FTP 传输使用新文件名并校验内容；暂停后从头重传。服务器不保证并发重命名不覆盖，请勿并发修改同一目标。") : tr("传输在后台继续。上传与下载均使用新文件名，不覆盖已有目标；双击小型 UTF-8 文本可编辑。")}</p>
+  <p className="footnote">{s3?'S3 objects support upload, download, preview, rename, and delete. POSIX permissions and folder rename are not available.':ftp?tr("FTP 传输使用新文件名并校验内容；暂停后从头重传。服务器不保证并发重命名不覆盖，请勿并发修改同一目标。") : tr("传输在后台继续。上传与下载均使用新文件名，不覆盖已有目标；双击小型 UTF-8 文本可编辑。")}</p>
   {operation&&<div className="modal-backdrop"><form className="modal" onSubmit={e=>{e.preventDefault();void mutate();}}><h2>{operation.kind==='chmod'?tr("修改权限"):operation.kind==='mkdir'?tr("新建远端目录"):tr("重命名")}</h2>{operation.kind==='chmod'&&<p>{tr("三位八进制权限（000–777），会清除特殊权限位。路径在服务器端并发变化时无法保证原子性。")}</p>}<label>{operation.kind==='chmod'?tr("八进制权限"):tr("名称")}<input autoFocus required value={name} onChange={e=>setName(e.target.value)}/></label><div className="modal-actions"><button type="button" onClick={()=>setOperation(null)}>{tr("取消")}</button><button className="primary">{tr("确认")}</button></div></form></div>}
  </div>;
 }

@@ -30,6 +30,14 @@ describe('session settings and quick command migration',()=>{
   try{const saved=db.saveProfile({...profile(),session:{mosh:true}},0);expect(db.profile(saved.profileId).session?.mosh).toBe(true);expect(()=>profileSchema.parse({...saved,session:{mosh:true,arbitrary:'value'}})).toThrow();}
   finally{db.close();}
  });
+ it('validates AWS S3 as an isolated file-only SSH-backed profile option',()=>{
+  const p=profile(),s3=profileSchema.parse({...p,host:'example-bucket',port:443,username:'AKIAEXAMPLE',session:{s3:true,s3Region:'us-east-1'}});
+  expect(s3.session?.s3).toBe(true);expect(sameTransport(s3,{...s3,session:{...s3.session,s3Region:'eu-west-1'}})).toBe(false);
+  expect(()=>profileSchema.parse({...s3,jumpProfileIds:[randomUUID()]})).toThrow();
+  expect(()=>profileSchema.parse({...s3,authType:'agent'})).toThrow();
+  expect(()=>profileSchema.parse({...s3,port:22})).toThrow();
+  expect(()=>profileSchema.parse({...s3,host:'Invalid_Bucket'})).toThrow();
+ });
  it('keeps old commands intact, preserves ordering and rejects dangling or ambiguous imported sets',()=>{
   const old=[{id:randomUUID(),name:'A',text:'pwd'},{id:randomUUID(),name:'B',text:'ls'}],library=readQuickLibrary(null,JSON.stringify(old));
   expect(library.commands).toEqual(old);expect(library.sets).toEqual([{id:'default',name:'默认命令集'}]);expect(readQuickLibrary(JSON.stringify(library),null)).toEqual(library);

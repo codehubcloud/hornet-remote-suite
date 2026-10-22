@@ -2,6 +2,9 @@ import { sameTransport } from '../../packages/core/profile-settings';
 import { FtpConnections } from '../ftp/connections';
 import { FtpFiles } from '../ftp/files';
 import { FtpTransfers } from '../ftp/transfers';
+import { S3Connections } from '../s3/connections';
+import { S3Files } from '../s3/files';
+import { S3Transfers } from '../s3/transfers';
 import { DeviceTerminals } from '../terminal/devices';
 import { localShells,openLocal } from '../terminal/local';
 import { serialDevices,openSerial } from '../terminal/serial';
@@ -43,7 +46,9 @@ const cachedSecret=(owner:string,profile:Profile):Promise<string|undefined>=>new
 const connections=new Connections(store,challenges,emit,cachedSecret);
 const ftp=new FtpConnections(store,challenges,emit,cachedSecret);
 const ftpFiles=new FtpFiles(ftp);
-const fileService=(id:string)=>ftp.has(id)?ftpFiles:files;
+const s3=new S3Connections(store,challenges,emit,cachedSecret);
+const s3Files=new S3Files(s3);
+const fileService=(id:string)=>s3.has(id)?s3Files:ftp.has(id)?ftpFiles:files;
 const terminals=new Terminals(connections,emit);
 const telnet=new TelnetTerminals(emit);
 const rlogin=new RloginTerminals(emit);
@@ -56,7 +61,7 @@ const x11=new X11Service(connections,xServers);
 const xdmcp=new XdmcpService(xServers);
 const lpd=new LpdService(join(process.argv[2],'print-spool'),async(job,path)=>{const result=await nativeCall({op:'print',path,printer:job.printer,mode:job.mode,jobId:job.jobId},60000);return result.osJobId;});
 const files=new Files(connections);
-const transfers=new Transfers(store,connections,emit,new FtpTransfers(ftp,emit));
+const transfers=new Transfers(store,connections,emit,new FtpTransfers(ftp,emit),new S3Transfers(s3,emit));
 async function dispatch(m:Message):Promise<unknown>{
   const p=m.payload,owner=m.owner;
   switch(m.method){
@@ -92,14 +97,14 @@ async function dispatch(m:Message):Promise<unknown>{
     case 'tunnel.create':return tunnels.create(owner,schemas['tunnel.create'].parse(p));
     case 'tunnel.stop':return tunnels.stop(owner,schemas['tunnel.stop'].parse(p).tunnelId);
     case 'profile.list':return store.profiles();
-    case 'profile.save':{const v=schemas['profile.save'].parse(p);if((connections.hasProfile(v.profile.profileId)||ftp.hasProfile(v.profile.profileId)||telnet.hasProfile(v.profile.profileId)||rlogin.hasProfile(v.profile.profileId))&&!sameTransport(store.profile(v.profile.profileId),v.profile))throw new AppError('PROFILE_BUSY','请先关闭正在使用此配置的连接，再修改认证或端点。');return store.saveProfile(v.profile,v.expectedRevision);}
-    case 'group.remove':{const v=schemas['group.remove'].parse(p);if(v.members.some(m=>connections.hasProfile(m.profileId)||ftp.hasProfile(m.profileId)||telnet.hasProfile(m.profileId)||rlogin.hasProfile(m.profileId)||transfers.hasProfile(m.profileId)))throw new AppError('PROFILE_BUSY','分组中有正在使用的连接或传输，请先关闭后再删除。');return store.removeGroup(v.path,v.members);}
-    case 'profile.delete':{const v=schemas['profile.delete'].parse(p);if(connections.hasProfile(v.profileId)||ftp.hasProfile(v.profileId)||telnet.hasProfile(v.profileId)||rlogin.hasProfile(v.profileId)||transfers.hasProfile(v.profileId))throw new AppError('PROFILE_BUSY','请先关闭此主机的连接和传输。');return store.deleteProfile(v.profileId,v.expectedRevision);}
+    case 'profile.save':{const v=schemas['profile.save'].parse(p);if((connections.hasProfile(v.profile.profileId)||ftp.hasProfile(v.profile.profileId)||s3.hasProfile(v.profile.profileId)||telnet.hasProfile(v.profile.profileId)||rlogin.hasProfile(v.profile.profileId))&&!sameTransport(store.profile(v.profile.profileId),v.profile))throw new AppError('PROFILE_BUSY','请先关闭正在使用此配置的连接，再修改认证或端点。');return store.saveProfile(v.profile,v.expectedRevision);}
+    case 'group.remove':{const v=schemas['group.remove'].parse(p);if(v.members.some(m=>connections.hasProfile(m.profileId)||ftp.hasProfile(m.profileId)||s3.hasProfile(m.profileId)||telnet.hasProfile(m.profileId)||rlogin.hasProfile(m.profileId)||transfers.hasProfile(m.profileId)))throw new AppError('PROFILE_BUSY','分组中有正在使用的连接或传输，请先关闭后再删除。');return store.removeGroup(v.path,v.members);}
+    case 'profile.delete':{const v=schemas['profile.delete'].parse(p);if(connections.hasProfile(v.profileId)||ftp.hasProfile(v.profileId)||s3.hasProfile(v.profileId)||telnet.hasProfile(v.profileId)||rlogin.hasProfile(v.profileId)||transfers.hasProfile(v.profileId))throw new AppError('PROFILE_BUSY','请先关闭此主机的连接和传输。');return store.deleteProfile(v.profileId,v.expectedRevision);}
     case 'profile.import':return store.importProfiles(z.array(profileSchema).max(1000).parse(p));
-    case 'connection.retain':return connections.retain(owner,schemas['connection.retain'].parse(p).connectionId);
-    case 'connection.open':{const v=schemas['connection.open'].parse(p),profile=store.profile(v.profileId);if(profile.protocol==='ftp'){if(v.purpose!=='files')throw new AppError('CAPABILITY_UNAVAILABLE','FTP 不支持终端。');return ftp.acquire(owner,v.profileId);}if((profile.protocol??'ssh')!=='ssh')throw new AppError('CAPABILITY_UNAVAILABLE',`${(profile.protocol??'ssh').toUpperCase()} requires its dedicated connection entry.`);return v.fresh?connections.acquireIsolated(owner,v.profileId):connections.acquire(owner,v.profileId);}
-    case 'connection.release':{const {leaseId}=schemas['connection.release'].parse(p);return (ftp.hasLease(leaseId)?ftp:connections).release(owner,leaseId);}
-    case 'connection.close':{const v=schemas['connection.close'].parse(p);return (ftp.has(v.connectionId)?ftp:connections).close(owner,v.connectionId,v.generation);}
+    case 'connection.retain':{const id=schemas['connection.retain'].parse(p).connectionId;return s3.has(id)?s3.retain(owner,id):connections.retain(owner,id);}
+    case 'connection.open':{const v=schemas['connection.open'].parse(p),profile=store.profile(v.profileId);if(profile.session?.s3){if(v.purpose!=='files')throw new AppError('CAPABILITY_UNAVAILABLE','AWS S3 profiles provide object storage, not a terminal.');return s3.acquire(owner,v.profileId);}if(profile.protocol==='ftp'){if(v.purpose!=='files')throw new AppError('CAPABILITY_UNAVAILABLE','FTP 不支持终端。');return ftp.acquire(owner,v.profileId);}if((profile.protocol??'ssh')!=='ssh')throw new AppError('CAPABILITY_UNAVAILABLE',`${(profile.protocol??'ssh').toUpperCase()} requires its dedicated connection entry.`);return v.fresh?connections.acquireIsolated(owner,v.profileId):connections.acquire(owner,v.profileId);}
+    case 'connection.release':{const {leaseId}=schemas['connection.release'].parse(p);return (s3.hasLease(leaseId)?s3:ftp.hasLease(leaseId)?ftp:connections).release(owner,leaseId);}
+    case 'connection.close':{const v=schemas['connection.close'].parse(p);return (s3.has(v.connectionId)?s3:ftp.has(v.connectionId)?ftp:connections).close(owner,v.connectionId,v.generation);}
     case 'auth.respond':{const v=schemas['auth.respond'].parse(p);return challenges.respond(owner,v.challengeId,v.response);}
     case 'auth.cancel':return challenges.cancel(owner,schemas['auth.cancel'].parse(p).challengeId);
     case 'auth.key':{const v=z.object({challengeId:z.string().uuid(),key:z.string().max(65536)}).parse(p);if(challenges.kind(owner,v.challengeId)!=='privateKey')throw new AppError('IPC005','私钥请求已失效。');return challenges.respond(owner,v.challengeId,v.key);}
@@ -145,9 +150,10 @@ async function dispatch(m:Message):Promise<unknown>{
       {id:'local',name:'本地 PowerShell / CMD',state:localShells().length?'available':'unavailable',reason:'Windows ConPTY 交互终端、窗口尺寸、分屏和持续日志；文件菜单打开'},
       {id:'serial',name:'串口终端',state:'requires-setup',reason:'COM 端口枚举、波特率/校验位/流控、多编码、脚本与日志；需要可用串口设备'},
       {id:'ftp',name:'FTP / FTPS',state:'available',reason:'被动模式、显式/隐式 TLS、双面板目录管理、普通文件传输与 SHA-256 校验；不支持目录同步、在线编辑或权限修改'},
+      {id:'s3',name:'AWS S3 object storage',state:'available',reason:'Bucket/object browsing, create empty folders, UTF-8 preview/edit, verified upload/download and object rename/delete; requires bucket-scoped IAM access keys; POSIX permissions and folder rename are unsupported'},
       {id:'extensions',name:'IDE / 插件 / AI / 企业服务',state:'unavailable',reason:'按设计文档列为后续扩展，不在当前版本伪装启用'}
     ];
-    case 'shutdown':await devices.stop();await lpd.shutdown();vnc.stop();await x11.stop();await xdmcp.stop();await xServers.stop();await transfers.stop();terminals.stop();telnet.stop();rlogin.stop();tunnels.shutdown();challenges.cancelOwner(owner);ftp.stop();await connections.stop();store.close();return null;
+    case 'shutdown':await devices.stop();await lpd.shutdown();vnc.stop();await x11.stop();await xdmcp.stop();await xServers.stop();await transfers.stop();terminals.stop();telnet.stop();rlogin.stop();tunnels.shutdown();challenges.cancelOwner(owner);s3.stop();ftp.stop();await connections.stop();store.close();return null;
     default:throw new AppError('IPC001','未知方法。');
   }
 }

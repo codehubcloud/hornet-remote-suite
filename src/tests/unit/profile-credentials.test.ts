@@ -46,6 +46,11 @@ it('binds staged credentials to the endpoint and accepts legacy encrypted entrie
  const entries=JSON.parse(readFileSync(h.file,'utf8'));entries[saved.profileId+':1']=entries[saved.profileId+':1'].value;
  const {writeFileSync}=await import('node:fs');writeFileSync(h.file,JSON.stringify(entries));expect(new Vault(h.file).get(saved)).toBe('original');
 });
+it('does not reuse an SSH password as an AWS secret access key',async()=>{
+ const h=fixture(),saved=await h.manager.saveProfile(h.profile,0,{mode:'save',password:'ssh-password'});
+ const awsProfile=profileSchema.parse({...saved,port:443,host:'example-bucket',username:'AKIAEXAMPLE',session:{s3:true,s3Region:'us-east-1'}});
+ expect(h.vault.get(awsProfile)).toBeUndefined();
+});
 it('reveals only the current saved revision without exporting or rewriting credentials',async()=>{
  const h=fixture(),saved=await h.manager.saveProfile(h.profile,0,{mode:'save',password:'original'}),encrypted=readFileSync(h.file,'utf8');
  await expect(h.manager.revealPassword(saved.profileId,saved.revision)).resolves.toEqual({password:'original'});

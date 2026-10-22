@@ -19,7 +19,7 @@ export const profileSchema = z.object({
   jumpProfileIds:z.array(id).max(4).optional(),
   session:sessionOptionsSchema.optional(),
   revision: z.number().int().nonnegative(),
-}).strict().refine(p=>['telnet','local','serial'].includes(p.protocol??'ssh')||p.username.length>0,{message:'连接需要用户名。',path:['username']}).refine(p=>!p.jumpProfileIds?.length||((p.protocol??'ssh')==='ssh'&&!p.jumpProfileIds.includes(p.profileId)&&new Set(p.jumpProfileIds).size===p.jumpProfileIds.length),{message:'跳板链只能用于 SSH，不能重复或包含自身。',path:['jumpProfileIds']}).refine(p=>p.protocol==='ftp'?p.authType==='password'&&!!p.ftpSecurity:!p.ftpSecurity,{message:'FTP 需要密码认证并指定传输加密方式。',path:['ftpSecurity']});
+}).strict().refine(p=>['telnet','local','serial'].includes(p.protocol??'ssh')||p.username.length>0,{message:'连接需要用户名。',path:['username']}).refine(p=>!p.jumpProfileIds?.length||((p.protocol??'ssh')==='ssh'&&!p.jumpProfileIds.includes(p.profileId)&&new Set(p.jumpProfileIds).size===p.jumpProfileIds.length),{message:'跳板链只能用于 SSH，不能重复或包含自身。',path:['jumpProfileIds']}).refine(p=>p.protocol==='ftp'?p.authType==='password'&&!!p.ftpSecurity:!p.ftpSecurity,{message:'FTP 需要密码认证并指定传输加密方式。',path:['ftpSecurity']}).refine(p=>!p.session?.s3||((p.protocol??'ssh')==='ssh'&&/^(?!\d+\.\d+\.\d+\.\d+$)(?!.*\.\.)[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(p.host)&&p.port===443&&p.authType==='password'&&!!p.username&&!p.session.mosh&&!p.jumpProfileIds?.length),{message:'AWS S3 requires a valid bucket name, access key, secret key authentication, port 443 and no SSH jump route.',path:['session']});
 export type Profile = z.infer<typeof profileSchema>;
 export const profileCredentialSchema=z.discriminatedUnion('mode',[
  z.object({mode:z.literal('keep')}).strict(),z.object({mode:z.literal('remove')}).strict(),

@@ -15,12 +15,12 @@ import type { TransferContext } from './tree-transfers';
 import type { FtpTransfers } from '../ftp/transfers';
 import { hashTransferStream,hashRemoteFile,type HashProgress } from './transfer-hash';
 
-interface Plan { transport?:'ftp';expectedTarget?:TransferContext['expectedTarget'];preserveModified?:boolean;expectedSource?:TransferContext['expectedSource'];remoteParent?:string; localPath:string; localParent:string; remotePath:string; temp:string; profileRevision:number; sourceHash?:string; sourceSize?:number; committing?:boolean }
+interface Plan { transport?:'ftp'|'s3';expectedTarget?:TransferContext['expectedTarget'];preserveModified?:boolean;expectedSource?:TransferContext['expectedSource'];remoteParent?:string; localPath:string; localParent:string; remotePath:string; temp:string; profileRevision:number; sourceHash?:string; sourceSize?:number; committing?:boolean }
 export interface TransferTask { snapshot:TaskSnapshot;owner:string;key:string;hash:string;plan:Plan; abort?:AbortController; stop?:'paused'|'cancelled' }
 type Task=TransferTask;
 export class Transfers {
   private tasks=new Map<string,Task>();private running=new Set<string>();private stopped=false;
-  constructor(private store:Storage,private connections:Connections,private emit:(owner:string,event:HornetEvent)=>void,private ftp?:FtpTransfers){
+  constructor(private store:Storage,private connections:Connections,private emit:(owner:string,event:HornetEvent)=>void,private ftp?:FtpTransfers,private s3?:import('../s3/transfers').S3Transfers){
     for(const r of store.loadTasks()){
       const task:Task={snapshot:{...r.snapshot,verification:undefined},owner:r.owner,key:r.key,hash:r.hash,plan:r.detail as Plan};
       if(['queued','running','verifying','pausing','cancelling'].includes(task.snapshot.state))task.snapshot={...task.snapshot,state:'paused',revision:task.snapshot.revision+1,error:'应用已重启，恢复前会重新校验文件。'};
@@ -31,7 +31,8 @@ export class Transfers {
   list(owner:string){return [...this.tasks.values()].filter(t=>t.owner===owner).map(t=>t.snapshot).sort((a,b)=>b.updatedAt-a.updatedAt);}
   hasProfile(profileId:string){return [...this.tasks.values()].some(t=>t.snapshot.profileId===profileId&&!['succeeded','cancelled','failed','conflict'].includes(t.snapshot.state));}
   async start(owner:string,connectionId:string,direction:'upload'|'download',localPath:string,localParent:string,remotePath:string,key:string,context?:TransferContext){
-    const isFtp=this.ftp?.connections.has(connectionId),c=isFtp?this.ftp!.connections.get(owner,connectionId):this.connections.get(owner,connectionId);
+    const isS3=this.s3?.connections.has(connectionId),isFtp=this.ftp?.connections.has(connectionId),c=isS3?this.s3!.connections.get(owner,connectionId):isFtp?this.ftp!.connections.get(owner,connectionId):this.connections.get(owner,connectionId);
+    if(isS3)this.s3!.validate(remotePath,context);
     if(isFtp)this.ftp!.validate(remotePath,context);
     const hash=createHash('sha256').update(JSON.stringify({profileId:c.profile.profileId,direction,localPath,remotePath,expectedSource:context?.expectedSource,expectedTarget:context?.expectedTarget,preserveModified:context?.preserveModified,remoteParent:context?.remoteParent})).digest('hex');
     const previous=[...this.tasks.values()].find(t=>t.owner===owner&&t.key===key);
@@ -39,6 +40,7 @@ export class Transfers {
     const id=randomUUID();
     const plan:Plan={expectedTarget:context?.expectedTarget,preserveModified:context?.preserveModified,expectedSource:context?.expectedSource,remoteParent:context?.remoteParent,localPath,localParent,remotePath,profileRevision:c.profile.revision,temp:direction==='upload'?posix.join(posix.dirname(remotePath),'.hornet-'+id+'.part'):join(dirname(localPath),'.hornet-'+id+'.part')};
     if(isFtp)plan.transport='ftp';
+    if(isS3)plan.transport='s3';
     const task:Task={owner,key,hash,plan,snapshot:{taskId:id,profileId:c.profile.profileId,direction,name:direction==='upload'?basename(localPath):posix.basename(remotePath),state:'queued',totalBytes:0,transferredBytes:0,revision:1,updatedAt:Date.now()}};
     this.tasks.set(id,task);this.persist(task);this.emit(owner,{type:'task.state',task:task.snapshot});this.pump();return task.snapshot;
   }
@@ -72,6 +74,10 @@ export class Transfers {
       if(p.transport==='ftp'){
         if(!this.ftp)throw new AppError('CAPABILITY_UNAVAILABLE','FTP 传输服务不可用。');
         await this.ftp.run(t,signal,state=>this.change(t,state),()=>this.persist(t));return;
+      }
+      if(p.transport==='s3'){
+        if(!this.s3)throw new AppError('CAPABILITY_UNAVAILABLE','AWS S3 transfer service is unavailable.');
+        await this.s3.run(t,signal,state=>this.change(t,state));return;
       }
       lease=await this.connections.acquire(t.owner,t.snapshot.profileId);check();
       const sftp=await this.connections.sftp(t.owner,lease.connectionId),upload=t.snapshot.direction==='upload';

@@ -16,5 +16,7 @@ export const sessionOptionsSchema=z.object({
  device:z.union([localTerminalSchema,serialTerminalSchema]).optional(),
  rdpDomain:z.string().max(255).optional(),
  mosh:z.boolean().optional(),
+ s3:z.boolean().optional(),
+ s3Region:z.string().regex(/^[a-z0-9-]{3,64}$/).optional(),
 }).strict();
 export type SessionOptions=z.infer<typeof sessionOptionsSchema>;

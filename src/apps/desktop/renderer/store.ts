@@ -80,6 +80,7 @@ export async function refreshProfiles(){useStore.getState().setProfiles(await wi
 export function isTerminalClosed(view:View,state:Pick<State,'closedTerminals'|'connectionStates'>){return view.connectionAttempt?.state==='failed'||!!state.closedTerminals[view.terminalId??'']||['closed','failed'].includes(state.connectionStates[view.connectionId]);}
 export async function openView(profile:Profile,kind:'terminal'|'files'){
  if(profile.protocol==='ftp')kind='files';
+ if(profile.session?.s3)kind='files';
  if(profile.protocol==='telnet'||profile.protocol==='rlogin'||profile.session?.mosh)kind='terminal';
  if(kind==='terminal'){
   const id=crypto.randomUUID();
