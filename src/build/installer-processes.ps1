@@ -2,7 +2,8 @@ param([Parameter(Mandatory=$true)][ValidateSet('Detect','Close','Prompt','Deferr
 $ErrorActionPreference = 'Stop'
 function Write-ProbeDiagnostic([string]$Message) {
     if ($env:HORNET_INSTALLER_DIAGNOSTICS) {
-        [IO.File]::AppendAllText($env:HORNET_INSTALLER_DIAGNOSTICS, ([DateTime]::UtcNow.ToString('o')+' '+$Mode+' '+$Message+[Environment]::NewLine))
+        # Optional diagnostics must never change process detection or setup.
+        try { [IO.File]::AppendAllText($env:HORNET_INSTALLER_DIAGNOSTICS, ([DateTime]::UtcNow.ToString('o')+' '+$Mode+' '+$Message+[Environment]::NewLine)) } catch {}
     }
 }
 try {

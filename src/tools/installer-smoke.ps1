@@ -17,7 +17,7 @@ $oldRunOncePath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
 $oldRunOnceName = '!HornetSetup-' + $fixtureGuid
 $fixtureCache = Join-Path $env:LOCALAPPDATA ($fixtureName + '\Installer\' + $fixtureGuid)
 $previousDiagnostics = $env:HORNET_INSTALLER_DIAGNOSTICS
-$env:HORNET_INSTALLER_DIAGNOSTICS = Join-Path $fixtureRoot 'process-probe.log'
+$env:HORNET_INSTALLER_DIAGNOSTICS = $fixtureRoot + '.probe.log'
 Add-Type -ReferencedAssemblies System.Drawing,Accessibility @'
 using System;
 using System.Collections.Generic;
@@ -159,7 +159,14 @@ if ($StartupProbeInstaller) {
         [InstallerUI]::Click($script:probeConfirmation,2)
         if (!$probe.WaitForExit(15000) -or $probe.ExitCode -ne 2) { throw 'Real installer did not cancel without installation.' }
         Write-Output 'Real installer startup confirmation passed: running genuine app in a different directory; Cancel only, no Next/Install click.'
-    } finally { $probe.Refresh();if (!$probe.HasExited) { Stop-Process -Id $probe.Id -Force } }
+    } catch {
+        if (Test-Path -LiteralPath $env:HORNET_INSTALLER_DIAGNOSTICS) { Get-Content -LiteralPath $env:HORNET_INSTALLER_DIAGNOSTICS | Write-Host }
+        throw
+    } finally {
+        $probe.Refresh();if (!$probe.HasExited) { Stop-Process -Id $probe.Id -Force }
+        Remove-Item -LiteralPath ($fixtureRoot + '.probe.log') -ErrorAction SilentlyContinue
+        $env:HORNET_INSTALLER_DIAGNOSTICS = $previousDiagnostics
+    }
     exit 0
 }
 
@@ -329,6 +336,7 @@ public class FixtureApp {
     if (Test-Path -LiteralPath $env:HORNET_INSTALLER_DIAGNOSTICS) { Get-Content -LiteralPath $env:HORNET_INSTALLER_DIAGNOSTICS | Write-Host }
     throw
 } finally {
+    Remove-Item -LiteralPath ($fixtureRoot + '.probe.log') -ErrorAction SilentlyContinue
     $env:HORNET_INSTALLER_DIAGNOSTICS = $previousDiagnostics
     if (Test-Path -LiteralPath $startupPath) { Remove-ItemProperty -LiteralPath $startupPath -Name $startupName -ErrorAction SilentlyContinue }
     if (Test-Path -LiteralPath $oldRunOncePath) { Remove-ItemProperty -LiteralPath $oldRunOncePath -Name $oldRunOnceName -ErrorAction SilentlyContinue }
