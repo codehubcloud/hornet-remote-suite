@@ -69,7 +69,18 @@ export function App(){
   },1500);
   return()=>{live=false;window.clearTimeout(timer);};
  },[profilesLoading,guide,tourOpen,sessionsOpen,form,groupParent,s.challenges.length]);
- async function connect(p:Profile,kind:'terminal'|'files'){setPending(true);try{await openView(p,kind);setRecent(ids=>[p.profileId,...ids.filter(id=>id!==p.profileId)].slice(0,20));}catch(e){s.fail(e);}finally{setPending(false);}}
+ async function connect(p:Profile,kind:'terminal'|'files'){
+  setPending(true);
+  try{
+   if(p.protocol==='rdp'){
+    const status=await window.hornet.profiles.credentialStatus(p.profileId);
+    if(status.saved){const {password}=await window.hornet.profiles.revealPassword(p.profileId,p.revision);await window.hornet.rdp.open({host:p.host,port:p.port,username:p.username,domain:p.session?.rdpDomain??'',password});openTool('tool:desktop');}
+    else{openTool('tool:desktop');window.setTimeout(()=>window.dispatchEvent(new CustomEvent('hornet:rdp-prefill',{detail:{host:p.host,port:p.port,username:p.username,domain:p.session?.rdpDomain??''}})),0);}
+    setRecent(ids=>[p.profileId,...ids.filter(id=>id!==p.profileId)].slice(0,20));return;
+   }
+   await openView(p,kind);setRecent(ids=>[p.profileId,...ids.filter(id=>id!==p.profileId)].slice(0,20));
+  }catch(e){s.fail(e);}finally{setPending(false);}
+ }
  async function close(v:View):Promise<boolean>{
   if(v.kind==='terminal'){try{await closeTerminalView(v.id);return true;}catch(e){s.fail(e);return false;}}
   if(v.desktop){try{await window.hornet.vnc.close(v.desktop.desktopId);s.removeView(v.id);return true;}catch(e){s.fail(e);return false;}}

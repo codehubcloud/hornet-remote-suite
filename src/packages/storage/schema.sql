@@ -26,7 +26,7 @@ CREATE TABLE connection_profile (
   credential_id TEXT REFERENCES credential_profile(id) ON DELETE RESTRICT,
   name TEXT NOT NULL,
   protocol TEXT NOT NULL CHECK(protocol IN
-    ('ssh','sftp','ftp','telnet','serial','local','x11','xdmcp','rdp','vnc')),
+    ('ssh','sftp','ftp','telnet','rlogin','serial','local','x11','xdmcp','rdp','vnc')),
   endpoint_json TEXT NOT NULL,
   username TEXT,
   options_json TEXT NOT NULL DEFAULT '{}',

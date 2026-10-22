@@ -11,7 +11,7 @@ import { printConfigSchema, printQueueSchema, type PrintQueue, xServerOptionsSch
 const id = z.string().uuid();
 const text = z.string().min(1).max(255).refine(v => !/[\x00-\x1f\x7f]/.test(v), 'Contains control characters');
 export const profileSchema = z.object({
-  protocol:z.enum(['ssh','telnet','ftp']).optional(),profileId: id, name: text, host: text, port: z.number().int().min(1).max(65535),
+  protocol:z.enum(['ssh','telnet','rlogin','ftp','serial','local','rdp']).optional(),profileId: id, name: text, host: text, port: z.number().int().min(1).max(65535),
   ftpSecurity:z.enum(['none','explicit','implicit']).optional(),
   username: z.string().max(255).refine(v=>!/[\x00-\x1f\x7f]/.test(v)), group: z.string().max(128), authType: z.enum(['password', 'privateKey', 'agent']),
   description: z.string().max(2048).optional(), updatedAt: z.number().int().nonnegative().optional(),
@@ -19,7 +19,7 @@ export const profileSchema = z.object({
   jumpProfileIds:z.array(id).max(4).optional(),
   session:sessionOptionsSchema.optional(),
   revision: z.number().int().nonnegative(),
-}).strict().refine(p=>p.protocol==='telnet'||p.username.length>0,{message:'连接需要用户名。',path:['username']}).refine(p=>!p.jumpProfileIds?.length||((p.protocol??'ssh')==='ssh'&&!p.jumpProfileIds.includes(p.profileId)&&new Set(p.jumpProfileIds).size===p.jumpProfileIds.length),{message:'跳板链只能用于 SSH，不能重复或包含自身。',path:['jumpProfileIds']}).refine(p=>p.protocol==='ftp'?p.authType==='password'&&!!p.ftpSecurity:!p.ftpSecurity,{message:'FTP 需要密码认证并指定传输加密方式。',path:['ftpSecurity']});
+}).strict().refine(p=>['telnet','local','serial'].includes(p.protocol??'ssh')||p.username.length>0,{message:'连接需要用户名。',path:['username']}).refine(p=>!p.jumpProfileIds?.length||((p.protocol??'ssh')==='ssh'&&!p.jumpProfileIds.includes(p.profileId)&&new Set(p.jumpProfileIds).size===p.jumpProfileIds.length),{message:'跳板链只能用于 SSH，不能重复或包含自身。',path:['jumpProfileIds']}).refine(p=>p.protocol==='ftp'?p.authType==='password'&&!!p.ftpSecurity:!p.ftpSecurity,{message:'FTP 需要密码认证并指定传输加密方式。',path:['ftpSecurity']});
 export type Profile = z.infer<typeof profileSchema>;
 export const profileCredentialSchema=z.discriminatedUnion('mode',[
  z.object({mode:z.literal('keep')}).strict(),z.object({mode:z.literal('remove')}).strict(),
@@ -48,6 +48,8 @@ export const schemas = {
   'serialTerminal.list':z.object({}).strict(),
   'serialTerminal.open':serialTerminalSchema,
   'telnet.open':z.object({profileId:id,cols:z.number().int().min(1).max(1000),rows:z.number().int().min(1).max(1000)}).strict(),
+  'rlogin.open':z.object({profileId:id,cols:z.number().int().min(1).max(1000),rows:z.number().int().min(1).max(1000)}).strict(),
+  'mosh.open':z.object({profileId:id,cols:z.number().int().min(1).max(1000),rows:z.number().int().min(1).max(1000)}).strict(),
   'print.queue.save':printQueueSchema,
   'print.queue.remove':z.object({queue:z.string().regex(/^[A-Za-z0-9_-]{1,64}$/)}).strict(),
   'print.status': z.object({}).strict(),
@@ -137,10 +139,12 @@ export interface HornetApi {
  help:{info():Promise<import('./help').AppInfo>;checkUpdates():Promise<import('./help').UpdateInfo>;downloadUpdate():Promise<import('./help').UpdateDownload>;installUpdate():Promise<void>;openLink(link:import('./help').HelpLink):Promise<void>;openPdf(language:string):Promise<void>};
  windowChrome:{platform:string;setColors:(colors:{color:string;symbolColor:string})=>Promise<void>;onContextMenu:(listener:(point:{x:number;y:number})=>void)=>()=>void};
  clipboard:{read:()=>Promise<string>;write:(text:string)=>Promise<void>};
-  localTerminal:{shells():Promise<{id:'powershell'|'cmd';name:string;path:string}[]>;open(config:LocalTerminalConfig):Promise<DeviceTerminal>};
+  localTerminal:{shells():Promise<{id:'powershell'|'cmd'|'wsl';name:string;path:string}[]>;open(config:LocalTerminalConfig):Promise<DeviceTerminal>};
   serialTerminal:{list():Promise<SerialDevice[]>;open(config:SerialTerminalConfig):Promise<DeviceTerminal>};
   terminalLogs:{openRecording(id?:string):Promise<TerminalRecording|null>;start(terminalId:string,format:TerminalLogFormat):Promise<TerminalLog|null>;stop(id:string):Promise<TerminalLog>;list():Promise<TerminalLog[]>};
   telnet:{open(profileId:string,cols:number,rows:number):Promise<{terminalId:string;connectionId:string;generation:number}>};
+  rlogin:{open(profileId:string,cols:number,rows:number):Promise<{terminalId:string;connectionId:string;generation:number}>};
+  mosh:{open(profileId:string,cols:number,rows:number):Promise<DeviceTerminal>};
   treeTransfer:{preview(request:TreeRequest):Promise<TreePreview>;execute(planId:string):Promise<TreeResult>;discard(planId:string):Promise<void>};
   localFiles:{choose():Promise<LocalDirectory|null>;list(rootId:string,path:string):Promise<LocalDirectory>;mkdir(rootId:string,path:string,name:string):Promise<void>;grant(rootId:string,path:string,direction:'upload'|'download',name?:string):Promise<{pathGrantId:string}>;release(rootId:string):Promise<void>};
 

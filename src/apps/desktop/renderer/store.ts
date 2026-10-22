@@ -1,5 +1,5 @@
 import type { TerminalDisconnect } from '../../../packages/contracts/terminal-disconnect';
-import type { DeviceTerminal } from '../../../packages/contracts/device-terminal';
+import { localTerminalSchema,serialTerminalSchema,type DeviceTerminal, type LocalTerminalConfig, type SerialTerminalConfig } from '../../../packages/contracts/device-terminal';
 import { tileTerminals,type SplitTree } from './terminal-layout';
 import { tabGroup,selectTab,removeTab,createTabGroup,moveTab } from './terminal-tabs';
 import type { TerminalLog } from '../../../packages/contracts/terminal-log';
@@ -11,7 +11,7 @@ export interface View {
  connectionAttempt?:{state:'connecting'|'failed';error?:string};
  autoReconnectPaused?:boolean;
  tabGroupId?:string;locked?:boolean;tabColor?:string;terminalTitle?:string;
- source?:'local'|'serial';
+ source?:'local'|'serial'|'mosh';
  title?:string;id:string;kind:'terminal'|'files'|'editor'|'vnc';profile:Profile;connectionId:string;leaseId?:string;
  desktop?: { desktopId: string; url: string; token: string };
  terminalIds?:string[];terminalId?:string;generation:number;path?:string;content?:string;hash?:string;
@@ -80,6 +80,7 @@ export async function refreshProfiles(){useStore.getState().setProfiles(await wi
 export function isTerminalClosed(view:View,state:Pick<State,'closedTerminals'|'connectionStates'>){return view.connectionAttempt?.state==='failed'||!!state.closedTerminals[view.terminalId??'']||['closed','failed'].includes(state.connectionStates[view.connectionId]);}
 export async function openView(profile:Profile,kind:'terminal'|'files'){
  if(profile.protocol==='ftp')kind='files';
+ if(profile.protocol==='telnet'||profile.protocol==='rlogin'||profile.session?.mosh)kind='terminal';
  if(kind==='terminal'){
   const id=crypto.randomUUID();
   useStore.getState().addView({id,kind,profile,connectionId:id,generation:0,connectionAttempt:{state:'connecting'}});
@@ -105,9 +106,29 @@ async function connectTerminalView(id:string,profile:Profile){
 }
 async function createRemoteView(profile:Profile,kind:'terminal'|'files',options:{fresh?:boolean;connectionId?:string}={}):Promise<View>{
  const api=window.hornet;
+ if(profile.session?.mosh){
+  if(kind!=='terminal')throw new Error('Mosh sessions do not provide remote files.');
+  const device=await api.mosh.open(profile.profileId,profile.session?.terminal?.cols??120,profile.session?.terminal?.rows??36);
+  return {id:crypto.randomUUID(),kind,profile,...device,terminalIds:[device.terminalId]};
+ }
+ if(profile.protocol==='local'){
+  if(kind!=='terminal')throw new Error('LOCAL does not provide remote files.');
+  const config=localTerminalSchema.parse(profile.session?.device&&'shell' in profile.session.device?profile.session.device:{shell:'powershell',cwd:'',cols:120,rows:36});
+  const device=await api.localTerminal.open(config);return {id:crypto.randomUUID(),kind,profile,...device,terminalIds:[device.terminalId]};
+ }
+ if(profile.protocol==='serial'){
+  if(kind!=='terminal')throw new Error('SERIAL does not provide remote files.');
+  const config=serialTerminalSchema.parse({...profile.session?.device&&'path' in profile.session.device?profile.session.device:{path:profile.host,baudRate:115200,dataBits:8,stopBits:1,parity:'none',flowControl:'none',newline:'cr',localEcho:false,cols:120,rows:36},encoding:profile.encoding});
+  const device=await api.serialTerminal.open(config);return {id:crypto.randomUUID(),kind,profile,...device,terminalIds:[device.terminalId]};
+ }
  if(profile.protocol==='telnet'){
   if(kind!=='terminal')throw new Error('Telnet 不支持文件传输，请使用 SSH 配置。');
   const session=await api.telnet.open(profile.profileId,profile.session?.terminal?.cols??120,profile.session?.terminal?.rows??36);
+  return {id:crypto.randomUUID(),kind,profile,...session,terminalIds:[session.terminalId]};
+ }
+ if(profile.protocol==='rlogin'){
+  if(kind!=='terminal')throw new Error('RLOGIN 不支持文件传输，只能打开终端。');
+  const session=await api.rlogin.open(profile.profileId,profile.session?.terminal?.cols??120,profile.session?.terminal?.rows??36);
   return {id:crypto.randomUUID(),kind,profile,...session,terminalIds:[session.terminalId]};
  }
  const lease=options.connectionId?await api.connection.retain(options.connectionId):await api.connection.open(profile.profileId,kind,options.fresh);
@@ -168,7 +189,7 @@ export async function disconnectView(id:string){
  try{await window.hornet.terminal.close(view.terminalId);}catch(error){const current=useStore.getState().views.find(v=>v.id===id);if(current?.terminalId===view.terminalId)useStore.getState().replaceView(id,{...current,autoReconnectPaused:view.autoReconnectPaused});throw error;}
 }
 
-export const hasRemoteFiles=(view:View)=>!view.connectionAttempt&&!view.source&&view.profile.protocol!=='telnet';
+export const hasRemoteFiles=(view:View)=>!view.connectionAttempt&&!view.source&&!view.profile.session?.mosh&&((view.profile.protocol??'ssh')==='ssh'||view.profile.protocol==='ftp');
 export function addDeviceView(session:DeviceTerminal,tabGroupId?:string){
  const profile:Profile={profileId:session.connectionId,name:session.name,host:session.address,port:0,username:'',group:'',authType:'password',revision:0};
  useStore.getState().addView({id:crypto.randomUUID(),kind:'terminal',profile,...session,tabGroupId,terminalIds:[session.terminalId]});

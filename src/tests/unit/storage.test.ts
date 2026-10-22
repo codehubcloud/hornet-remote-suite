@@ -20,14 +20,32 @@ describe('persistent model and untrusted input',()=>{
     await writeFile(schemaPath,eol==='lf'?schema:schema.replace(/\n/g,'\r\n'));
     let db=new Storage(dbPath,schemaPath);
     const saved=db.saveProfile(profile(),0);
-    db.db.prepare('UPDATE schema_migration SET checksum=? WHERE version=1').run(oldChecksum);db.close();
+    db.db.prepare('UPDATE schema_migration SET checksum=? WHERE version=2').run(oldChecksum);db.close();
     db=new Storage(dbPath,schemaPath);
     expect(db.profile(saved.profileId)).toEqual(saved);
-    expect(db.db.prepare('SELECT checksum FROM schema_migration WHERE version=1').get()!.checksum).toBe(canonical);
-    expect(db.db.prepare('PRAGMA user_version').get()!.user_version).toBe(1);
-    db.db.prepare('UPDATE schema_migration SET checksum=? WHERE version=1').run('0'.repeat(64));db.close();
+    expect(db.db.prepare('SELECT checksum FROM schema_migration WHERE version=2').get()!.checksum).toBe(canonical);
+    expect(db.db.prepare('PRAGMA user_version').get()!.user_version).toBe(2);
+    db.db.prepare('UPDATE schema_migration SET checksum=? WHERE version=2').run('0'.repeat(64));db.close();
     expect(()=>new Storage(dbPath,schemaPath)).toThrow('数据库版本不兼容');
    }
+  }finally{await rm(directory,{recursive:true,force:true});}
+ });
+ it('migrates version 1 profiles and dependent foreign keys before enabling RLOGIN',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'hornet-rlogin-migration-'));
+  const current=(await readFile('packages/storage/schema.sql','utf8')).replace(/\r\n/g,'\n');
+  const legacy=current.replace("'telnet','rlogin','serial'","'telnet','serial'");
+  const currentPath=join(directory,'current.sql'),legacyPath=join(directory,'legacy.sql'),dbPath=join(directory,'legacy.db');
+  await writeFile(currentPath,current);await writeFile(legacyPath,legacy);
+  try{
+   let db=new Storage(dbPath,legacyPath);const saved=db.saveProfile(profile(),0);db.close();
+   db=new Storage(dbPath,legacyPath);db.db.prepare('UPDATE schema_migration SET version=1,checksum=? WHERE version=2').run(createHash('sha256').update(legacy).digest('hex'));db.db.exec('PRAGMA user_version=1;');db.close();
+   db=new Storage(dbPath,currentPath);
+   expect(db.db.prepare('PRAGMA user_version').get()!.user_version).toBe(2);
+   expect(db.profile(saved.profileId)).toEqual(saved);
+   const rlogin=db.saveProfile({...profile(),protocol:'rlogin',port:513,authType:'agent'},0);
+   expect(db.profile(rlogin.profileId)).toEqual(rlogin);
+   expect(db.db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+   db.close();
   }finally{await rm(directory,{recursive:true,force:true});}
  });
  it('validates jump references, prevents dangling routes and remaps imported chains atomically',()=>{
@@ -54,7 +72,7 @@ describe('persistent model and untrusted input',()=>{
    expect(JSON.parse(String(db.db.prepare('SELECT options_json FROM connection_profile WHERE id=?').get(saved.profileId)!.options_json))).toEqual({other:'preserved',encoding:'utf8',description:'生产服务器',jumpProfileIds:[]});
    expect(db.importProfiles([saved])).toBe(1);expect(db.profiles().every(p=>p.description==='生产服务器')).toBe(true);
    const cleared=db.saveProfile({...saved,description:''},saved.revision);expect(db.profile(cleared.profileId).description).toBeUndefined();
-   expect(db.db.prepare('PRAGMA user_version').get()!.user_version).toBe(1);
+   expect(db.db.prepare('PRAGMA user_version').get()!.user_version).toBe(2);
   }finally{db.close();}
  });
  it('persists Telnet protocol edits/imports and blocks SSH authentication for Telnet profiles',async()=>{

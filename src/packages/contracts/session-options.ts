@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { localTerminalSchema,serialTerminalSchema } from './device-terminal';
 
 export const terminalPreferencesSchema=z.object({
  fontSize:z.number().int().min(8).max(32),font:z.enum(['cascadia','consolas','courier']),
@@ -12,5 +13,8 @@ export const sessionOptionsSchema=z.object({
  reconnect:z.object({enabled:z.boolean(),intervalSeconds:z.number().int().min(5).max(3600),limitMinutes:z.number().int().min(0).max(1440)}).strict().optional(),
  quickCommandSetId:z.string().min(1).max(80).optional(),disableQuickShortcuts:z.boolean().optional(),
  remoteDirectory:z.string().min(1).max(4096).refine(s=>!/[\x00-\x1f\x7f]/.test(s)).optional(),
+ device:z.union([localTerminalSchema,serialTerminalSchema]).optional(),
+ rdpDomain:z.string().max(255).optional(),
+ mosh:z.boolean().optional(),
 }).strict();
 export type SessionOptions=z.infer<typeof sessionOptionsSchema>;

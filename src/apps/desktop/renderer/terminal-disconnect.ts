@@ -7,7 +7,7 @@ export function disconnectText(value:string):string{
   .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'')
   .replace(/[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g,' ').trim();
 }
-export function disconnectTranscript(info:TerminalDisconnect,name:string,source?:'local'|'serial'):string{
+export function disconnectTranscript(info:TerminalDisconnect,name:string,source?:'local'|'serial'|'mosh'):string{
  const time=new Date(info.at).toLocaleTimeString(undefined,{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
  const lines:string[]=[];
  if(info.error)lines.push(t('连接错误：{error}',{error:disconnectText(info.error)}));

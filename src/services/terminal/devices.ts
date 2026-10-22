@@ -23,7 +23,7 @@ export class DeviceTerminals {
  private get(owner:string,id:string){const s=this.sessions.get(id);if(!s||s.owner!==owner||s.closing)throw new AppError('IPC005','终端已关闭或无权访问。');return s;}
  inspect(owner:string,id:string){this.get(owner,id);return {generation:1};}
  encoding(owner:string,id:string,generation:number,encoding?:TerminalEncoding){const s=this.get(owner,id);if(generation!==1)throw new AppError('IPC005','终端版本已改变。');if(s.driver?.encoding)return s.driver.encoding(encoding);if(encoding&&encoding!=='utf8')throw new AppError('ENCODING_LOCAL','本地 ConPTY 终端使用 Unicode，不支持切换传输编码。');return 'utf8' as const;}
- async open(owner:string,info:{name:string;address:string;source:'local'|'serial';key?:string},factory:(events:DriverEvents)=>Promise<TerminalDriver>):Promise<DeviceTerminal>{
+ async open(owner:string,info:{name:string;address:string;source:'local'|'serial'|'mosh';key?:string},factory:(events:DriverEvents)=>Promise<TerminalDriver>):Promise<DeviceTerminal>{
   if(this.stopped||this.sessions.size>=16)throw new AppError('DEVICE_LIMIT','本地/串口终端已达到16个上限或服务正在停止。');
   if(info.key&&[...this.sessions.values()].some(s=>s.key===info.key))throw new AppError('DEVICE_BUSY','此串口已在本应用中打开，请先关闭原终端。');
   const id=randomUUID(),descriptor:DeviceTerminal={terminalId:id,connectionId:id,generation:1,name:info.name,address:info.address,source:info.source};

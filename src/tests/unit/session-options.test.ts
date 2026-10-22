@@ -17,13 +17,18 @@ describe('session settings and quick command migration',()=>{
    db.db.prepare("UPDATE connection_profile SET options_json=json_set(options_json,'$.unrelated',42) WHERE id=?").run(first.profileId);
    const next=db.saveProfile({...first,session:{appearance:{fontSize:20}}},first.revision);expect(db.profile(next.profileId).session).toEqual({appearance:{fontSize:20}});
    const cleared=db.saveProfile({...next,session:undefined},next.revision);expect(db.profile(cleared.profileId).session).toBeUndefined();expect(JSON.parse(String(db.db.prepare('SELECT options_json FROM connection_profile WHERE id=?').get(first.profileId)!.options_json)).unrelated).toBe(42);
-   expect(db.db.prepare('PRAGMA user_version').get()!.user_version).toBe(1);
+   expect(db.db.prepare('PRAGMA user_version').get()!.user_version).toBe(2);
   }finally{db.close();}
  });
  it('allows active session styling while preserving transport identity and strict option boundaries',()=>{
   const p=profile();expect(sameTransport(p,{...p,session:{appearance:{fontSize:18}},name:'renamed'})).toBe(true);
   for(const edit of [{host:'other'},{port:23},{username:'other'},{authType:'agent' as const},{protocol:'telnet' as const},{jumpProfileIds:[randomUUID()]}])expect(sameTransport(p,{...p,...edit})).toBe(false);
   for(const session of [{remoteDirectory:'/tmp\0bad'},{keepAlive:{intervalSeconds:0,maxMissed:1}},{appearance:{password:'secret'}},{reconnect:{enabled:true,intervalSeconds:1,limitMinutes:-1}}])expect(()=>profileSchema.parse({...p,session})).toThrow();
+ });
+ it('persists Mosh as an SSH-backed terminal option without accepting unknown fields',()=>{
+  const db=new Storage(':memory:',resolve('packages/storage/schema.sql'));
+  try{const saved=db.saveProfile({...profile(),session:{mosh:true}},0);expect(db.profile(saved.profileId).session?.mosh).toBe(true);expect(()=>profileSchema.parse({...saved,session:{mosh:true,arbitrary:'value'}})).toThrow();}
+  finally{db.close();}
  });
  it('keeps old commands intact, preserves ordering and rejects dangling or ambiguous imported sets',()=>{
   const old=[{id:randomUUID(),name:'A',text:'pwd'},{id:randomUUID(),name:'B',text:'ls'}],library=readQuickLibrary(null,JSON.stringify(old));

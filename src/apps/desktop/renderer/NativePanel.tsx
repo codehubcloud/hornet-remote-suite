@@ -7,6 +7,7 @@ export function NativePanel(){
  const [profileId,setProfile]=useState(''),[host,setHost]=useState('127.0.0.1'),[port,setPort]=useState(5900),[busy,setBusy]=useState(false);
  const [rdp,setRdp]=useState<RdpConfig>({host:'',port:3389,username:'',domain:'',password:''}),[rdpReady,setRdpReady]=useState<boolean|null>(null),[rdpSessions,setRdpSessions]=useState<{id:string;state:string;reason?:number}[]>([]);
  useEffect(()=>{let live=true;const refresh=()=>void window.hornet.rdp.list().then(r=>{if(live)setRdpSessions(r);}).catch(fail);refresh();const timer=setInterval(refresh,2000);return()=>{live=false;clearInterval(timer);};},[]);
+ useEffect(()=>{const prefill=(event:Event)=>{const config=(event as CustomEvent<Partial<RdpConfig>>).detail;setRdp(current=>({...current,...config,password:''}));};window.addEventListener('hornet:rdp-prefill',prefill);return()=>window.removeEventListener('hornet:rdp-prefill',prefill);},[]);
  async function run(action:()=>Promise<unknown>){setBusy(true);try{await action();}catch(e){fail(e);}finally{setBusy(false);}}
  const selected=profileId||profiles[0]?.profileId||'';
  const profileSelect=<label>{tr("SSH 主机")}<select aria-label={tr("图形 SSH 主机")} value={selected} onChange={e=>setProfile(e.target.value)}>{!profiles.length&&<option value="">{tr("请先创建 SSH 主机")}</option>}{profiles.map(p=><option value={p.profileId} key={p.profileId}>{p.name}</option>)}</select></label>;

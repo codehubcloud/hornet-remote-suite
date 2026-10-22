@@ -21,6 +21,8 @@ const api:HornetApi={
  serialTerminal:{list:()=>call('serialTerminal.list'),open:config=>call('serialTerminal.open',config)},
  terminalLogs:{openRecording:id=>local('terminalLogs.openRecording',{id}),start:(terminalId,format)=>local('terminalLogs.start',{terminalId,format}),stop:id=>local('terminalLogs.stop',{id}),list:()=>local('terminalLogs.list')},
  telnet:{open:(profileId,cols,rows)=>call('telnet.open',{profileId,cols,rows})},
+ rlogin:{open:(profileId,cols,rows)=>call('rlogin.open',{profileId,cols,rows})},
+ mosh:{open:(profileId,cols,rows)=>call('mosh.open',{profileId,cols,rows})},
  treeTransfer:{preview:request=>local('treeTransfer.preview',request),execute:planId=>local('treeTransfer.execute',{planId}),discard:planId=>local('treeTransfer.discard',{planId})},
  localFiles:{choose:()=>local('localFiles.choose'),list:(rootId,path)=>local('localFiles.list',{rootId,path}),mkdir:(rootId,path,name)=>local('localFiles.mkdir',{rootId,path,name}),grant:(rootId,path,direction,name)=>local('localFiles.grant',{rootId,path,direction,name}),release:rootId=>local('localFiles.release',{rootId})},
 

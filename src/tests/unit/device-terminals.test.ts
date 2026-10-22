@@ -27,6 +27,9 @@ it('closes a driver that exceeds its output ceiling and cleans late startup on s
 });
 it('rejects arbitrary executables, file paths and incompatible serial settings',()=>{
  expect(localTerminalSchema.safeParse({shell:'arbitrary.exe',cols:80,rows:24}).success).toBe(false);
+ expect(localTerminalSchema.parse({shell:'wsl',distribution:'Ubuntu-24.04',cwd:'~/work',cols:120,rows:36})).toMatchObject({shell:'wsl',distribution:'Ubuntu-24.04',cwd:'~/work'});
+ expect(localTerminalSchema.safeParse({shell:'powershell',distribution:'Ubuntu',cols:80,rows:24}).success).toBe(false);
+ expect(localTerminalSchema.safeParse({shell:'wsl',distribution:'Ubuntu;id',cols:80,rows:24}).success).toBe(false);
  const config={path:'COM1',baudRate:115200,dataBits:8,stopBits:1,parity:'none',flowControl:'none',newline:'cr',localEcho:false,cols:80,rows:24};
  expect(serialTerminalSchema.parse({...config,path:'com4'}).path).toBe('COM4');
  for(const invalid of [{path:'C:\\file.txt'},{baudRate:0},{stopBits:1.5},{flowControl:'invalid'}])expect(serialTerminalSchema.safeParse({...config,...invalid}).success).toBe(false);

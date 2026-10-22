@@ -17,7 +17,8 @@ try{
  await dismissStartupGuide(page);
  const dialog=page.getByRole('dialog',{name:'会话',exact:true});
  await expect(dialog).toBeVisible();await expect(dialog.getByRole('checkbox')).toBeChecked();
- await page.keyboard.press('Alt+s');await expect(dialog.getByRole('checkbox')).not.toBeChecked();await page.keyboard.press('Alt+s');await expect(dialog.getByRole('checkbox')).toBeChecked();
+ await dialog.getByRole('button',{name:'新建',exact:true}).click();const editor=page.getByRole('dialog',{name:'新建连接',exact:true});
+ const protocolSelect=editor.locator('select').first();await protocolSelect.selectOption('rlogin');await expect(editor.locator('input[type=number]').first()).toHaveValue('513');await expect(editor.locator('input[type=password]')).toHaveCount(0);await protocolSelect.selectOption('local');await expect(editor.getByText(/LOCAL starts a PowerShell/)).toBeVisible();await protocolSelect.selectOption('serial');await expect(editor.getByText('Serial port')).toBeVisible();await protocolSelect.selectOption('rdp');await expect(editor.locator('input[placeholder="192.168.1.10"]')).toBeVisible();await protocolSelect.selectOption('rlogin');await editor.locator('.modal-heading button').click();await page.keyboard.press('Alt+s');await expect(dialog.getByRole('checkbox')).not.toBeChecked();await page.keyboard.press('Alt+s');await expect(dialog.getByRole('checkbox')).toBeChecked();
  await expect(dialog.getByRole('button',{name:'连接(C)',exact:true})).toBeDisabled();
  await expect(dialog.getByRole('columnheader')).toHaveCount(7);
  await expect(dialog.getByRole('searchbox')).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(dialog.getByRole('button',{name:'新建分组',exact:true})).toBeFocused();
@@ -26,8 +27,8 @@ try{
  await page.keyboard.press('Escape');await expect(dialog).toBeHidden();expect(server.shellCount).toBe(0);
  await page.reload();await expect(dialog).toBeVisible();
  await dialog.getByRole('button',{name:'新建',exact:true}).click();
- await page.getByLabel('名称',{exact:true}).fill('Alpha fixture');await page.getByLabel('主机',{exact:true}).fill('127.0.0.1');
- await page.getByLabel('用户名',{exact:true}).fill('tester');await page.getByLabel('端口',{exact:true}).fill(String(server.port));
+ await page.getByLabel('名称',{exact:true}).fill('Alpha fixture');await page.locator('input[placeholder="192.168.1.10"]').fill('127.0.0.1');
+ await page.getByLabel('用户名',{exact:true}).fill('tester');await page.locator('input[type=number]').first().fill(String(server.port));
  await page.getByLabel('分组',{exact:true}).fill('生产/北京');await page.getByLabel('说明',{exact:true}).fill('仅供本地测试');
  await page.getByRole('button',{name:'保存配置',exact:true}).click();
  await expect(dialog).toBeVisible();expect(server.shellCount).toBe(0);

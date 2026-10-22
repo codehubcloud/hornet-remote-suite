@@ -21,7 +21,7 @@ export class Vault {
     const wasLocked=this.locked;
     let value:string|undefined;
     if(credential.mode==='save'){
-      if(next.authType!=='password'||next.protocol==='telnet')throw new AppError('VAULT_INVALID','此连接不支持保存密码。');
+      if(next.authType!=='password'||next.protocol==='telnet'||next.protocol==='rlogin')throw new AppError('VAULT_INVALID','此连接不支持保存密码。');
       if(!this.available())throw new AppError('VAULT_UNAVAILABLE','系统安全存储不可用，无法保存密码。');
       value=safeStorage.encryptString(credential.password).toString('base64');
     }else if(credential.mode==='keep'&&previous&&sameCredentialIdentity(previous,next))value=this.entry(previous);

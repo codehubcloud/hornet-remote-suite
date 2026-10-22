@@ -7,6 +7,10 @@ import { AppError } from '../core/errors';
 
 export class Storage {
   readonly db: DatabaseSync;
+  private static readonly version1Checksums=new Set([
+    'b10a4a5cbfa2942482edd781889e74940a5de803f43c3ec4f27fbc7d8e122a12',
+    '584cdfbb32a6226af5ae6aea53c5de66eb2c465b128bc5fd939de4720caf9d18',
+  ]);
   constructor(path: string, schemaFile: string) {
     if (path !== ':memory:') mkdirSync(dirname(path),{recursive:true});
     this.db = new DatabaseSync(path);
@@ -20,19 +24,52 @@ export class Storage {
       this.db.exec('PRAGMA journal_mode=WAL;');
       this.transaction(() => {
         this.db.exec(schema.replace('PRAGMA journal_mode = WAL;',''));
-        this.db.prepare('INSERT INTO schema_migration VALUES (1,?,?)').run(checksum,Date.now());
-        this.db.exec('PRAGMA user_version=1;');
+        this.db.prepare('INSERT INTO schema_migration VALUES (2,?,?)').run(checksum,Date.now());
+        this.db.exec('PRAGMA user_version=2;');
       });
-    } else {
-      if (version.user_version !== 1) { this.db.close(); throw new AppError('DATA_VERSION','数据库版本不兼容，已停止写入。'); }
+    } else if(version.user_version===1) {
       const stored=(this.db.prepare('SELECT checksum FROM schema_migration WHERE version=1').get() as {checksum:string}|undefined)?.checksum;
+      if(!stored||!Storage.version1Checksums.has(stored)){
+        this.db.close();throw new AppError('DATA_VERSION','数据库版本不兼容，已停止写入。');
+      }
+      this.db.exec('PRAGMA foreign_keys=OFF;');
+      try {
+        this.transaction(()=>{
+          this.db.exec(`CREATE TABLE connection_profile_v2 (
+            id TEXT PRIMARY KEY,
+            host_id TEXT REFERENCES host_profile(id) ON DELETE RESTRICT,
+            credential_id TEXT REFERENCES credential_profile(id) ON DELETE RESTRICT,
+            name TEXT NOT NULL,
+            protocol TEXT NOT NULL CHECK(protocol IN ('ssh','sftp','ftp','telnet','rlogin','serial','local','x11','xdmcp','rdp','vnc')),
+            endpoint_json TEXT NOT NULL,
+            username TEXT,
+            options_json TEXT NOT NULL DEFAULT '{}',
+            identity_revision INTEGER NOT NULL DEFAULT 1 CHECK(identity_revision > 0),
+            revision INTEGER NOT NULL DEFAULT 1 CHECK(revision > 0),
+            updated_at INTEGER NOT NULL
+          );
+          INSERT INTO connection_profile_v2 SELECT * FROM connection_profile;
+          DROP TABLE connection_profile;
+          ALTER TABLE connection_profile_v2 RENAME TO connection_profile;
+          CREATE INDEX idx_profile_host ON connection_profile(host_id);`);
+          this.db.prepare('INSERT INTO schema_migration VALUES (2,?,?)').run(checksum,Date.now());
+          this.db.exec('PRAGMA user_version=2;');
+        });
+      } catch(error) {
+        this.db.close();throw error;
+      }
+      this.db.exec('PRAGMA foreign_keys=ON;');
+      if((this.db.prepare('PRAGMA foreign_key_check').all() as unknown[]).length){this.db.close();throw new AppError('DATA_VERSION','数据迁移发现关联记录异常，已停止写入。');}
+    } else {
+      if (version.user_version !== 2) { this.db.close(); throw new AppError('DATA_VERSION','数据库版本不兼容，已停止写入。'); }
+      const stored=(this.db.prepare('SELECT checksum FROM schema_migration WHERE version=2').get() as {checksum:string}|undefined)?.checksum;
       const legacyWindowsChecksum=createHash('sha256').update(schema.replace(/\n/g,'\r\n')).digest('hex');
       if (stored !== checksum && stored !== legacyWindowsChecksum) {
         this.db.close(); throw new AppError('DATA_VERSION','数据库版本不兼容，已停止写入。');
       }
       // Only migrate the proven CRLF equivalent, without rebuilding tables or
       // discarding profiles. Unknown schema checksums remain an error.
-      if (stored !== checksum) this.transaction(()=>{this.db.prepare('UPDATE schema_migration SET checksum=? WHERE version=1 AND checksum=?').run(checksum,stored);});
+      if (stored !== checksum) this.transaction(()=>{this.db.prepare('UPDATE schema_migration SET checksum=? WHERE version=2 AND checksum=?').run(checksum,stored);});
     }
   }
   transaction<T>(action:()=>T):T {
@@ -43,7 +80,7 @@ export class Storage {
     return (this.db.prepare('SELECT c.*, h.group_path, k.kind FROM connection_profile c JOIN host_profile h ON c.host_id=h.id JOIN credential_profile k ON k.id=c.credential_id ORDER BY c.name').all() as Record<string,unknown>[]).map(row => {
       const endpoint = JSON.parse(String(row.endpoint_json)) as {host:string;port:number};
       const options=JSON.parse(String(row.options_json)) as {description?:string;jumpProfileIds?:string[];encoding?:string;ftpSecurity?:string;session?:Profile['session']};
-      return profileSchema.parse({...(options.session?{session:options.session}:{}),...(row.protocol==='ftp'?{ftpSecurity:options.ftpSecurity??'none'}:{}),...(options.encoding?{encoding:options.encoding}:{}),...(options.jumpProfileIds?.length?{jumpProfileIds:options.jumpProfileIds}:{}),...(options.description?{description:options.description}:{}),updatedAt:row.updated_at,...(row.protocol==='telnet'||row.protocol==='ftp'?{protocol:row.protocol}:{}),profileId:row.id,name:row.name,...endpoint,username:row.username,group:row.group_path,authType:row.kind,revision:row.revision});
+      return profileSchema.parse({...(options.session?{session:options.session}:{}),...(row.protocol==='ftp'?{ftpSecurity:options.ftpSecurity??'none'}:{}),...(options.encoding?{encoding:options.encoding}:{}),...(options.jumpProfileIds?.length?{jumpProfileIds:options.jumpProfileIds}:{}),...(options.description?{description:options.description}:{}),updatedAt:row.updated_at,...(row.protocol==='telnet'||row.protocol==='rlogin'||row.protocol==='ftp'||row.protocol==='local'||row.protocol==='serial'||row.protocol==='rdp'?{protocol:row.protocol}:{}),profileId:row.id,name:row.name,...endpoint,username:row.username,group:row.group_path,authType:row.kind,revision:row.revision});
     });
   }
   profile(id: string):Profile { const p=this.profiles().find(p=>p.profileId===id); if(!p) throw new AppError('PROFILE_MISSING','连接配置不存在。'); return p; }
@@ -61,7 +98,7 @@ export class Storage {
     this.db.prepare('INSERT INTO credential_profile(id,name,kind) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,kind=excluded.kind,revision=revision+1').run(p.profileId,p.name,p.authType);
     this.db.prepare(`INSERT INTO connection_profile(id,host_id,credential_id,name,protocol,endpoint_json,username,revision,updated_at,options_json) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,protocol=excluded.protocol,endpoint_json=excluded.endpoint_json,username=excluded.username,revision=excluded.revision,identity_revision=identity_revision+1,updated_at=excluded.updated_at,options_json=json_patch(json_remove(json_set(CASE WHEN excluded.protocol='ftp' THEN json_set(connection_profile.options_json,'$.ftpSecurity',json_extract(excluded.options_json,'$.ftpSecurity')) ELSE json_remove(connection_profile.options_json,'$.ftpSecurity') END,'$.encoding',json_extract(excluded.options_json,'$.encoding'),'$.description',json_extract(excluded.options_json,'$.description'),'$.jumpProfileIds',json_extract(excluded.options_json,'$.jumpProfileIds')),'$.session'),json_object('session',json_extract(excluded.options_json,'$.session')))`).run(p.profileId,p.profileId,p.profileId,p.name,p.protocol??'ssh',JSON.stringify({host:p.host,port:p.port}),p.username,revision,updatedAt,JSON.stringify({session:p.session,ftpSecurity:p.ftpSecurity,encoding:p.encoding??'utf8',description:p.description??'',jumpProfileIds:p.jumpProfileIds??[]}));
     const {protocol,description,jumpProfileIds,...fields}=p;
-    return {...fields,encoding:p.encoding??'utf8',...(protocol==='telnet'||protocol==='ftp'?{protocol}:{}),...(description?{description}:{}),...(jumpProfileIds?.length?{jumpProfileIds}:{}),revision,updatedAt};
+    return {...fields,encoding:p.encoding??'utf8',...(protocol==='telnet'||protocol==='rlogin'||protocol==='ftp'||protocol==='local'||protocol==='serial'||protocol==='rdp'?{protocol}:{}),...(description?{description}:{}),...(jumpProfileIds?.length?{jumpProfileIds}:{}),revision,updatedAt};
   }
   removeGroup(path:string,members:{profileId:string;revision:number}[]) {
     const normalize=(value:string)=>value.split('/').map(s=>s.trim()).filter(Boolean).join('/')||'默认分组';

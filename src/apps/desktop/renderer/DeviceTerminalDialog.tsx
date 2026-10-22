@@ -9,7 +9,7 @@ function remembered<T>(key:string,schema:{parse(value:unknown):T},fallback:T):T{
 export function DeviceTerminalDialog({kind,close}:{kind:'local'|'serial';close:()=>void}){
  const [local,setLocal]=useState(()=>remembered('hornet.localTerminal',localTerminalSchema,defaultLocal));
  const [serial,setSerial]=useState(()=>remembered('hornet.serialTerminal',serialTerminalSchema,defaultSerial));
- const [shells,setShells]=useState<{id:'powershell'|'cmd';name:string}[]>([]),[ports,setPorts]=useState<SerialDevice[]>([]);
+ const [shells,setShells]=useState<{id:LocalTerminalConfig['shell'];name:string}[]>([]),[ports,setPorts]=useState<SerialDevice[]>([]);
  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true);
  async function refresh(){setLoading(true);setError('');try{setPorts(await window.hornet.serialTerminal.list());}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setLoading(false);}}
  useEffect(()=>{let cancelled=false;const load=kind==='local'?window.hornet.localTerminal.shells().then(value=>{if(!cancelled)setShells(value);}):window.hornet.serialTerminal.list().then(value=>{if(!cancelled)setPorts(value);});void load.catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:String(e));}).finally(()=>{if(!cancelled)setLoading(false);});return()=>{cancelled=true;};},[kind]);
