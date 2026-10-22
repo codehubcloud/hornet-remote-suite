@@ -1063,6 +1063,8 @@ export const english:Record<string,string> = {
   "Update downloaded: {name} ({size})": "Update downloaded: {name} ({size})",
   "Downloading update: {received}{total}": "Downloading update: {received}{total}",
   "Update download progress": "Update download progress",
+  "剩余时间：{time}": "Remaining: {time}",
+  "计算中…": "Calculating…",
   "The installer is verified after download. Click Install when ready.": "The installer is verified after download. Click Install when ready.",
   "No direct installer is available for this platform. Visit the release page.": "No direct installer is available for this platform. Visit the release page.",
 };

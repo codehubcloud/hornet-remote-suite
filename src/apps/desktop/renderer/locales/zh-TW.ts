@@ -1063,6 +1063,8 @@ export const traditionalChinese:Record<string,string> = {
   "Update downloaded: {name} ({size})": "已下載更新套件：{name} ({size})",
   "Downloading update: {received}{total}": "正在下載更新：{received}{total}",
   "Update download progress": "更新下載進度",
+  "剩余时间：{time}": "剩餘時間：{time}",
+  "计算中…": "計算中…",
   "The installer is verified after download. Click Install when ready.": "安裝套件下載後會先驗證，驗證通過後再點擊安裝。",
   "No direct installer is available for this platform. Visit the release page.": "此平台沒有可直接下載的安裝套件，請前往發佈頁面。",
 };

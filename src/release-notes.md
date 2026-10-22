@@ -1,1 +1,1 @@
-Hornet Remote Suite 0.0.21 checks for new releases whenever the app starts and notifies once for each available version. Update checks remain quiet when offline, and the existing download, verification and install flow is unchanged.
+Hornet Remote Suite 0.0.22 shows an estimated remaining time alongside update download progress and speed. The estimate adjusts with the recent download rate and displays while the installer downloads.

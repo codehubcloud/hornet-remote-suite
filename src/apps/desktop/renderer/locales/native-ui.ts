@@ -383,6 +383,8 @@ export const nativeUi:Record<string,readonly [string,string,string,string,string
   "Update downloaded: {name} ({size})": ["\\u66f4\\u65b0\\u3092\\u30c0\\u30a6\\u30f3\\u30ed\\u30fc\\u30c9\\u3057\\u307e\\u3057\\u305f: {name} ({size})","\\uc5c5\\ub370\\uc774\\ud2b8 \\ub2e4\\uc6b4\\ub85c\\ub4dc\\ub428: {name} ({size})","Update heruntergeladen: {name} ({size})","Mise ? jour t?l?charg?e : {name} ({size})","Actualizaci?n descargada: {name} ({size})"],
   "Downloading update: {received}{total}": ["\\u66f4\\u65b0\\u3092\\u30c0\\u30a6\\u30f3\\u30ed\\u30fc\\u30c9\\u4e2d: {received}{total}","\\uc5c5\\ub370\\uc774\\ud2b8 \\ub2e4\\uc6b4\\ub85c\\ub4dc \\uc911: {received}{total}","Update wird heruntergeladen: {received}{total}","T?l?chargement : {received}{total}","Descargando actualizaci?n: {received}{total}"],
   "Update download progress": ["更新をダウンロード","업데이트 다운로드","Update herunterladen","Télécharger la mise à jour","Descargar actualización"],
+  "剩余时间：{time}": ["残り時間: {time}","남은 시간: {time}","Verbleibend: {time}","Temps restant : {time}","Tiempo restante: {time}"],
+  "计算中…": ["計算中…","계산 중…","Wird berechnet…","Calcul en cours…","Calculando…"],
   "The installer is verified after download. Click Install when ready.": ["更新をダウンロード","업데이트 다운로드","Update herunterladen","Télécharger la mise à jour","Descargar actualización"],
   "No direct installer is available for this platform. Visit the release page.": ["更新をダウンロード","업데이트 다운로드","Update herunterladen","Télécharger la mise à jour","Descargar actualización"],
 };
