@@ -16,6 +16,10 @@
     ${StdUtils.TestParameter} $R0 "hornet-restart-after-install"
     ${If} $R0 == "true"
       StrCpy $HornetWasRunning "1"
+      ; Clear the retrying logon entry only after the deferred installer starts.
+      ; A persistent entry permits another sign-in attempt if startup is blocked.
+      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "HornetSetup-${APP_GUID}"
+      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "!HornetSetup-${APP_GUID}"
       ReadRegStr $R1 HKCU "Software\${APP_GUID}\PendingInstall" InstallMode
       ${If} $R1 == "all"
         !insertmacro setInstallModePerAllUsers
@@ -42,6 +46,7 @@
 
   !macro customInstall
     ; A successful manual or resumed installation supersedes any pending setup.
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "HornetSetup-${APP_GUID}"
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "!HornetSetup-${APP_GUID}"
     DeleteRegKey HKCU "Software\${APP_GUID}\PendingInstall"
   !macroend
@@ -123,7 +128,7 @@
         Goto hornet_schedule_failed
       ${EndIf}
     ${EndIf}
-    ; Keep the RunOnce command under Windows' 260-character limit. The chosen
+    ; Keep the logon command under Windows' 260-character limit. The chosen
     ; directory/mode live in product-specific setup state, not command text.
     StrCpy $HornetDeferredCommand '$\"$HornetDeferredDirectory\pending.exe$\" --hornet-restart-after-install'
     StrLen $R1 $HornetDeferredCommand
@@ -133,7 +138,10 @@
     ClearErrors
     WriteRegStr HKCU "Software\${APP_GUID}\PendingInstall" InstallLocation "$INSTDIR"
     WriteRegStr HKCU "Software\${APP_GUID}\PendingInstall" InstallMode "$installMode"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "!HornetSetup-${APP_GUID}" "$HornetDeferredCommand"
+    ; Keep retrying at sign-in until resumed setup reaches customInit.
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "!HornetSetup-${APP_GUID}"
+    ClearErrors
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "HornetSetup-${APP_GUID}" "$HornetDeferredCommand"
     ${If} ${Errors}
       Goto hornet_schedule_failed
     ${EndIf}

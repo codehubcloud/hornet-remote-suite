@@ -11,8 +11,10 @@ $unpackedDirectory = Join-Path $fixtureRoot 'unpacked'
 $outputDirectory = Join-Path $fixtureRoot 'output'
 $fixtureProcesses = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
 $fixtureGuid = [guid]::NewGuid().ToString()
-$runOncePath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
-$runOnceName = '!HornetSetup-' + $fixtureGuid
+$startupPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$startupName = 'HornetSetup-' + $fixtureGuid
+$oldRunOncePath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+$oldRunOnceName = '!HornetSetup-' + $fixtureGuid
 $fixtureCache = Join-Path $env:LOCALAPPDATA ($fixtureName + '\Installer\' + $fixtureGuid)
 Add-Type -ReferencedAssemblies System.Drawing,Accessibility @'
 using System;
@@ -74,7 +76,7 @@ function Wait-Condition([scriptblock]$Condition, [string]$Description, [int]$Sec
 
 function Start-FixtureInstaller([string]$InstallerPath=$script:installer,[switch]$Resume) {
     $arguments = if ($Resume) { '--hornet-restart-after-install' } else { "/currentuser /D=$installDirectory" }
-    # RunOnce launches the resumed interactive wizard normally. SW_HIDE would
+    # The persistent logon entry launches the resumed interactive wizard normally. SW_HIDE would
     # hide its first window, leaving the simulated sign-in unable to proceed.
     $windowStyle = if ($Resume) { 'Normal' } else { 'Hidden' }
     $process = Start-Process -FilePath $InstallerPath -ArgumentList $arguments -WindowStyle $windowStyle -PassThru
@@ -233,7 +235,7 @@ public class FixtureApp {
     Wait-Condition { $script:installerProcess.Refresh(); $script:installerProcess.HasExited } 'cancelled installer process exit'
     $runningApp.Refresh()
     if ($runningApp.HasExited -or (Get-FileHash -LiteralPath $appPath -Algorithm SHA256).Hash -ne $beforeHash) { throw 'Cancel changed the running app.' }
-    if ((Get-ItemProperty -LiteralPath $runOncePath -Name $runOnceName -ErrorAction SilentlyContinue).$runOnceName) { throw 'Cancel scheduled an installation.' }
+    if ((Get-ItemProperty -LiteralPath $startupPath -Name $startupName -ErrorAction SilentlyContinue).$startupName) { throw 'Cancel scheduled an installation.' }
     Write-Output 'Startup prompt and cancellation passed: no Next/Install click; existing process and executable retained.'
     $silent = Start-Process -FilePath $script:installer -ArgumentList "/S /currentuser /D=$installDirectory" -WindowStyle Hidden -PassThru
     $fixtureProcesses.Add($silent)
@@ -263,9 +265,10 @@ public class FixtureApp {
     $runningApp.Refresh()
     if ($script:installerProcess.ExitCode -ne 3010 -or $runningApp.HasExited -or (Get-FileHash -LiteralPath $appPath).Hash -ne $beforeHash) { throw 'Deferred install closed or modified the existing app.' }
     $cachedInstaller=Join-Path $fixtureCache 'pending.exe'
-    $pendingCommand=(Get-ItemProperty -LiteralPath $runOncePath -Name $runOnceName).$runOnceName
+    $pendingCommand=(Get-ItemProperty -LiteralPath $startupPath -Name $startupName).$startupName
     $expectedCommand='"'+$cachedInstaller+'" --hornet-restart-after-install'
-    if ($pendingCommand -ne $expectedCommand -or (Get-FileHash -LiteralPath $cachedInstaller).Hash -ne (Get-FileHash -LiteralPath $script:installer).Hash) { throw 'Deferred installer command or cached payload mismatch.' }
+    if ($pendingCommand -ne $expectedCommand -or (Get-FileHash -LiteralPath $cachedInstaller).Hash -ne (Get-FileHash -LiteralPath $script:installer).Hash) { throw 'Deferred logon command or cached payload mismatch.' }
+    if ((Get-ItemProperty -LiteralPath $oldRunOncePath -Name $oldRunOnceName -ErrorAction SilentlyContinue).$oldRunOnceName) { throw 'Deferred setup retained a competing RunOnce registration.' }
     # Simulate a new sign-in only for this fixture; do not reboot the computer
     # or execute command text read from the registry.
     Stop-Process -Id $runningApp.Id -Force
@@ -273,10 +276,10 @@ public class FixtureApp {
     Write-Output ('Resuming cached fixture: '+$cachedInstaller)
     Start-FixtureInstaller -InstallerPath $cachedInstaller -Resume
     Complete-RunningInstall $marker 2
-    if ((Get-ItemProperty -LiteralPath $runOncePath -Name $runOnceName -ErrorAction SilentlyContinue).$runOnceName) { throw 'Successful resume retained its RunOnce registration.' }
+    if ((Get-ItemProperty -LiteralPath $startupPath -Name $startupName -ErrorAction SilentlyContinue).$startupName) { throw 'Successful resume retained its logon registration.' }
     $runningApp=Get-Process -Id ([int](@(Get-Content -LiteralPath $marker)[-1]))
     $fixtureProcesses.Add($runningApp)
-    Write-Output 'Deferred branch passed: app retained, installer cached, RunOnce and reboot-required status, resumed install reopens once and clears registration.'
+    Write-Output 'Deferred branch passed: app retained, installer cached, persistent logon registration and reboot-required status, resumed install reopens once and clears registration.'
     $expectedStarts=@(Get-Content -LiteralPath $marker).Count+1
     Start-FixtureInstaller
     $confirmation = Wait-InstallerPage 'confirm' -NoAdvance
@@ -323,7 +326,8 @@ public class FixtureApp {
     Write-Host ('Installer lifecycle failure: ' + $_.Exception.Message)
     throw
 } finally {
-    if (Test-Path -LiteralPath $runOncePath) { Remove-ItemProperty -LiteralPath $runOncePath -Name $runOnceName -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $startupPath) { Remove-ItemProperty -LiteralPath $startupPath -Name $startupName -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $oldRunOncePath) { Remove-ItemProperty -LiteralPath $oldRunOncePath -Name $oldRunOnceName -ErrorAction SilentlyContinue }
     $pendingState='HKCU:\Software\'+$fixtureGuid+'\PendingInstall'
     if (Test-Path -LiteralPath $pendingState) { Remove-Item -LiteralPath $pendingState -Force }
     foreach ($window in [InstallerUI]::Windows($fixtureName)) { [InstallerUI]::Click($window,2) }
