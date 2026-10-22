@@ -1,5 +1,6 @@
 // Traditional Chinese application copy; user data is never converted.
 export const traditionalChinese:Record<string,string> = {
+"横向":"橫向",
 "连接错误：{error}":"連線錯誤：{error}",
 "已主动断开连接。":"已主動中斷連線。",
 "连接异常中断。":"連線異常中斷。",

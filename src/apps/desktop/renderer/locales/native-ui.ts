@@ -1,6 +1,7 @@
 // Reviewed interface copy. Detailed protocol help falls back to the English catalog.
 // Columns: Japanese, Korean, German, French, Spanish. Keep user data out of this table.
 export const nativeUi:Record<string,readonly [string,string,string,string,string]>={
+"横向":["横向き","가로","Querformat","Paysage","Horizontal"],
 "连接错误：{error}":["接続エラー: {error}","연결 오류: {error}","Verbindungsfehler: {error}","Erreur de connexion : {error}","Error de conexión: {error}"],
 "已主动断开连接。":["ユーザーが接続を切断しました。","사용자가 연결을 끊었습니다.","Verbindung vom Benutzer getrennt.","Connexion interrompue par l’utilisateur.","Conexión cerrada por el usuario."],
 "连接异常中断。":["接続が予期せず切断されました。","연결이 예기치 않게 끊어졌습니다.","Verbindung unerwartet unterbrochen.","Connexion interrompue de façon inattendue.","Conexión interrumpida inesperadamente."],

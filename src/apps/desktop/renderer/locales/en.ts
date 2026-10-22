@@ -1,5 +1,6 @@
 // Application copy only. Never translate user names, paths or terminal output.
 export const english:Record<string,string> = {
+"横向":"Landscape",
 "连接错误：{error}":"Connection error: {error}",
 "已主动断开连接。":"Disconnected by user.",
 "连接异常中断。":"Connection interrupted unexpectedly.",

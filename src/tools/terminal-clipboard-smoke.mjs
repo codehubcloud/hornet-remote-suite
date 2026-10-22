@@ -25,7 +25,8 @@ try{
  // Match Electron's Promise-returning API, including delayed writes, without
  // reading or replacing the user's real system clipboard.
  await app.evaluate(({clipboard})=>{
-  const state=globalThis.__hornetClipboardFixture={text:'initial',failWrite:false};
+  const state=globalThis.__hornetClipboardFixture={text:'initial',failWrite:false,rtf:''};
+  clipboard.write=async items=>{state.text=await(await items[0].getType('text/plain')).text();state.rtf=await(await items[0].getType('text/rtf')).text();};
   clipboard.readText=async()=>{await new Promise(r=>setTimeout(r,15));return state.text;};
   clipboard.writeText=async text=>{await new Promise(r=>setTimeout(r,80));if(state.failWrite)throw new Error('fixture clipboard denied');state.text=text;};
  });
@@ -51,6 +52,7 @@ try{
   await page.mouse.dblclick(box.x+4,box.y+4);
  };
  await selectFixture(first);await menu('编辑','复制');await expect.poll(clipboard).toBe('fixture');
+ await menu('编辑','复制为RTF格式');await expect.poll(()=>app.evaluate(()=>globalThis.__hornetClipboardFixture.rtf)).toContain('rtf1');await expect.poll(clipboard).toBe('fixture');
  await menu('编辑','粘贴');await expect.poll(()=>server.shellInputs.find(([pid])=>pid===1001)?.[1]).toBe('fixture');
  await expect(first.locator('.xterm-helper-textarea')).toBeFocused();
  await page.getByLabel('快速连接地址',{exact:true}).fill('Clipboard fixture');await page.locator('.quick-connect-bar').getByRole('button',{name:'连接',exact:true}).click();await expect.poll(()=>server.shellCount).toBe(2);
@@ -72,7 +74,14 @@ try{
  await expect(second.locator('.xterm-helper-textarea')).toBeFocused();
  await second.locator('.xterm-helper-textarea').focus();await page.keyboard.press('Shift+F10');await expect(context).toBeVisible();await page.keyboard.press('Escape');await expect(context).toHaveCount(0);await expect(second.locator('.xterm-helper-textarea')).toBeFocused();
  await openContext(second);await context.getByRole('menuitem',{name:'搜索终端',exact:true}).click();await page.getByLabel('搜索终端内容').fill('fixture');await page.getByRole('button',{name:'下一个',exact:true}).click();await page.getByRole('button',{name:'关闭终端搜索',exact:true}).click();
- await openContext(second);await expect(context.getByRole('menuitem',{name:'复制',exact:true})).toBeDisabled();await context.getByRole('menuitem',{name:'全选',exact:true}).click();
+ await menu('编辑','查找下一个');await expect(second.locator('.terminal-search')).toBeVisible();await page.getByLabel('搜索终端内容').fill('fixture');
+ await menu('编辑','查找下一个');await expect(second.locator('.terminal-search')).toContainText('已定位匹配');await menu('编辑','查找上一个');await expect(second.locator('.terminal-search')).toContainText('已定位匹配');await page.getByRole('button',{name:'关闭终端搜索',exact:true}).click();
+ await menu('编辑','选择屏幕');await menu('编辑','复制');await expect.poll(clipboard).toContain('fixture ready');
+ await app.evaluate(({BrowserWindow})=>{const proto=Object.getPrototypeOf(BrowserWindow.getAllWindows()[0].webContents);proto.print=function(options,callback){globalThis.__printMenuFixture={options,url:this.getURL()};callback(true,'');};});
+ await menu('文件','打印预览');const preview=page.getByRole('dialog',{name:'打印预览',exact:true});await expect(preview.locator('pre')).toContainText('fixture ready');await preview.locator('select').selectOption('Letter');await preview.getByLabel('横向',{exact:true}).check();await preview.getByRole('button',{name:'打印…',exact:true}).click();
+ await expect.poll(()=>app.evaluate(()=>globalThis.__printMenuFixture?.options)).toMatchObject({silent:false,pageSize:'Letter',landscape:true});await expect.poll(()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().length)).toBe(1);await preview.getByRole('button',{name:'关闭',exact:true}).click();
+ // Copy the complete buffer next; select-screen is limited to visible rows.
+ await menu('编辑','全选');
  await openContext(second);await context.getByRole('menuitem',{name:'复制',exact:true}).click();await expect.poll(clipboard).toContain('fixture ready');
  const before=server.shellInputs.find(([pid])=>pid===1002)?.[1];await setClipboard('first_line\nsecond_line');
  page.once('dialog',dialog=>dialog.dismiss());await openContext(second);await context.getByRole('menuitem',{name:'粘贴',exact:true}).click();await page.waitForTimeout(150);expect(server.shellInputs.find(([pid])=>pid===1002)?.[1]).toBe(before);
@@ -83,6 +92,7 @@ try{
  await openContext(second);await context.getByRole('menuitem',{name:'重命名终端',exact:true}).click();
  await page.getByLabel('终端标题',{exact:true}).fill('Renamed pane');await page.getByRole('button',{name:'保存标题',exact:true}).click();
  await expect(second.locator('.tabs')).toContainText('Renamed pane');await expect(first.locator('.tabs')).toContainText('Clipboard fixture');expect(server.shellCount).toBe(2);
+ const beforeSelectionPaste=server.shellInputs.find(([pid])=>pid===1002)?.[1];await selectFixture(second);await menu('编辑','粘贴选择内容');await expect.poll(()=>server.shellInputs.find(([pid])=>pid===1002)?.[1]).toBe(beforeSelectionPaste+'fixture');
  const id=await second.getAttribute('data-terminal-id');await openContext(second);await context.getByRole('menuitem',{name:'断开',exact:true}).click();await expect.poll(()=>server.shellCount).toBe(2);await page.waitForTimeout(100);await openContext(second);await expect(context.getByRole('menuitem',{name:'粘贴',exact:true})).toBeDisabled();await page.keyboard.press('Escape');
  if(!executable)await page.screenshot({path:'test-results/terminal-disconnected.png'});
  await expect(second.locator('.terminal-disconnected')).toContainText('已断开');await expect(second.locator('.tabs')).toContainText('已断开');

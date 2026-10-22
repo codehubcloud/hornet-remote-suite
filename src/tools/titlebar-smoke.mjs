@@ -20,6 +20,16 @@ try{
    win.setTitleBarOverlay=options=>{globalThis.__titlebarColors=options;original(options);};
   }
  });
+ if(process.platform!=='linux'){
+  await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:'查看',exact:true}).click();await page.getByRole('menuitem',{name:'全屏',exact:true}).click();
+  await expect.poll(()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isFullScreen())).toBe(true);
+  await page.keyboard.press('Escape');await expect.poll(()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isFullScreen())).toBe(false);
+  await page.keyboard.press('F11');await expect.poll(()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isFullScreen())).toBe(true);
+  await page.keyboard.press('F11');await expect.poll(()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isFullScreen())).toBe(false);
+ }
+ await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:'查看',exact:true}).click();await page.getByRole('menuitem',{name:'十六进制查看器',exact:true}).click();
+ const hex=page.getByRole('dialog',{name:'十六进制查看器',exact:true});await hex.locator('input[type=file]').setInputFiles({name:'binary.dat',mimeType:'application/octet-stream',buffer:Buffer.from([0,65,127,255,...Array(4096).fill(66)])});
+ await expect(hex.locator('pre')).toContainText('00 41 7f ff');await hex.getByRole('button',{name:'下一个',exact:true}).click();await expect(hex.locator('pre')).toContainText('00001000');await hex.getByRole('button',{name:'关闭',exact:true}).click();
  const bar=page.locator('.app-titlebar'),menu=bar.locator('.reference-menubar');
  await expect(bar).toBeVisible();expect((await bar.boundingBox()).y).toBe(0);
  if(process.platform==='win32')await expect.poll(()=>page.evaluate(()=>navigator.windowControlsOverlay?.visible)).toBe(true);

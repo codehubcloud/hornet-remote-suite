@@ -1,1 +1,8 @@
-Hornet Remote Suite 0.0.23 keeps a deferred Windows update installer registered until it starts after sign-in, retrying on later sign-ins if startup is interrupted. Update downloads also show an estimated remaining time alongside progress and speed.
+Hornet Remote Suite 0.0.24
+
+- 修复“查看 → 全屏”：改用原生窗口全屏，支持 F11 切换、Esc 退出和状态同步。
+- 实现终端“查找上一个/下一个”（Shift+F3/F3）、选择屏幕、粘贴选中文本与复制为 RTF。
+- 实现本地文件十六进制分页查看器，每次仅加载 4 KiB，支持大文件浏览。
+- 实现终端打印预览与系统打印，支持 A4/Letter 和横向排版。
+- 修复断开/正在连接时粘贴与开始日志的菜单可用状态，以及空白标签的批量关闭。
+- 尚未实现的高级占位菜单继续禁用，避免将其显示为可执行功能。

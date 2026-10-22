@@ -31,6 +31,7 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
  const closeSearch=()=>{setSearchOpen(false);terminal.current?.clearSelection();terminal.current?.focus();};
  const [query,setQuery]=useState(''),[result,setResult]=useState('');
  const find=(previous=false)=>{if(!query){terminal.current?.clearSelection();setResult('');return;}const found=previous?search.current?.findPrevious(query):search.current?.findNext(query);setResult(found?tr("已定位匹配"):tr("未找到匹配"));};
+ useEffect(()=>{const handler=(event:Event)=>{const detail=(event as CustomEvent<{viewId:string;previous:boolean}>).detail;if(detail.viewId!==view.id)return;setSearchOpen(true);if(!query)searchInput.current?.focus();else find(detail.previous);};window.addEventListener('hornet:terminal-find',handler);return()=>window.removeEventListener('hornet:terminal-find',handler);},[query,view.id]);
  useEffect(()=>{
   if(!element.current)return;
   const id=view.terminalId??view.id;
@@ -89,17 +90,21 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
    if(!ended&&targets.some(t=>t.terminalId===id))for(const target of targets)if(target.terminalId!==id)window.dispatchEvent(new CustomEvent<TerminalAction>('hornet:terminal-action',{detail:{viewId:target.viewId,terminalId:target.terminalId,kind:'input',text:data}}));
   });
   const action=(event:Event)=>{const detail=(event as CustomEvent<TerminalAction>).detail;if(detail.viewId!==view.id||detail.terminalId&&detail.terminalId!==id)return;
-   if(runner.running&&['input','execute','paste'].includes(detail.kind))return;
+   if(runner.running&&['input','execute','paste','pasteSelection'].includes(detail.kind))return;
    if(detail.kind==='input'&&detail.terminalId===id&&detail.text&&!ended)void send(detail.text).catch(reportInputFailure);
    if(detail.kind==='execute'){if(ended){useStore.getState().fail(new Error(tr("终端已关闭，命令未发送。")));return;}if(detail.text){const text=detail.enter===false?detail.text:detail.text.replace(/[\r\n]+$/,'')+'\r';void send(text.replace(/\r\n|\n/g,'\r')).catch(reportInputFailure);term.focus();}}
    if(detail.kind==='copy'){const text=detail.text??term.getSelection();if(text)void window.hornet.clipboard.write(text).catch(useStore.getState().fail);term.focus();}
    if(detail.kind==='paste'&&!ended)void window.hornet.clipboard.read().then(text=>{if(!ended&&!runner.running&&useStore.getState().active===view.id&&(!/[\r\n]/.test(text)||window.confirm(tr("粘贴多行文本可能执行命令。继续？")))){term.paste(text);term.focus();}}).catch(useStore.getState().fail);
+   if(detail.kind==='selectScreen'){const b=term.buffer.active;term.selectLines(b.viewportY,Math.min(b.length-1,b.viewportY+term.rows-1));term.focus();}
+   if(detail.kind==='copyRtf'){const text=term.getSelection();if(text)void window.hornet.clipboard.writeRtf(text).catch(useStore.getState().fail);term.focus();}
+   if(detail.kind==='pasteSelection'&&!ended){const text=term.getSelection();if(text&&(!/[\r\n]/.test(text)||window.confirm(tr("粘贴多行文本可能执行命令。继续？")))){term.paste(text);term.focus();}}
    if(detail.kind==='reset')term.reset();
    if(detail.kind==='selectAll'){term.selectAll();term.focus();}
    if(detail.kind==='clear')term.clear();
-   if(detail.kind==='export'){
+   if(detail.kind==='export'||detail.kind==='print'){
     const buffer=term.buffer.active,parts:string[]=[];let size=0;
     for(let i=0;i<buffer.length;i++){const line=buffer.getLine(i);if(!line)continue;const text=line.translateToString(true);size+=text.length+1;if(size>4194304){useStore.getState().fail(new Error(tr("终端文本超过导出上限，请减少滚屏行数后重试。")));return;}parts.push(text);if(!buffer.getLine(i+1)?.isWrapped)parts.push('\n');}
+    if(detail.kind==='print'){window.dispatchEvent(new CustomEvent('hornet:terminal-document',{detail:{title:view.title??view.profile.name,text:parts.join('')}}));return;}
     void window.hornet.terminal.exportText(useStore.getState().views.find(v=>v.id===view.id)?.title??view.profile.name,parts.join('')).catch(useStore.getState().fail);
    }
   };

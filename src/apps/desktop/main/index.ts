@@ -1,4 +1,5 @@
-import { app,BrowserWindow,dialog,clipboard,ipcMain,protocol,net,screen,type IpcMainInvokeEvent,type IpcMainEvent } from 'electron';
+import { app,BrowserWindow,dialog,clipboard,ClipboardItem,ipcMain,protocol,net,screen,type IpcMainInvokeEvent,type IpcMainEvent } from 'electron';
+import { plainRtf } from './rtf';
 import { join,basename,resolve,sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readFile,writeFile,stat } from 'node:fs/promises';
@@ -95,6 +96,16 @@ async function setupIpc(){
           const p=z.object({profileId:z.string().uuid(),expectedRevision:z.number().int().nonnegative()}).strict().parse(m.payload);
           data=await credentials.revealPassword(p.profileId,p.expectedRevision);break;
         }
+        case 'documents.print':{
+          const doc=z.object({text:z.string().max(4194304),title:z.string().max(512),landscape:z.boolean(),pageSize:z.enum(['A4','Letter'])}).strict().parse(m.payload);
+          const printWindow=new BrowserWindow({show:false,parent:window,webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true}});
+          printWindow.removeMenu();printWindow.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+          const escape=(text:string)=>text.replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]!));
+          try{await printWindow.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent('<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; style-src &#39;unsafe-inline&#39;"><title>'+escape(doc.title)+'</title><style>body{color:#000;background:#fff}pre{font:11pt monospace;white-space:pre-wrap;overflow-wrap:anywhere}</style><pre>'+escape(doc.text)+'</pre>'));
+          await new Promise<void>((resolve,reject)=>{printWindow.webContents.print({silent:false,landscape:doc.landscape,pageSize:doc.pageSize,printBackground:false},(success,reason)=>{if(success||/cancel/i.test(reason))resolve();else reject(new Error(reason));});});}finally{if(!printWindow.isDestroyed())printWindow.destroy();}data=null;break;
+        }
+        case 'windowChrome.getFullscreen':z.object({}).strict().parse(m.payload);data=window?.isFullScreen()??false;break;
+        case 'windowChrome.setFullscreen':{const {value}=z.object({value:z.boolean()}).strict().parse(m.payload);window?.setFullScreen(value);data=null;break;}
         case 'windowChrome.colors':{
           const color=z.string().regex(/^#[0-9a-f]{6}$/i);
           const colors=z.object({color,symbolColor:color}).strict().parse(m.payload);
@@ -130,6 +141,7 @@ async function setupIpc(){
         case 'localFiles.mkdir':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),name:z.string().min(1).max(255)}).strict().parse(m.payload);data=await localFiles.mkdir('local-user',p.rootId,p.path,p.name);break;}
         case 'localFiles.grant':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),direction:z.enum(['upload','download']),name:z.string().max(255).optional()}).strict().parse(m.payload);data=await localFiles.grant('local-user',p.rootId,p.path,p.direction,p.name);break;}
         case 'localFiles.release':{const p=z.object({rootId:z.string().uuid()}).strict().parse(m.payload);localFiles.release('local-user',p.rootId);data=null;break;}
+        case 'clipboard.writeRtf':{const {text}=z.object({text:z.string().max(131072)}).strict().parse(m.payload);await clipboard.write([new ClipboardItem({'text/plain':text,'text/rtf':plainRtf(text)})]);data=null;break;}
         case 'clipboard.read':z.object({}).strict().parse(m.payload??{});data=await clipboard.readText();if((data as string).length>131072)throw new AppError('FILE_LIMIT','Clipboard text exceeds 128 KiB.');break;
         case 'clipboard.write':await clipboard.writeText(z.object({text:z.string().max(131072)}).strict().parse(m.payload).text);data=null;break;
         case 'rdp.probe':data=await rdp.probe();break;
@@ -214,6 +226,8 @@ async function bootstrap(){
     if(x<0||x>bounds.width||y<0||y>36)return;
     event.preventDefault();chromeWindow.webContents.send('hornet:chrome-context',{x,y});
   });
+  window.on('enter-full-screen',()=>window?.webContents.send('hornet:fullscreen',true));
+  window.on('leave-full-screen',()=>window?.webContents.send('hornet:fullscreen',false));
   window.removeMenu();window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_webContents,_permission,callback)=>callback(false));

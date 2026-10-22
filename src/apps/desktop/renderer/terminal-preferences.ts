@@ -38,5 +38,5 @@ export const quickCommandSchema=z.object({id:z.string().uuid(),name:z.string().t
 export type QuickCommand=z.infer<typeof quickCommandSchema>;
 export function readQuickCommands(value:string|null):QuickCommand[]{try{return z.array(quickCommandSchema).max(100).parse(JSON.parse(value??''));}catch{return [];}}
 export function saveQuickCommands(commands:QuickCommand[]){const parsed=z.array(quickCommandSchema).max(100).parse(commands);localStorage.setItem('hornet.terminal.commands.v1',JSON.stringify(parsed));}
-export type TerminalAction={viewId:string;kind:'export'|'selectAll'|'clear'|'execute'|'copy'|'paste'|'reset'|'input';terminalId?:string;text?:string;enter?:boolean};
+export type TerminalAction={viewId:string;kind:'print'|'selectScreen'|'pasteSelection'|'copyRtf'|'export'|'selectAll'|'clear'|'execute'|'copy'|'paste'|'reset'|'input';terminalId?:string;text?:string;enter?:boolean};
 export function terminalAction(action:TerminalAction){window.dispatchEvent(new CustomEvent('hornet:terminal-action',{detail:action}));}

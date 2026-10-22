@@ -15,8 +15,9 @@ function clipboardCall<T>(method:string,payload:unknown={}):Promise<T>{
 }
 const api:HornetApi={
  help:{info:()=>local('help.info'),checkUpdates:()=>local('help.checkUpdates'),downloadUpdate:()=>local('help.downloadUpdate'),installUpdate:()=>local('help.installUpdate'),openLink:link=>local('help.openLink',{link}),openPdf:language=>local('help.openPdf',{language})},
- windowChrome:{platform:process.platform,setColors:colors=>local('windowChrome.colors',colors),onContextMenu:listener=>{const handler=(_event:unknown,point:{x:number;y:number})=>{if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y))listener({x:point.x,y:point.y});};ipcRenderer.on('hornet:chrome-context',handler);return()=>{ipcRenderer.removeListener('hornet:chrome-context',handler);};}},
- clipboard:{read:()=>clipboardCall('clipboard.read'),write:text=>clipboardCall('clipboard.write',{text})},
+ documents:{print:document=>local('documents.print',document)},
+ windowChrome:{getFullscreen:()=>local('windowChrome.getFullscreen',{}),setFullscreen:value=>local('windowChrome.setFullscreen',{value}),onFullscreen:listener=>{const handler=(_event:unknown,value:boolean)=>listener(value===true);ipcRenderer.on('hornet:fullscreen',handler);return()=>{ipcRenderer.removeListener('hornet:fullscreen',handler);};},platform:process.platform,setColors:colors=>local('windowChrome.colors',colors),onContextMenu:listener=>{const handler=(_event:unknown,point:{x:number;y:number})=>{if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y))listener({x:point.x,y:point.y});};ipcRenderer.on('hornet:chrome-context',handler);return()=>{ipcRenderer.removeListener('hornet:chrome-context',handler);};}},
+ clipboard:{writeRtf:text=>clipboardCall('clipboard.writeRtf',{text}),read:()=>clipboardCall('clipboard.read'),write:text=>clipboardCall('clipboard.write',{text})},
  localTerminal:{shells:()=>call('localTerminal.shells'),open:config=>call('localTerminal.open',config)},
  serialTerminal:{list:()=>call('serialTerminal.list'),open:config=>call('serialTerminal.open',config)},
  terminalLogs:{openRecording:id=>local('terminalLogs.openRecording',{id}),start:(terminalId,format)=>local('terminalLogs.start',{terminalId,format}),stop:id=>local('terminalLogs.stop',{id}),list:()=>local('terminalLogs.list')},

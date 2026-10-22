@@ -136,9 +136,10 @@ export type HornetEvent =
   | { type: 'service.error'; message: string };
 export interface Layout { profileIds: string[]; activeProfileId?: string }
 export interface HornetApi {
+ documents:{print:(document:{text:string;title:string;landscape:boolean;pageSize:'A4'|'Letter'})=>Promise<void>};
  help:{info():Promise<import('./help').AppInfo>;checkUpdates():Promise<import('./help').UpdateInfo>;downloadUpdate():Promise<import('./help').UpdateDownload>;installUpdate():Promise<void>;openLink(link:import('./help').HelpLink):Promise<void>;openPdf(language:string):Promise<void>};
- windowChrome:{platform:string;setColors:(colors:{color:string;symbolColor:string})=>Promise<void>;onContextMenu:(listener:(point:{x:number;y:number})=>void)=>()=>void};
- clipboard:{read:()=>Promise<string>;write:(text:string)=>Promise<void>};
+ windowChrome:{getFullscreen:()=>Promise<boolean>;setFullscreen:(value:boolean)=>Promise<void>;onFullscreen:(listener:(value:boolean)=>void)=>()=>void;platform:string;setColors:(colors:{color:string;symbolColor:string})=>Promise<void>;onContextMenu:(listener:(point:{x:number;y:number})=>void)=>()=>void};
+ clipboard:{writeRtf:(text:string)=>Promise<void>;read:()=>Promise<string>;write:(text:string)=>Promise<void>};
   localTerminal:{shells():Promise<{id:'powershell'|'cmd'|'wsl';name:string;path:string}[]>;open(config:LocalTerminalConfig):Promise<DeviceTerminal>};
   serialTerminal:{list():Promise<SerialDevice[]>;open(config:SerialTerminalConfig):Promise<DeviceTerminal>};
   terminalLogs:{openRecording(id?:string):Promise<TerminalRecording|null>;start(terminalId:string,format:TerminalLogFormat):Promise<TerminalLog|null>;stop(id:string):Promise<TerminalLog>;list():Promise<TerminalLog[]>};
