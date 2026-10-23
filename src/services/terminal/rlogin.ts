@@ -47,6 +47,7 @@ export class RloginTerminals {
   }catch(error){this.finish(s,error instanceof Error?error.message:'RLOGIN 连接失败。');throw error;}
  }
  encoding(owner:string,id:string,generation:number,encoding?:TerminalEncoding){const s=this.get(owner,id);if(generation!==1)throw new AppError('IPC005','终端版本已改变。');if(encoding&&encoding!==s.text.encoding){this.output(s,s.text.end());s.text=new TerminalCodec(encoding);}return s.text.encoding;}
+ detach(owner:string,id:string){const s=this.get(owner,id);s.attached=false;return {inputSeq:s.input,seq:s.seq};}
  attach(owner:string,id:string){const s=this.get(owner,id);s.attached=true;this.flush(s);}
  private output(s:Session,data:Buffer){if(!data.length)return;const seq=++s.seq;s.bytes+=data.length;s.pending.set(seq,data.length);this.emit(s.owner,{type:'terminal.data',terminalId:s.id,generation:1,seq,data});}
  private read(s:Session){

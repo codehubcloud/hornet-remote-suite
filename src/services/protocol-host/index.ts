@@ -1,3 +1,4 @@
+import { ZmodemTransfers } from '../terminal/zmodem';
 import { sameTransport } from '../../packages/core/profile-settings';
 import { FtpConnections } from '../ftp/connections';
 import { FtpFiles } from '../ftp/files';
@@ -49,6 +50,7 @@ const ftpFiles=new FtpFiles(ftp);
 const s3=new S3Connections(store,challenges,emit,cachedSecret);
 const s3Files=new S3Files(s3);
 const fileService=(id:string)=>s3.has(id)?s3Files:ftp.has(id)?ftpFiles:files;
+const zmodem=new ZmodemTransfers();
 const terminals=new Terminals(connections,emit);
 const telnet=new TelnetTerminals(emit);
 const rlogin=new RloginTerminals(emit);
@@ -72,9 +74,16 @@ async function dispatch(m:Message):Promise<unknown>{
     case 'telnet.open':{const v=schemas['telnet.open'].parse(p);return telnet.open(owner,store.profile(v.profileId),v.cols,v.rows);}
     case 'rlogin.open':{const v=schemas['rlogin.open'].parse(p);return rlogin.open(owner,store.profile(v.profileId),v.cols,v.rows);}
     case 'mosh.open':{const v=schemas['mosh.open'].parse(p);return openMosh(devices,owner,store.profile(v.profileId),v.cols,v.rows);}
+    case 'zmodem.list':return zmodem.list();
+    case 'zmodem.cancel':zmodem.cancel(schemas['zmodem.cancel'].parse(p).id);return null;
+    case 'zmodem.start':{const v=z.object({terminalId:z.string().uuid(),direction:z.enum(['send','receive'])}).strict().parse(p);if(!m.context)throw new AppError('IPC005','需要本地文件选择授权。');return zmodem.start(v.terminalId,v.direction,m.context.localPath,m.context.localParent,terminals.binary(owner,v.terminalId));}
+    case 'terminal.detach':{const v=schemas['terminal.detach'].parse(p);return terminalService(v.terminalId).detach(owner,v.terminalId);}
     case 'terminal.inspect':{const v=schemas['terminal.attach'].parse(p);return terminalService(v.terminalId).inspect(owner,v.terminalId);}
     case 'print.queue.save':return lpd.saveQueue(schemas['print.queue.save'].parse(p));
     case 'print.queue.remove':return lpd.removeQueue(schemas['print.queue.remove'].parse(p).queue);
+    case 'print.default':return lpd.setDefault(schemas['print.default'].parse(p).queue);
+    case 'print.job.read':return lpd.readJob(schemas['print.job.read'].parse(p).jobId);
+    case 'print.jobs.remove':return lpd.removeJobs(schemas['print.jobs.remove'].parse(p).jobIds);
     case 'print.status':return lpd.status();
     case 'print.start':return lpd.start(schemas['print.start'].parse(p));
     case 'print.stop':return lpd.stop();
@@ -108,6 +117,8 @@ async function dispatch(m:Message):Promise<unknown>{
     case 'auth.respond':{const v=schemas['auth.respond'].parse(p);return challenges.respond(owner,v.challengeId,v.response);}
     case 'auth.cancel':return challenges.cancel(owner,schemas['auth.cancel'].parse(p).challengeId);
     case 'auth.key':{const v=z.object({challengeId:z.string().uuid(),key:z.string().max(65536)}).parse(p);if(challenges.kind(owner,v.challengeId)!=='privateKey')throw new AppError('IPC005','私钥请求已失效。');return challenges.respond(owner,v.challengeId,v.key);}
+    case 'knownHosts.list':schemas['knownHosts.list'].parse(p);return store.knownHosts();
+    case 'knownHosts.remove':{const v=schemas['knownHosts.remove'].parse(p);return store.forgetHost(v.id,v.fingerprint);}
     case 'trust.resolve':{const v=schemas['trust.resolve'].parse(p);return challenges.respond(owner,v.challengeId,v.decision,true);}
     case 'terminal.encoding':{const v=schemas['terminal.encoding'].parse(p);return terminalService(v.terminalId).encoding(owner,v.terminalId,v.generation,v.encoding);}
     case 'terminal.cwd':{const v=schemas['terminal.cwd'].parse(p);return terminalService(v.terminalId).cwd(owner,v.terminalId);}
@@ -121,6 +132,8 @@ async function dispatch(m:Message):Promise<unknown>{
     case 'file.tree':{const v=schemas['file.list'].parse(p);return fileService(v.connectionId).tree(owner,v.connectionId,v.path);}
     case 'file.tree.hash':{const v=z.object({connectionId:z.string().uuid(),root:z.string().min(1).max(4096),path:z.string().min(1).max(4096)}).strict().parse(p);return fileService(v.connectionId).treeHash(owner,v.connectionId,v.root,v.path);}
     case 'file.tree.mkdir':{const v=z.object({connectionId:z.string().uuid(),root:z.string().min(1).max(4096),path:z.string().min(1).max(4096)}).strict().parse(p);return fileService(v.connectionId).treeMkdir(owner,v.connectionId,v.root,v.path);}
+    case 'ftp.mode':{const v=schemas['ftp.mode'].parse(p);return ftp.configure(owner,v.connectionId,v.mode);}
+    case 'ftp.command':{const v=schemas['ftp.command'].parse(p);return ftp.command(owner,v.connectionId,v.command);}
     case 'file.list':{const v=schemas['file.list'].parse(p);return fileService(v.connectionId).list(owner,v.connectionId,v.path);}
     case 'file.read':{const v=schemas['file.read'].parse(p);return fileService(v.connectionId).read(owner,v.connectionId,v.path);}
     case 'file.mkdir':{const v=schemas['file.mkdir'].parse(p);return fileService(v.connectionId).mkdir(owner,v.connectionId,v.path);}
@@ -136,7 +149,7 @@ async function dispatch(m:Message):Promise<unknown>{
     case 'layout.load':return store.layout();
     case 'layout.save':return store.saveLayout(schemas['layout.save'].parse(p));
     case 'capability.list':return [
-      {id:'ssh',name:'SSH 终端',state:'available',reason:'密码 / 私钥 / Agent、跳板链、分屏、多编码、脚本步骤与录制回放'},
+      {id:'ssh',name:'SSH 终端',state:'available',reason:'密码 / 托管私钥 / Agent、跳板链、多窗口与活标签移动、按键对应、突出显示、触发器、脚本、录制及手动 SSH ZMODEM'},
       {id:'sftp',name:'SFTP 文件管理',state:'available',reason:'本地/远端双面板、双向同步、同名策略、SHA-256 覆盖校验、递归传输、续传、权限及 UTF-8 编辑'},
       {id:'tunnels',name:'SSH 端口转发 / SOCKS5',state:'available',reason:'本地 / 远程 / 动态 SOCKS5 TCP 转发；最多四跳 SSH 链，逐跳认证与指纹校验、独立租约'},
       {id:'x11',name:'X11 / XDMCP',state:x11.status().configured||(await xServers.status()).configured?'experimental':'requires-setup',reason:'VcXsrv 自动管理、独立进程/显示/cookie；SSH 图形应用和局域网 XDMCP 独立窗口；需明确启用网络监听'},
@@ -149,7 +162,7 @@ async function dispatch(m:Message):Promise<unknown>{
       {id:'wsl',name:'Windows Subsystem for Linux',state:localShells().some(shell=>shell.id==='wsl')?'available':'unavailable',reason:'Runs installed Linux distributions through Windows ConPTY; optional distribution and Linux working directory are supported'},
       {id:'local',name:'本地 PowerShell / CMD',state:localShells().length?'available':'unavailable',reason:'Windows ConPTY 交互终端、窗口尺寸、分屏和持续日志；文件菜单打开'},
       {id:'serial',name:'串口终端',state:'requires-setup',reason:'COM 端口枚举、波特率/校验位/流控、多编码、脚本与日志；需要可用串口设备'},
-      {id:'ftp',name:'FTP / FTPS',state:'available',reason:'被动模式、显式/隐式 TLS、双面板目录管理、普通文件传输与 SHA-256 校验；不支持目录同步、在线编辑或权限修改'},
+      {id:'ftp',name:'FTP / FTPS',state:'available',reason:'被动模式、显式/隐式 TLS、二进制/ASCII/自动模式、FTP 命令、同步浏览与预订；普通文件 SHA-256 校验，不支持 FTP 目录同步、在线编辑或权限修改'},
       {id:'s3',name:'AWS S3 object storage',state:'available',reason:'Bucket/object browsing, create empty folders, UTF-8 preview/edit, verified upload/download and object rename/delete; requires bucket-scoped IAM access keys; POSIX permissions and folder rename are unsupported'},
       {id:'extensions',name:'IDE / 插件 / AI / 企业服务',state:'unavailable',reason:'按设计文档列为后续扩展，不在当前版本伪装启用'}
     ];

@@ -1,3 +1,7 @@
+import { TransferSchedules } from './transfer-schedules';
+import { scheduleInput } from '../../../packages/contracts/transfer-schedules';
+import { IdentityStore } from './identity-store';
+import { identitySchema } from '../../../packages/contracts/identities';
 import { app,BrowserWindow,dialog,clipboard,ClipboardItem,ipcMain,protocol,net,screen,type IpcMainInvokeEvent,type IpcMainEvent } from 'electron';
 import { FullscreenController } from './fullscreen';
 import { plainRtf } from './rtf';
@@ -25,6 +29,11 @@ protocol.registerSchemesAsPrivileged([{scheme:'app',privileges:{standard:true,se
 if(process.env.HORNET_USER_DATA)app.setPath('userData',process.env.HORNET_USER_DATA);
 let window:BrowserWindow|undefined,backend:Backend,vault:Vault;
 let fullscreen:FullscreenController;
+const workbenches=new Set<BrowserWindow>(),controllers=new Map<number,FullscreenController>(),initialWindows=new Map<number,unknown>();
+const challengeWindows=new Map<string,number>();
+let createWorkbench:(initial?:unknown)=>Promise<BrowserWindow>;
+let identities:IdentityStore;
+let schedules:TransferSchedules;
 const taskCache=new Map<string,TaskSnapshot>();
 const grants=new PathGrants();
 const localFiles=new LocalFiles(grants);
@@ -43,10 +52,11 @@ const emit=(event:HornetEvent)=>{
     if(secret)void backend.call<Profile[]>('profile.list').then(profiles=>{const p=profiles.find(p=>p.profileId===event.profileId);if(p)vault.save(p,secret);}).catch(()=>window?.webContents.send('hornet:event',{type:'service.error',message:'系统凭据保存失败，密码未持久化。'}));
   }
   if(event.type==='connection.state'&&event.state==='failed')pendingPasswords.delete(event.profileId);
-  if(window&&!window.isDestroyed())window.webContents.send('hornet:event',event);
+  for(const target of workbenches)if(!target.isDestroyed()&&(event.type!=='challenge'||!challengeWindows.has(event.profileId)||target.webContents.id===challengeWindows.get(event.profileId)))target.webContents.send('hornet:event',event);
 };
 function authorize(event:IpcMainInvokeEvent|IpcMainEvent){
-  if(!window||event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||!event.senderFrame?.url.startsWith('app://hornet/'))throw new AppError('IPC005','请求来源无权访问。');
+  const source=BrowserWindow.fromWebContents(event.sender);
+  if(!source||!workbenches.has(source)||event.senderFrame!==event.sender.mainFrame||!event.senderFrame?.url.startsWith('app://hornet/'))throw new AppError('IPC005','请求来源无权访问。');
 }
 function responseError(e:unknown,requestId='local'){return {ok:false,requestId,error:e instanceof z.ZodError?{code:'IPC002',message:'请求参数无效。',retryable:false}:safeError(e)};}
 async function setupIpc(){
@@ -60,6 +70,7 @@ async function setupIpc(){
       const req=envelopeSchema.parse(raw);requestId=req.requestId;
       if(req.deadlineMs<Date.now())throw new AppError('IPC003','请求已过期。');
       const parsed=schemas[req.method].parse(req.payload);
+      if(['connection.open','telnet.open','rlogin.open','mosh.open'].includes(req.method)&&parsed&&typeof parsed==='object'&&'profileId' in parsed)challengeWindows.set(String(parsed.profileId),event.sender.id);
       if(req.method==='auth.respond'){
         const p=schemas['auth.respond'].parse(parsed),challenge=challenges.get(p.challengeId);
         if(!challenge||challenge.kind==='privateKey')throw new AppError('IPC005','认证请求无效。');
@@ -76,9 +87,30 @@ async function setupIpc(){
   });
   ipcMain.handle('hornet:local',async(event,raw:unknown)=>{
     try{
-      authorize(event);const m=z.object({method:z.string(),payload:z.unknown()}).strict().parse(raw);
+      authorize(event);const window=BrowserWindow.fromWebContents(event.sender)!,fullscreen=controllers.get(window.id)!;const m=z.object({method:z.string(),payload:z.unknown()}).strict().parse(raw);
       let data:unknown;
       switch(m.method){
+        case 'zmodem.start':{const p=z.object({terminalId:z.string().uuid(),direction:z.enum(['send','receive'])}).strict().parse(m.payload);await backend.call('terminal.inspect',{terminalId:p.terminalId});const selected=await dialog.showOpenDialog(window!,{title:p.direction==='send'?'选择发送文件':'选择 ZMODEM 接收目录',properties:[p.direction==='send'?'openFile':'openDirectory']});data=null;if(!selected.canceled&&selected.filePaths[0]){const path=selected.filePaths[0];const {realpath,lstat}=await import('node:fs/promises'),{dirname}=await import('node:path');if((await lstat(path)).isSymbolicLink())throw new Error('请选择普通文件或目录。');const canonical=await realpath(path);data=await backend.call('zmodem.start',p,{localPath:canonical,localParent:await realpath(dirname(canonical))});}break;}
+        case 'workbench.create':z.object({}).strict().parse(m.payload);await createWorkbench();data=null;break;
+        case 'workbench.initial':z.object({}).strict().parse(m.payload);data=initialWindows.get(window.id)??{secondary:false};initialWindows.delete(window.id);break;
+        case 'workbench.close':z.object({}).strict().parse(m.payload);data=null;if(workbenches.size>1)window.destroy();else window.close();break;
+        case 'workbench.cascade':{z.object({}).strict().parse(m.payload);const area=screen.getDisplayMatching(window.getBounds()).workArea;let index=0;for(const target of workbenches){if(target.isFullScreen())target.setFullScreen(false);if(target.isMaximized())target.unmaximize();if(target.isMinimized())target.restore();const offset=(index++%6)*32;target.setBounds({x:area.x+offset,y:area.y+offset,width:Math.max(1024,area.width-192),height:Math.max(720,area.height-192)});target.show();}data=null;break;}
+        case 'workbench.move':{const payload=z.object({view:z.object({id:z.string().uuid(),kind:z.literal('terminal'),profile:profileSchema,connectionId:z.string().uuid(),leaseId:z.string().uuid().optional(),terminalId:z.string().uuid(),terminalIds:z.array(z.string().uuid()).max(32).optional(),generation:z.number().int().positive(),source:z.enum(['local','serial','mosh']).optional(),title:z.string().max(255).optional(),tabColor:z.string().max(16).optional(),terminalTitle:z.string().max(255).optional()}).strict(),snapshot:z.string().max(8388608),inputSeq:z.number().int().nonnegative()}).strict().parse(m.payload);await backend.call('terminal.inspect',{terminalId:payload.view.terminalId});await createWorkbench({secondary:true,view:payload});data=null;break;}
+        case 'schedules.list':z.object({}).strict().parse(m.payload);data=schedules.list();break;
+        case 'schedules.create':{const input=scheduleInput.parse(m.payload),profile=(await backend.call<Profile[]>('profile.list')).find(profile=>profile.profileId===input.profileId);if(!profile||profile.session?.s3||!['ssh','ftp'].includes(profile.protocol??'ssh'))throw new AppError('IPC002','请选择 SSH 或 FTP 文件连接。');const selected=input.direction==='upload'?await dialog.showOpenDialog(window!,{properties:['openFile']}):await dialog.showSaveDialog(window!,{defaultPath:basename(input.remotePath)});data=null;const path='filePaths' in selected?selected.filePaths[0]:selected.filePath;if(!selected.canceled&&path){const grant=await grants.create('local-user',path,input.direction);data=schedules.add(input,profile.revision,profile.name,grant.path,grant.parent);}break;}
+        case 'schedules.run':data=await schedules.run(z.object({id:z.string().uuid()}).strict().parse(m.payload).id);break;
+        case 'schedules.cancel':schedules.cancel(z.object({id:z.string().uuid()}).strict().parse(m.payload).id);data=null;break;
+        case 'schedules.remove':schedules.remove(z.object({id:z.string().uuid()}).strict().parse(m.payload).id);data=null;break;
+        case 'keys.list':z.object({}).strict().parse(m.payload);data=identities.keys();break;
+        case 'keys.generate':{const p=z.object({name:z.string().trim().min(1).max(80),algorithm:z.enum(['ed25519','rsa','ecdsa']),passphrase:z.string().max(4096)}).strict().parse(m.payload);data=await identities.generate(p.name,p.algorithm,p.passphrase);break;}
+        case 'keys.import':{const p=z.object({name:z.string().trim().min(1).max(80),passphrase:z.string().max(4096)}).strict().parse(m.payload);const selected=await dialog.showOpenDialog(window!,{title:'导入用户私钥',properties:['openFile']});data=null;if(!selected.canceled&&selected.filePaths[0]){if((await stat(selected.filePaths[0])).size>65536)throw new AppError('FILE_LIMIT','私钥文件过大。');data=identities.importKey(p.name,await readFile(selected.filePaths[0],'utf8'),p.passphrase);}break;}
+        case 'keys.remove':{const {id}=z.object({id:z.string().uuid()}).strict().parse(m.payload);if((await backend.call<Profile[]>('profile.list')).some(profile=>profile.session?.keyId===id))throw new AppError('KEY_IN_USE','密钥正在被连接配置使用，请先修改对应配置。');identities.removeKey(id);data=null;break;}
+        case 'keys.use':{const p=z.object({id:z.string().uuid(),challengeId:z.string().uuid()}).strict().parse(m.payload);if(challenges.get(p.challengeId)?.kind!=='privateKey')throw new AppError('IPC005','私钥请求已失效。');const key=identities.privateKey(p.id,true);if(!key)throw new AppError('KEY_INVALID','私钥不存在。');await backend.call('auth.key',{challengeId:p.challengeId,key});data=null;break;}
+        case 'keys.export':{const p=z.object({id:z.string().uuid(),privateKey:z.boolean()}).strict().parse(m.payload),key=identities.keys().find(key=>key.id===p.id);if(!key)throw new AppError('KEY_INVALID','私钥不存在。');data=false;if(p.privateKey){const confirmation=await dialog.showMessageBox(window!,{type:'question',buttons:['导出私钥','取消'],defaultId:1,cancelId:1,message:'将私钥导出到所选文件',detail:key.name+' · '+key.fingerprint});if(confirmation.response!==0)break;}const selected=await dialog.showSaveDialog(window!,{defaultPath:basename(key.name).replace(/[<>:"/\\|?*\x00-\x1f]/g,'_')+(p.privateKey?'':'.pub')});if(!selected.canceled&&selected.filePath){await writeFile(selected.filePath,p.privateKey?identities.privateKey(p.id,true)!:key.publicKey+'\n',{mode:0o600});data=true;}break;}
+        case 'identities.list':z.object({}).strict().parse(m.payload);data=identities.identities();break;
+        case 'identities.save':{const p=z.object({identity:identitySchema,password:z.string().max(16384).optional(),clearPassword:z.boolean().optional()}).strict().parse(m.payload);data=identities.saveIdentity(p.identity,p.password,p.clearPassword);break;}
+        case 'identities.remove':{const {id}=z.object({id:z.string().uuid()}).strict().parse(m.payload);identities.removeIdentity(id);data=null;break;}
+        case 'identities.revealPassword':{const {id}=z.object({id:z.string().uuid()}).strict().parse(m.payload);data=identities.revealPassword(id);break;}
         case 'help.info':z.object({}).strict().parse(m.payload);data=appInfo();break;
         case 'help.checkUpdates':z.object({}).strict().parse(m.payload);data=await checkUpdates();break;
         case 'help.downloadUpdate':z.object({}).strict().parse(m.payload);data=await downloadUpdate(progress=>{if(window&&!window.isDestroyed())window.webContents.send('hornet:event',{type:'update.progress',...progress});});break;
@@ -98,6 +130,7 @@ async function setupIpc(){
           const p=z.object({profileId:z.string().uuid(),expectedRevision:z.number().int().nonnegative()}).strict().parse(m.payload);
           data=await credentials.revealPassword(p.profileId,p.expectedRevision);break;
         }
+        case 'print.export':{const {jobId}=z.object({jobId:z.string().uuid()}).strict().parse(m.payload);const job=await backend.call<{name:string;data:Uint8Array}>('print.job.read',{jobId});const result=await dialog.showSaveDialog(window!,{defaultPath:basename(job.name).replace(/[<>:"/\\|?*\x00-\x1f]/g,'_')||'print-job.bin'});data=false;if(!result.canceled&&result.filePath){await writeFile(result.filePath,new Uint8Array(job.data));data=true;}break;}
         case 'documents.print':{
           const doc=z.object({text:z.string().max(4194304),title:z.string().max(512),landscape:z.boolean(),pageSize:z.enum(['A4','Letter'])}).strict().parse(m.payload);
           const printWindow=new BrowserWindow({show:false,parent:window,webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true}});
@@ -141,6 +174,9 @@ async function setupIpc(){
           data=selected.canceled?null:await localFiles.choose('local-user',selected.filePaths[0]);break;
         }
         case 'localFiles.list':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096)}).strict().parse(m.payload);data=await localFiles.list('local-user',p.rootId,p.path);break;}
+        case 'localFiles.rename':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),name:z.string().min(1).max(255)}).strict().parse(m.payload);await localFiles.rename('local-user',p.rootId,p.path,p.name);data=null;break;}
+        case 'localFiles.remove':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096)}).strict().parse(m.payload);await localFiles.remove('local-user',p.rootId,p.path);data=null;break;}
+        case 'localFiles.copy':{const p=z.object({sourceId:z.string().uuid(),path:z.string().max(4096),targetId:z.string().uuid(),parent:z.string().max(4096)}).strict().parse(m.payload);await localFiles.copy('local-user',p.sourceId,p.path,p.targetId,p.parent);data=null;break;}
         case 'localFiles.mkdir':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),name:z.string().min(1).max(255)}).strict().parse(m.payload);data=await localFiles.mkdir('local-user',p.rootId,p.path,p.name);break;}
         case 'localFiles.grant':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),direction:z.enum(['upload','download']),name:z.string().max(255).optional()}).strict().parse(m.payload);data=await localFiles.grant('local-user',p.rootId,p.path,p.direction,p.name);break;}
         case 'localFiles.release':{const p=z.object({rootId:z.string().uuid()}).strict().parse(m.payload);localFiles.release('local-user',p.rootId);data=null;break;}
@@ -180,7 +216,7 @@ async function setupIpc(){
           const selected=await dialog.showOpenDialog(window!,{title:'选择 SSH 私钥',properties:['openFile']});
           data=false;if(!selected.canceled&&selected.filePaths[0]){if((await stat(selected.filePaths[0])).size>65536)throw new AppError('IPC002','私钥文件过大。');const key=await readFile(selected.filePaths[0],'utf8');await backend.call('auth.key',{challengeId:p.challengeId,key});data=true;}break;
         }
-        case 'vault.lock':vault.lock();pendingPasswords.clear();data=null;break;
+        case 'vault.lock':vault.lock();identities.lock();pendingPasswords.clear();data=null;break;
         case 'profile.export':{
           const selected=await dialog.showSaveDialog(window!,{defaultPath:'hornet-profiles.json',filters:[{name:'Hornet 配置',extensions:['json']}]});
           data=false;if(selected.filePath&&!selected.canceled){await writeFile(selected.filePath,JSON.stringify({formatVersion:1,profiles:await backend.call('profile.list')},null,2),{mode:0o600});data=true;}break;
@@ -206,9 +242,8 @@ async function setupIpc(){
 async function bootstrap(){
   if(!app.requestSingleInstanceLock()){app.quit();return;}
   const showWindow=()=>{
-    if(!window||window.isDestroyed())return;
-    if(window.isMinimized())window.restore();
-    window.show();window.focus();
+    const target=BrowserWindow.getFocusedWindow()??[...workbenches].find(target=>!target.isDestroyed());if(!target)return;
+    if(target.isMinimized())target.restore();target.show();target.focus();
   };
   app.on('second-instance',showWindow);
   await app.whenReady();
@@ -221,15 +256,27 @@ async function bootstrap(){
     return net.fetch(pathToFileURL(file).toString());
   });
   vault=new Vault(join(app.getPath('userData'),'credentials','vault.json'));
-  backend=new Backend(vault,emit,()=>{void logs.stopAll('local-user').catch(()=>{});});await backend.start(app.getPath('userData'));await setupIpc();
-  window=new BrowserWindow({title:'Hornet Remote Suite',titleBarStyle:'hidden',...(process.platform==='darwin'?{trafficLightPosition:{x:12,y:11}}:{titleBarOverlay:{color:'#f0f0f0',symbolColor:'#20252b',height:36}}),icon:join(__dirname,process.platform==='win32'?'icon.ico':'icon.png'),width:1440,height:900,minWidth:1024,minHeight:720,backgroundColor:'#0c1220',show:process.env.HORNET_SMOKE!=='1',webPreferences:{preload:join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  identities=new IdentityStore(join(app.getPath('userData'),'credentials','identities.json'));
+  backend=new Backend(vault,emit,()=>{void logs.stopAll('local-user').catch(()=>{});},profile=>identities.secret(profile)??vault.get(profile));await backend.start(app.getPath('userData'));
+  schedules=new TransferSchedules(join(app.getPath('userData'),'transfer-schedules.json'),async job=>{
+    const profile=(await backend.call<Profile[]>('profile.list')).find(profile=>profile.profileId===job.profileId);
+    if(!profile||profile.revision!==job.profileRevision)throw new Error('连接配置已改变，请重新创建计划。');
+    const grant=await grants.create('local-user',job.localPath,job.direction);if(grant.parent!==job.localParent)throw new Error('本地目录已改变。');
+    const lease=await backend.call<import('../../../packages/contracts').Lease>('connection.open',{profileId:job.profileId,purpose:'files'});
+    try{const task=await backend.call<TaskSnapshot>('transfer.start',{connectionId:lease.connectionId,direction:job.direction,pathGrantId:grant.id,remotePath:job.remotePath,idempotencyKey:job.id},{localPath:grant.path,localParent:grant.parent});return task.taskId;}finally{await backend.call('connection.release',{leaseId:lease.leaseId});}
+  });await setupIpc();
+  createWorkbench=async(initial={secondary:true})=>{
+  if(workbenches.size>=8)throw new AppError('FILE_LIMIT','最多打开 8 个工作窗口。');
+  const window=new BrowserWindow({title:'Hornet Remote Suite',titleBarStyle:'hidden',...(process.platform==='darwin'?{trafficLightPosition:{x:12,y:11}}:{titleBarOverlay:{color:'#f0f0f0',symbolColor:'#20252b',height:36}}),icon:join(__dirname,process.platform==='win32'?'icon.ico':'icon.png'),width:1440,height:900,minWidth:1024,minHeight:720,backgroundColor:'#0c1220',show:process.env.HORNET_SMOKE!=='1',webPreferences:{preload:join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  workbenches.add(window);initialWindows.set(window.id,initial);
+  window.on('closed',()=>{workbenches.delete(window);controllers.delete(window.id);initialWindows.delete(window.id);});
   const chromeWindow=window;
   chromeWindow.on('system-context-menu',(event,point)=>{
     const dip=screen.screenToDipPoint(point),bounds=chromeWindow.getContentBounds(),x=dip.x-bounds.x,y=dip.y-bounds.y;
     if(x<0||x>bounds.width||y<0||y>36)return;
     event.preventDefault();chromeWindow.webContents.send('hornet:chrome-context',{x,y});
   });
-  fullscreen=new FullscreenController(()=>window?.isFullScreen()??false,value=>window?.setFullScreen(value));
+  const fullscreen=new FullscreenController(()=>window.isFullScreen(),value=>window.setFullScreen(value));controllers.set(window.id,fullscreen);
   const fullscreenChanged=()=>{window?.webContents.send('hornet:fullscreen',window.isFullScreen());setImmediate(()=>fullscreen.completed());};
   window.on('enter-full-screen',fullscreenChanged);window.on('leave-full-screen',fullscreenChanged);
   window.removeMenu();window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -245,11 +292,14 @@ async function bootstrap(){
       finally{try{window?.destroy();}finally{app.exit(0);}}
   });
   window.on('close',event=>{
-    event.preventDefault();void exit.request().catch(()=>{});
+    event.preventDefault();if(workbenches.size>1)window.webContents.send('hornet:close-workbench');else void exit.request().catch(()=>{});
   });
-  await window.loadURL('app://hornet/index.html');
+  try{await window.loadURL('app://hornet/index.html');}catch(error){window.destroy();throw error;}
+  if(process.env.HORNET_SMOKE!=='1')window.show();return window;
+  };
+  window=await createWorkbench({secondary:false});
   if(process.env.HORNET_SMOKE!=='1')showWindow();
 }
 app.on('window-all-closed',()=>app.quit());
-app.on('before-quit',()=>{rdp.stop();grants.clear('local-user');pendingPasswords.clear();});
+app.on('before-quit',()=>{schedules?.stop();rdp.stop();grants.clear('local-user');pendingPasswords.clear();});
 void bootstrap().catch(error=>{if(process.env.HORNET_SMOKE==='1')console.error('STARTUP ERROR',error);else dialog.showErrorBox('Hornet 启动失败',error instanceof Error?error.message:'无法启动应用');app.exit(1);});

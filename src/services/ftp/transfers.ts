@@ -1,3 +1,4 @@
+import { asciiLines } from './ascii';
 import { randomUUID } from 'node:crypto';
 import { createReadStream,createWriteStream } from 'node:fs';
 import { lstat,realpath,link,unlink } from 'node:fs/promises';
@@ -22,10 +23,10 @@ export class FtpTransfers {
   let localTempCreated=false;
   let size=0,lastProgress=0;
   const hashProgress=(bytes:number)=>{task.snapshot.verification={bytes,totalBytes:size,method:'stream'};if(bytes===0||bytes===size||Date.now()-lastProgress>=150){lastProgress=Date.now();this.emit(task.owner,{type:'task.state',task:{...task.snapshot}});}};
-  const localHash=(path:string)=>hashTransferStream(createReadStream(path,{highWaterMark:1024*1024}),signal,size,hashProgress);
+  const localHash=(path:string)=>{const source=createReadStream(path,{highWaterMark:1024*1024});const input=p.ftpText?source.pipe(asciiLines(true)):source;input.on('error',()=>source.destroy());source.on('error',error=>input.destroy(error));return hashTransferStream(input,signal,size,hashProgress);};
   const remoteHash=(path:string)=>ftpHash(client,path,hashProgress);
   try{
-   check();
+   check();await client.send(p.ftpText?'TYPE A':'TYPE I');
    const source=upload?await lstat(p.localPath):await ftpStat(client,p.remotePath);
    if(!source||!(typeof source.isFile==='function'?source.isFile():source.isFile)||(typeof source.isSymbolicLink==='function'?source.isSymbolicLink():source.isSymbolicLink))throw new AppError('FILE_CONFLICT','源必须为普通文件。');
    size=source.size;if(!Number.isSafeInteger(size)||size<0)throw new AppError('FILE_LIMIT','文件大小无效。');task.snapshot.totalBytes=size;
@@ -38,9 +39,9 @@ export class FtpTransfers {
    task.snapshot.verification=undefined;
    let last=0;client.trackProgress(info=>{if(info.type!==(upload?'upload':'download'))return;task.snapshot.transferredBytes=Math.min(size,info.bytes);if(Date.now()-last>100){last=Date.now();this.emit(task.owner,{type:'task.state',task:{...task.snapshot}});}});
    if(upload){
-    await ftpAbsent(client,p.temp);const stream=createReadStream(p.localPath);try{await client.uploadFrom(stream,p.temp);}finally{stream.destroy();}
+    await ftpAbsent(client,p.temp);const stream=createReadStream(p.localPath);const input=p.ftpText?stream.pipe(asciiLines(true)):stream;stream.on('error',error=>input.destroy(error));try{await client.uploadFrom(input,p.temp);}finally{input.destroy();stream.destroy();}
    }else{
-    const stream=createWriteStream(p.temp,{flags:'wx',mode:0o600});stream.once('open',()=>{localTempCreated=true;});try{await client.downloadTo(stream,p.remotePath);}finally{stream.destroy();}
+    const stream=createWriteStream(p.temp,{flags:'wx',mode:0o600});stream.once('open',()=>{localTempCreated=true;});const output=p.ftpText?asciiLines(false):stream;const finished=import('node:stream/promises').then(({finished})=>finished(stream));if(p.ftpText){output.pipe(stream);output.on('error',error=>stream.destroy(error));stream.on('error',error=>output.destroy(error));}try{await client.downloadTo(output,p.remotePath);await finished;}finally{output.destroy();stream.destroy();await finished.catch(()=>{});}
    }
    client.trackProgress();check();change('verifying');
    const resultHash=upload?await remoteHash(p.temp):await localHash(p.temp);

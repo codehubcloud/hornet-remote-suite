@@ -8,15 +8,17 @@ import { useBroadcast } from './broadcast';
 import type { HornetApi,Profile,TaskSnapshot,Capability,HornetEvent } from '../../../packages/contracts';
 declare global {interface Window {hornet:HornetApi}}
 export interface View {
+ restored?:{snapshot:string;inputSeq:number};
  connectionAttempt?:{state:'connecting'|'failed';error?:string};
  autoReconnectPaused?:boolean;
  tabGroupId?:string;locked?:boolean;tabColor?:string;terminalTitle?:string;
  source?:'local'|'serial'|'mosh';
- title?:string;id:string;kind:'terminal'|'files'|'editor'|'vnc';profile:Profile;connectionId:string;leaseId?:string;
+ title?:string;id:string;kind:'terminal'|'files'|'localFiles'|'editor'|'vnc';profile:Profile;connectionId:string;leaseId?:string;
  desktop?: { desktopId: string; url: string; token: string };
  terminalIds?:string[];terminalId?:string;generation:number;path?:string;content?:string;hash?:string;
 }
 interface State {
+ binaryTerminals:Record<string,boolean>;
  blankTabs:string[];blankGroups:Record<string,string>;newTab():void;closeBlankTab(id:string):void;
  tabDisplay:{numbers:boolean;title:boolean;status:boolean};setTabDisplay(key:'numbers'|'title'|'status',value:boolean):void;
  updateTerminal(id:string,patch:Pick<View,'locked'|'tabColor'|'terminalTitle'>):void;
@@ -34,6 +36,7 @@ interface State {
  event(event:HornetEvent):void;clearError():void;
 }
 export const useStore=create<State>((set)=>({
+ binaryTerminals:{},
  blankTabs:[],blankGroups:{},newTab:()=>set(s=>{const id='blank-'+crypto.randomUUID(),view=s.views.find(v=>v.id===s.active&&v.kind==='terminal');return {blankTabs:[...s.blankTabs,id],blankGroups:{...s.blankGroups,[id]:view?tabGroup(view):s.blankGroups[s.active]??'main'},active:id};}),closeBlankTab:id=>set(s=>{const blankGroups={...s.blankGroups};delete blankGroups[id];return {blankTabs:s.blankTabs.filter(tab=>tab!==id),blankGroups,active:s.active===id?'home':s.active};}),
  tabDisplay:readTabDisplay(),setTabDisplay:(key,value)=>set(s=>{const tabDisplay={...s.tabDisplay,[key]:value};try{localStorage.setItem('hornet.tabs.display',JSON.stringify(tabDisplay));}catch{}return {tabDisplay};}),
  updateTerminal:(id,patch)=>set(s=>({views:s.views.map(v=>v.id===id?{...v,...patch}:v)})),
@@ -53,6 +56,7 @@ export const useStore=create<State>((set)=>({
  removeView:id=>set(s=>{const view=s.views.find(v=>v.id===id),remaining=s.views.filter(v=>v.id!==id),next=view&&remaining.find(v=>v.kind==='terminal'&&tabGroup(v)===tabGroup(view));return {views:remaining,terminalLayout:removeTab(s.views,s.terminalLayout,id),active:s.active===id?(next?.id??remaining.find(v=>v.kind==='terminal')?.id??'home'):s.active};}),
  setActive:active=>set(s=>({active,terminalLayout:selectTab(s.views,s.terminalLayout,active)})),fail:e=>set({error:e instanceof Error?e.message:String(e)}),clearError:()=>set({error:''}),
  event:event=>set(s=>{
+  if(event.type==='terminal.binary')return {binaryTerminals:{...s.binaryTerminals,[event.terminalId]:event.active}};
   if(event.type==='terminal.closed'){
    const view=s.views.find(v=>v.terminalId===event.terminalId);
    if(view&&event.generation!==undefined&&view.generation!==event.generation)return {};

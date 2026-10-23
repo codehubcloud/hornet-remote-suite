@@ -1,3 +1,6 @@
+import { SerializeAddon } from '@xterm/addon-serialize';
+import { installHighlights } from './terminal-highlights';
+import { decodeKeyInput,keyChord,useTerminalRules,TerminalTriggers } from './terminal-rules';
 import type { TerminalDisconnect } from '../../../packages/contracts/terminal-disconnect';
 import { disconnectTranscript,disconnectText } from './terminal-disconnect';
 import { ScriptRunner,registerScriptRunner } from './script-runner';
@@ -13,6 +16,7 @@ import { isTerminalClosed,reconnectView,useStore,type View } from './store';
 export function TerminalView({view,searchRequested=0}:{view:View;searchRequested?:number}){
  const globalPreferences=useTerminalPreferences(s=>s.value),preferences=useMemo(()=>({...globalPreferences,...view.profile.session?.appearance}),[globalPreferences,view.profile.session?.appearance]),resizeTerminal=useRef<(()=>void)|null>(null);
  const session=useRef(view.profile.session);session.current=view.profile.session;
+ const [triggerNotice,setTriggerNotice]=useState('');
  const [bell,setBell]=useState(false);
  const [fontSize,setFontSize]=useState(preferences.fontSize),fontSizeRef=useRef(fontSize);fontSizeRef.current=fontSize;
  // A wheel zoom belongs to this view; applying terminal settings resets it.
@@ -36,14 +40,16 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   if(!element.current)return;
   const id=view.terminalId??view.id;
   const prefs=preferences;
-  const term=new Terminal({disableStdin:!!view.connectionAttempt,cursorBlink:!view.connectionAttempt&&prefs.cursorBlink,cursorStyle:prefs.cursorStyle,fontSize:fontSizeRef.current,fontFamily:terminalFonts[prefs.font],scrollback:prefs.scrollback,theme:terminalThemes[prefs.theme],allowProposedApi:false});
+  const term=new Terminal({disableStdin:!!view.connectionAttempt,cursorBlink:!view.connectionAttempt&&prefs.cursorBlink,cursorStyle:prefs.cursorStyle,fontSize:fontSizeRef.current,fontFamily:terminalFonts[prefs.font],scrollback:prefs.scrollback,theme:terminalThemes[prefs.theme],allowProposedApi:true});
   const fit=new FitAddon();term.loadAddon(fit);term.open(element.current);
   terminal.current=term;const addon=new SearchAddon();term.loadAddon(addon);search.current=addon;
+  const stopHighlights=installHighlights(term),triggers=new TerminalTriggers();
   let bellTimer:ReturnType<typeof setTimeout>|undefined;
   const onBell=term.onBell(()=>{if(session.current?.terminal?.bell==='visual'){setBell(true);clearTimeout(bellTimer);bellTimer=setTimeout(()=>setBell(false),180);}});
   const titleChange=term.onTitleChange(title=>useStore.getState().updateTerminal(view.id,{terminalTitle:title.replace(/[\x00-\x1f\x7f]/g,'').slice(0,255)}));
-  term.attachCustomKeyEventHandler(e=>{if(e.ctrlKey&&e.shiftKey&&e.code==='KeyF'){if(e.type==='keydown'){setSearchOpen(true);searchInput.current?.focus();}return false;}return true;});
-  let inputSeq=0,ended=!!view.connectionAttempt;
+  term.attachCustomKeyEventHandler(e=>{if(e.ctrlKey&&e.shiftKey&&e.code==='KeyF'){if(e.type==='keydown'){setSearchOpen(true);searchInput.current?.focus();}return false;}const mapping=useTerminalRules.getState().value.keys.find(rule=>rule.enabled&&rule.shortcut===keyChord(e));if(mapping){e.preventDefault();if(e.type==='keydown'&&!ended&&!runner.running)void send(decodeKeyInput(mapping.output)).catch(reportInputFailure);return false;}return true;});
+  let moving=false,movingFrozen=false;
+  let inputSeq=view.restored?.inputSeq??0,ended=!!view.connectionAttempt;
   const runner=new ScriptRunner((text,signal)=>send(text,signal));
   const endTerminal=(detail?:TerminalDisconnect)=>{if(ended)return;ended=true;runner.close();term.options.disableStdin=true;term.options.cursorBlink=false;const state=useStore.getState(),current=state.views.find(v=>v.id===view.id)??view;
    const connection=state.connectionDisconnects[view.connectionId];
@@ -57,12 +63,13 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
     const reset='\x1b[?47l\x1b[r\x1b[?6l\x1b[4l\x1b[?7h\x1b[?2026l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b(B\x0f\x1b[0m';
     term.write(reset+'\x1b['+(cursorY+1)+';'+(cursorX+1)+'H'+disconnectTranscript(info,current.title??current.profile.name,view.source),()=>{if(terminal.current===term)term.scrollToBottom();});
    });};
-  const stopState=useStore.subscribe(state=>{if(isTerminalClosed(view,state))endTerminal();});
-  inputAvailable.current=()=>!ended&&!runner.running;
+  const stopState=useStore.subscribe(state=>{if(isTerminalClosed(view,state))endTerminal();if(!ended)term.options.disableStdin=!!state.binaryTerminals[id]||moving;});
+  inputAvailable.current=()=>!ended&&!runner.running&&!useStore.getState().binaryTerminals[id];
   const unregister=registerScriptRunner(id,runner);
   const unsubscribe=window.hornet.onEvent(e=>{
-   if(e.type==='terminal.data'&&e.terminalId===id&&e.generation===view.generation){
-    runner.feed(new Uint8Array(e.data));
+   if(!movingFrozen&&e.type==='terminal.data'&&e.terminalId===id&&e.generation===view.generation){
+    const bytes=new Uint8Array(e.data);runner.feed(bytes);
+    for(const rule of triggers.feed(bytes,useTerminalRules.getState().value.triggers)){setTriggerNotice(rule.name);if(rule.action==='send'&&rule.output&&!ended&&!runner.running&&useStore.getState().active===view.id)void send(decodeKeyInput(rule.output)).catch(reportInputFailure);}
     term.write(new Uint8Array(e.data),()=>{if(!ended)window.hornet.terminal.ack(id,e.seq);});
    }
    if(e.type==='terminal.closed'&&e.terminalId===id&&(e.generation===undefined||e.generation===view.generation))endTerminal(e.disconnect);
@@ -73,6 +80,8 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   // normal shell exit cancels that input; it must not become a global error.
   const reportInputFailure=(error:unknown)=>{if(!ended)useStore.getState().fail(error);};
   const send=(data:string,signal?:AbortSignal):Promise<void>=>{
+   if(useStore.getState().binaryTerminals[id])return Promise.resolve();
+   if(moving)return Promise.reject(new Error('终端正在移动，请稍候。'));
    const operation=writes.then(async()=>{
     for(let i=0;i<data.length;){
      signal?.throwIfAborted();if(ended)throw new Error('SCRIPT_CLOSED');
@@ -123,10 +132,15 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   element.current.addEventListener('paste',onPaste,true);
   // A background tab can receive the close event before its xterm mounts.
   if(isTerminalClosed(view,useStore.getState()))endTerminal();
-  if(!ended)void window.hornet.terminal.attach(id).then(resize).catch(reportInputFailure);
+  if(!ended){if(view.restored)term.write(view.restored.snapshot,()=>{void window.hornet.terminal.attach(id).then(resize).catch(reportInputFailure);});else void window.hornet.terminal.attach(id).then(resize).catch(reportInputFailure);}
+  const serializer=new SerializeAddon();term.loadAddon(serializer);
+  const move=async(event:Event)=>{if((event as CustomEvent<{viewId:string}>).detail.viewId!==view.id||moving||ended||runner.running)return;moving=true;term.options.disableStdin=true;
+   try{await writes;const checkpoint=await window.hornet.terminal.detach(id);await new Promise<void>(resolve=>term.write('',resolve));movingFrozen=true;const snapshot=serializer.serialize();await window.hornet.workbench.move({view:{id:view.id,kind:'terminal',profile:view.profile,connectionId:view.connectionId,leaseId:view.leaseId,terminalId:id,terminalIds:view.terminalIds,generation:view.generation,source:view.source,title:view.title,tabColor:view.tabColor,terminalTitle:view.terminalTitle},snapshot,inputSeq:checkpoint.inputSeq});useStore.getState().removeView(view.id);}catch(error){movingFrozen=false;useStore.getState().fail(error);await window.hornet.terminal.attach(id).catch(()=>{});term.options.disableStdin=false;}finally{moving=false;}
+  };
+  window.addEventListener('hornet:move-terminal',move);
   term.focus();
   const el=element.current;
-  return()=>{ended=true;inputAvailable.current=()=>false;clearTimeout(bellTimer);onBell.dispose();stopState();unregister();window.removeEventListener('hornet:terminal-action',action);resizeTerminal.current=null;unsubscribe();input.dispose();titleChange.dispose();observer.disconnect();el.removeEventListener('wheel',onWheel,true);el.removeEventListener('paste',onPaste,true);search.current=null;terminal.current=null;term.dispose();};
+  return()=>{window.removeEventListener('hornet:move-terminal',move);ended=true;inputAvailable.current=()=>false;clearTimeout(bellTimer);stopHighlights();onBell.dispose();stopState();unregister();window.removeEventListener('hornet:terminal-action',action);resizeTerminal.current=null;unsubscribe();input.dispose();titleChange.dispose();observer.disconnect();el.removeEventListener('wheel',onWheel,true);el.removeEventListener('paste',onPaste,true);search.current=null;terminal.current=null;term.dispose();};
  },[view.id,view.terminalId,view.generation]);
  useEffect(()=>{
   const attempt=view.connectionAttempt,term=terminal.current;if(!attempt||!term)return;
@@ -134,5 +148,5 @@ export function TerminalView({view,searchRequested=0}:{view:View;searchRequested
   if(attempt.state==='failed')term.write('\r\n'+tr('连接失败：{error}',{error:disconnectText(attempt.error??'')})+'\r\n\r\n'+tr('选择“重新连接”可建立新的会话。')+'\r\n',()=>{if(terminal.current===term)term.scrollToBottom();});
  },[view.connectionAttempt,view.profile.host,view.profile.port]);
  useEffect(()=>{const term=terminal.current;if(!term)return;term.options.fontSize=fontSize;term.options.fontFamily=terminalFonts[preferences.font];term.options.theme=terminalThemes[preferences.theme];term.options.scrollback=preferences.scrollback;term.options.cursorStyle=preferences.cursorStyle;term.options.cursorBlink=!view.connectionAttempt&&!closed&&preferences.cursorBlink;resizeTerminal.current?.();},[preferences,fontSize,closed,view.connectionAttempt]);
- return <>{view.connectionAttempt?.state==='connecting'&&<div className="terminal-disconnected" role="status"><strong>{tr('正在连接…')}</strong></div>}{closed&&<div className="terminal-disconnected" role="status"><strong>{view.connectionAttempt?tr('连接失败'):tr("已断开")}</strong>{!view.source&&<button disabled={reconnecting} onClick={()=>void reconnectView(view.id).catch(useStore.getState().fail)}>{tr("重新连接")}</button>}</div>}{searchOpen&&<form className="terminal-search" onSubmit={e=>{e.preventDefault();find();}}><input ref={searchInput} aria-label={tr("搜索终端内容")} placeholder={tr("搜索终端 · Ctrl+Shift+F")} value={query} onChange={e=>{setQuery(e.target.value);setResult('');}} onKeyDown={e=>{if(e.key==='Escape'){setQuery('');setResult('');closeSearch();}else if(e.key==='Enter'&&e.shiftKey){e.preventDefault();find(true);}}}/><button type="button" onClick={()=>find(true)}>{tr("上一个")}</button><button>{tr("下一个")}</button><span role="status">{result}</span><button type="button" aria-label={tr("关闭终端搜索")} onClick={closeSearch}>×</button></form>}<div className={'terminal-host'+(bell?' terminal-bell':'')} ref={element} onPointerDownCapture={event=>{if(event.button===2){rightClickSelection.current=terminal.current?.getSelection()??'';event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);}else rightClickSelection.current=undefined;}} onContextMenuCapture={event=>{event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);rightClickSelection.current=undefined;}} onKeyDownCapture={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();const box=element.current?.getBoundingClientRect();openMenu((box?.left??0)+20,(box?.top??0)+20);}}}/>{menu&&<TerminalContextMenu view={view} x={menu.x} y={menu.y} canCopy={!!menu.selection} canPaste={!closed&&inputAvailable.current()} choose={choose} close={closeMenu}/>} </>;
+ return <>{triggerNotice&&<div role="status" className="terminal-trigger-notice">{tr('触发器…')}: {triggerNotice}<button onClick={()=>setTriggerNotice('')}>×</button></div>}{view.connectionAttempt?.state==='connecting'&&<div className="terminal-disconnected" role="status"><strong>{tr('正在连接…')}</strong></div>}{closed&&<div className="terminal-disconnected" role="status"><strong>{view.connectionAttempt?tr('连接失败'):tr("已断开")}</strong>{!view.source&&<button disabled={reconnecting} onClick={()=>void reconnectView(view.id).catch(useStore.getState().fail)}>{tr("重新连接")}</button>}</div>}{searchOpen&&<form className="terminal-search" onSubmit={e=>{e.preventDefault();find();}}><input ref={searchInput} aria-label={tr("搜索终端内容")} placeholder={tr("搜索终端 · Ctrl+Shift+F")} value={query} onChange={e=>{setQuery(e.target.value);setResult('');}} onKeyDown={e=>{if(e.key==='Escape'){setQuery('');setResult('');closeSearch();}else if(e.key==='Enter'&&e.shiftKey){e.preventDefault();find(true);}}}/><button type="button" onClick={()=>find(true)}>{tr("上一个")}</button><button>{tr("下一个")}</button><span role="status">{result}</span><button type="button" aria-label={tr("关闭终端搜索")} onClick={closeSearch}>×</button></form>}<div className={'terminal-host'+(bell?' terminal-bell':'')} ref={element} onPointerDownCapture={event=>{if(event.button===2){rightClickSelection.current=terminal.current?.getSelection()??'';event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);}else rightClickSelection.current=undefined;}} onContextMenuCapture={event=>{event.preventDefault();event.stopPropagation();openMenu(event.clientX,event.clientY,rightClickSelection.current);rightClickSelection.current=undefined;}} onKeyDownCapture={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();const box=element.current?.getBoundingClientRect();openMenu((box?.left??0)+20,(box?.top??0)+20);}}}/>{menu&&<TerminalContextMenu view={view} x={menu.x} y={menu.y} canCopy={!!menu.selection} canPaste={!closed&&inputAvailable.current()} choose={choose} close={closeMenu}/>} </>;
 }

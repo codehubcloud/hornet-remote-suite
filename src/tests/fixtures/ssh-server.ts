@@ -3,7 +3,7 @@ import { generateKeyPairSync,createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import { createServer,createConnection,type Socket,type Server as TcpServer } from 'node:net';
 interface Handle { path:string;directory?:boolean;read?:boolean }
-export async function sshFixture(options:{networkProxy?:boolean;hashDelayMs?:number;remoteHash?:'supported'|'corrupt';atomicRename?:boolean;password?:string;writeDelay?:number;key?:string;directoryTracking?:boolean;procReadlink?:boolean;procProbeDelayMs?:number;rejectTrackingExec?:boolean}={}){
+export async function sshFixture(options:{authorizedKey?:string;networkProxy?:boolean;hashDelayMs?:number;remoteHash?:'supported'|'corrupt';atomicRename?:boolean;password?:string;writeDelay?:number;key?:string;directoryTracking?:boolean;procReadlink?:boolean;procProbeDelayMs?:number;rejectTrackingExec?:boolean}={}){
  const key=options.key??generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs1',format:'pem'},publicKeyEncoding:{type:'pkcs1',format:'pem'}}).privateKey;
  const directories=new Set(['/','/tmp','/tmp/space dir']);const shellCwds=new Map<number,string>(),shellInputs=new Map<number,string>();
  const shellBytes=new Map<number,Buffer>();
@@ -15,7 +15,10 @@ export async function sshFixture(options:{networkProxy?:boolean;hashDelayMs?:num
  const remoteHashes:string[]=[],readBytes=new Map<string,number>();
  const server=new Server({hostKeys:[key]},client=>{
   clients.add(client);client.on('error',()=>{});client.on('close',()=>clients.delete(client));
-  client.on('authentication',ctx=>{if(ctx.method==='password'&&ctx.username==='tester'&&ctx.password===(options.password??'test-password')){authCount++;ctx.accept();}else ctx.reject(['password']);});
+  client.on('authentication',ctx=>{
+   if(options.authorizedKey){const parsed=utils.parseKey(options.authorizedKey);if(ctx.method==='publickey'&&ctx.username==='tester'&&!(parsed instanceof Error)&&!Array.isArray(parsed)&&parsed.getPublicSSH().equals(ctx.key.data)&&(!ctx.signature||parsed.verify(ctx.blob!,ctx.signature,ctx.hashAlgo)===true)){if(ctx.signature)authCount++;ctx.accept();}else ctx.reject(['publickey']);}
+   else if(ctx.method==='password'&&ctx.username==='tester'&&ctx.password===(options.password??'test-password')){authCount++;ctx.accept();}else ctx.reject(['password']);
+  });
   const listeners=new Map<number,TcpServer>(),sockets=new Set<Socket>();
   client.on('close',()=>{for(const listener of listeners.values())listener.close();for(const socket of sockets)socket.destroy();});
   client.on('tcpip',(accept,reject,info)=>{

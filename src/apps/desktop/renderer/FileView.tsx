@@ -1,9 +1,17 @@
+import { pasteToRemote } from './paste-files';
+import { useFileClipboard } from './file-clipboard';
+import { DirectoryTree } from './DirectoryTree';
+import { useWorkspacePreferences,useFileJournal } from './workspace-preferences';
 import { t as tr,formatDate } from './i18n';
 import { useWorkspaceCommands } from './workspace-commands';
 import { useEffect,useRef,useState } from 'react';
 import type { FileEntry,FilePage } from '../../../packages/contracts';
 import { useStore,type View } from './store';
+const emptyJournal:{at:number;message:string;failed?:boolean}[]=[];
 export function FileView({view,compact=false,followTarget,onDirectory,uploadSelected,downloadTo,downloadSelection,refreshKey=0}:{view:View;compact?:boolean;followTarget?:{terminalId:string;path:string};onDirectory?:(path:string|null)=>void;uploadSelected?:()=>Promise<void>;downloadTo?:(file:FileEntry)=>Promise<void>;downloadSelection?:(files:FileEntry[])=>Promise<void>;refreshKey?:number}){
+ const clipboard=useFileClipboard(state=>state.value);
+ const preferences=useWorkspacePreferences(s=>s.value),journal=useFileJournal(s=>s.entries[view.id]??emptyJournal);
+ const record=(message:string,failed=false)=>useFileJournal.getState().record(view.id,message,failed);
  const ftp=view.profile.protocol==='ftp',s3=!!view.profile.session?.s3;
  const [selected,setSelected]=useState<string[]>([]),[batch,setBatch]=useState(false);
  const request=useRef(0),wasFollowing=useRef(false),location=useRef('.');
@@ -14,9 +22,10 @@ export function FileView({view,compact=false,followTarget,onDirectory,uploadSele
  const [operation,setOperation]=useState<{kind:'mkdir'|'rename'|'chmod';file?:FileEntry}|null>(null),[name,setName]=useState('');
  const fail=useStore(s=>s.fail);
  const selectable=(file:FileEntry)=>file.kind==='file'||(!s3&&file.kind==='directory'&&!!downloadSelection);
- async function load(path:string,quiet=false){const current=++request.current;location.current=path;onDirectory?.(null);setBusy(true);try{const p=await window.hornet.file.list(view.connectionId,path);if(current===request.current){location.current=p.path;setPage(p);setPath(p.path);setSelected([]);onDirectory?.(p.path);setFollowError('');}}catch(e){if(current===request.current){if(quiet)setFollowError(e instanceof Error?e.message:tr("无法跟随目录"));else fail(e);}}finally{if(current===request.current)setBusy(false);}}
+ async function load(path:string,quiet=false){const current=++request.current;location.current=path;onDirectory?.(null);setBusy(true);try{const p=await window.hornet.file.list(view.connectionId,path);record('LIST '+p.path);if(current===request.current){location.current=p.path;setPage(p);setPath(p.path);setSelected([]);onDirectory?.(p.path);setFollowError('');}}catch(e){if(current===request.current){if(quiet)setFollowError(e instanceof Error?e.message:tr("无法跟随目录"));else {record(String(e),true);fail(e);}}}finally{if(current===request.current)setBusy(false);}}
  useEffect(()=>{void load(view.profile.session?.remoteDirectory??'.');return()=>{request.current++;};},[view.connectionId]);
  useEffect(()=>{if(followTarget)void load(followTarget.path,true);else if(wasFollowing.current){request.current++;setBusy(false);setFollowError('');}wasFollowing.current=Boolean(followTarget);},[followTarget?.path,followTarget?.terminalId]);
+ useEffect(()=>window.hornet.onEvent(event=>{if(event.type==='task.state'&&event.task.profileId===view.profile.profileId&&['succeeded','failed','conflict','cancelled','paused'].includes(event.task.state))record(event.task.direction.toUpperCase()+' '+event.task.name+' · '+event.task.state+(event.task.error?' · '+event.task.error:''),event.task.state==='failed'||event.task.state==='conflict');}),[view.profile.profileId,view.id]);
  useEffect(()=>{if(refreshKey)void load(location.current);},[refreshKey]);
  async function downloadBatch(){setBatch(true);try{const items=page.entries.filter(f=>selected.includes(f.path));if(!s3&&items.some(f=>f.kind==='directory')&&downloadSelection){await downloadSelection(items);setSelected([]);return;}for(const file of items.filter(f=>f.kind==='file'||(!s3&&f.kind==='directory'&&!!downloadSelection))){if(downloadTo)await downloadTo(file);}setSelected([]);}catch(e){fail(e);}finally{setBatch(false);}}
  async function upload(){
@@ -28,15 +37,15 @@ export function FileView({view,compact=false,followTarget,onDirectory,uploadSele
  }
  async function download(file:FileEntry){try{if(downloadTo){await downloadTo(file);return;}const grant=await window.hornet.file.choose('download',file.name);if(grant)await window.hornet.transfer.start(view.connectionId,'download',grant.pathGrantId,file.path,crypto.randomUUID());}catch(e){fail(e);}}
  async function mutate(){
-  if(operation?.kind==='chmod'){if(!/^[0-7]{3}$/.test(name)){fail(new Error(tr("请输入三位八进制权限，例如 644。")));return;}try{await window.hornet.file.chmod(view.connectionId,operation.file!.path,parseInt(name,8));setOperation(null);await load(page.path);}catch(e){fail(e);}return;}
+  if(operation?.kind==='chmod'){if(!/^[0-7]{3}$/.test(name)){fail(new Error(tr("请输入三位八进制权限，例如 644。")));return;}try{await window.hornet.file.chmod(view.connectionId,operation.file!.path,parseInt(name,8));record('CHMOD '+operation.file!.path+' '+name);setOperation(null);await load(page.path);}catch(e){fail(e);}return;}
   if(!operation||!name||name==='.'||name==='..'||name.includes('/')||name.includes('\\')){fail(new Error(tr("请输入不包含目录分隔符的名称。")));return;}
   try{const target=(page.path==='/'?'':page.path)+'/'+name;
    if(operation.kind==='mkdir')await window.hornet.file.mkdir(view.connectionId,target);
    else await window.hornet.file.rename(view.connectionId,operation.file!.path,target);
-   setOperation(null);await load(page.path);
+   record(operation.kind.toUpperCase()+' '+target);setOperation(null);await load(page.path);
   }catch(e){fail(e);}
  }
- async function remove(file:FileEntry){if(!window.confirm(tr("从 ")+view.profile.name+tr(" 删除 ")+file.path+tr("？此操作不能撤销，目录仅允许为空。")))return;try{await window.hornet.file.remove(view.connectionId,file.path);await load(page.path);}catch(e){fail(e);}}
+ async function remove(file:FileEntry){if(!window.confirm(tr("从 ")+view.profile.name+tr(" 删除 ")+file.path+tr("？此操作不能撤销，目录仅允许为空。")))return;try{await window.hornet.file.remove(view.connectionId,file.path);record('DELETE '+file.path);await load(page.path);}catch(e){fail(e);}}
  async function edit(file:FileEntry){
   let lease:Awaited<ReturnType<typeof window.hornet.connection.open>>|undefined;
   try{lease=await window.hornet.connection.open(view.profile.profileId,'files');const data=await window.hornet.file.read(lease.connectionId,file.path);
@@ -47,6 +56,8 @@ export function FileView({view,compact=false,followTarget,onDirectory,uploadSele
   if(compact)return;
   const one=selected.length===1?page.entries.find(f=>f.path===selected[0]):undefined;
   useWorkspaceCommands.getState().publish(view.id,{
+   copy:busy||!selected.length?undefined:()=>useFileClipboard.getState().set({source:'remote',connectionId:view.connectionId,files:page.entries.filter(file=>selected.includes(file.path))}),
+   paste:busy||clipboard?.source!=='local'?undefined:()=>{void pasteToRemote(clipboard,view.connectionId,page.path).then(()=>load(page.path)).catch(fail);},
    refresh:busy?undefined:()=>void load(page.path),up:busy?undefined:()=>void load(page.path+'/..'),
    mkdir:busy?undefined:()=>{setName('');setOperation({kind:'mkdir'});},
    upload:busy?undefined:()=>void upload(),download:busy||batch||!selected.length?undefined:()=>void downloadBatch(),
@@ -57,8 +68,9 @@ export function FileView({view,compact=false,followTarget,onDirectory,uploadSele
    chmod:ftp||s3||busy||!one||one.kind==='link'?undefined:()=>{setName((one.mode&0o777).toString(8).padStart(3,'0'));setOperation({kind:'chmod',file:one});}
   });
  });
- useEffect(()=>()=>{if(!compact)useWorkspaceCommands.getState().remove(view.id);},[view.id,compact]);
- return <div className={compact?"files files-compact":"files"}>
+ useEffect(()=>()=>{if(!compact)useWorkspaceCommands.getState().remove(view.id);useFileJournal.getState().clear(view.id);},[view.id,compact]);
+ return <div className={compact?"files files-compact":"files"} onPointerDownCapture={()=>{if(!compact)useWorkspaceCommands.getState().focus(view.id,'remote');}} data-file-display={compact?'details':preferences.fileDisplay}>
+  {!compact&&preferences.folderTree&&<DirectoryTree load={path=>window.hornet.file.list(view.connectionId,path)} navigate={path=>void load(path)} root={view.profile.session?.remoteDirectory??'/'}/>}
   {followError&&<div className="follow-status" role="alert">{followError}</div>}
   <form className="filebar" onSubmit={e=>{e.preventDefault();void load(path);}}>
    <button type="button" onClick={()=>void load(page.path+'/..')}>{tr("↑ 上级")}</button>
@@ -79,6 +91,7 @@ export function FileView({view,compact=false,followTarget,onDirectory,uploadSele
    </tr>)}
   </tbody></table>{!busy&&!page.entries.length&&<div className="empty">{tr("此目录为空")}</div>}</div>
   <p className="footnote">{s3?'S3 objects support upload, download, preview, rename, and delete. POSIX permissions and folder rename are not available.':ftp?tr("FTP 传输使用新文件名并校验内容；暂停后从头重传。服务器不保证并发重命名不覆盖，请勿并发修改同一目标。") : tr("传输在后台继续。上传与下载均使用新文件名，不覆盖已有目标；双击小型 UTF-8 文本可编辑。")}</p>
+  {!compact&&preferences.fileLog&&<section className="file-operation-log" aria-label={tr('会话日志')}><h3>{tr('会话日志')}</h3><ol>{journal.map((entry,index)=><li key={index} className={entry.failed?'error':''}>{formatDate(entry.at)} · {entry.message}</li>)}</ol><button onClick={()=>useFileJournal.getState().clear(view.id)}>{tr('清空日志')}</button></section>}
   {operation&&<div className="modal-backdrop"><form className="modal" onSubmit={e=>{e.preventDefault();void mutate();}}><h2>{operation.kind==='chmod'?tr("修改权限"):operation.kind==='mkdir'?tr("新建远端目录"):tr("重命名")}</h2>{operation.kind==='chmod'&&<p>{tr("三位八进制权限（000–777），会清除特殊权限位。路径在服务器端并发变化时无法保证原子性。")}</p>}<label>{operation.kind==='chmod'?tr("八进制权限"):tr("名称")}<input autoFocus required value={name} onChange={e=>setName(e.target.value)}/></label><div className="modal-actions"><button type="button" onClick={()=>setOperation(null)}>{tr("取消")}</button><button className="primary">{tr("确认")}</button></div></form></div>}
  </div>;
 }

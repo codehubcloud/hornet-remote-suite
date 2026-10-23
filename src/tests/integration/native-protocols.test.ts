@@ -75,6 +75,7 @@ it('routes multiple LPD queues on one listener, persists mapping and keeps stage
   await sendJob(started.config!.port,false,'finance');
   await sendJob(started.config!.port,true);
   const jobs=lpd.status().jobs;
+  lpd.setDefault('finance');expect(lpd.status().defaultQueue).toBe('finance');expect(lpd.readJob(jobs[0].jobId).data.length).toBe(jobs[0].bytes);expect(()=>lpd.readJob('../escape')).toThrow();
   expect(jobs.map(j=>[j.queue,j.printer,j.owner,j.host])).toEqual([['finance','accounts-printer','user','fixture'],['hornet','fixture','user','fixture']]);
   expect(()=>lpd.removeQueue('finance')).toThrow('待提交');
   lpd.saveQueue({queue:'finance',printer:'new-printer',mode:'text',enabled:false});
@@ -85,8 +86,10 @@ it('routes multiple LPD queues on one listener, persists mapping and keeps stage
   await lpd.stop();
   const restored=new LpdService(root,async()=>undefined);
   expect(restored.status().listening).toBe(false);
+  expect(restored.status().defaultQueue).toBe('finance');expect(lpd.status().events?.some(event=>event.message.startsWith('Received'))).toBe(true);
   expect(restored.status().queues.find(q=>q.queue==='finance')).toEqual({queue:'finance',printer:'new-printer',mode:'text',enabled:false});
   restored.removeQueue('finance');expect(restored.status().jobs[0].queue).toBe('finance');
+  restored.removeJobs([jobs[0].jobId]);expect(restored.status().jobs).toHaveLength(1);await expect(readFile(join(root,jobs[0].jobId+'.spool'))).rejects.toThrow();
   await restored.shutdown();
  }finally{await lpd.shutdown();await rm(root,{recursive:true,force:true});}
 });

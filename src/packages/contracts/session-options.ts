@@ -7,6 +7,7 @@ export const terminalPreferencesSchema=z.object({
  scrollback:z.number().int().min(1000).max(100000),cursorStyle:z.enum(['block','bar','underline']),cursorBlink:z.boolean(),
 }).strict();
 export const sessionOptionsSchema=z.object({
+ keyId:z.string().uuid().optional(),identityId:z.string().uuid().optional(),
  appearance:terminalPreferencesSchema.partial().optional(),
  terminal:z.object({type:z.enum(['xterm-256color','xterm','vt100','vt220','ansi']).optional(),cols:z.number().int().min(20).max(500).optional(),rows:z.number().int().min(5).max(200).optional(),backspace:z.enum(['del','bs']).optional(),enter:z.enum(['cr','crlf']).optional(),bell:z.enum(['none','visual']).optional()}).strict().optional(),
  keepAlive:z.object({intervalSeconds:z.number().int().min(5).max(300),maxMissed:z.number().int().min(1).max(10)}).strict().optional(),

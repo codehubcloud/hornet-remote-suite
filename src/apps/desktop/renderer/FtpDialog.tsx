@@ -1,0 +1,9 @@
+import { useEffect,useState } from 'react';
+import { t as tr } from './i18n';
+import { useStore,type View } from './store';
+export function FtpDialog({view,page,close}:{view:View;page:'mode'|'command';close:()=>void}){
+ const [mode,setMode]=useState<'binary'|'text'|'auto'>('binary'),[command,setCommand]=useState('STAT'),[replies,setReplies]=useState(''),[busy,setBusy]=useState(false);
+ useEffect(()=>{void window.hornet.ftp.mode(view.connectionId).then(setMode).catch(useStore.getState().fail);},[view.connectionId]);
+ async function submit(){setBusy(true);try{if(page==='mode'){await window.hornet.ftp.mode(view.connectionId,mode);close();}else{const response=await window.hornet.ftp.command(view.connectionId,command);setReplies(old=>(old+'\n> '+command+'\n'+response).slice(-65536));}}catch(error){useStore.getState().fail(error);}finally{setBusy(false);}}
+ return <div className="modal-backdrop"><form className="modal" role="dialog" aria-modal="true" aria-label={tr(page==='mode'?'传输类型':'FTP命令')} onSubmit={event=>{event.preventDefault();void submit();}}><h2>{tr(page==='mode'?'传输类型':'FTP命令')}</h2>{page==='mode'?<><label>{tr('传输类型')}<select value={mode} onChange={event=>setMode(event.target.value as typeof mode)}><option value="binary">{tr('二进制')}</option><option value="text">{tr('文本（ASCII）')}</option><option value="auto">{tr('自动（按扩展名）')}</option></select></label><p>{tr('仅影响之后创建的 FTP 任务。文本上传使用 CRLF，下载使用 LF；二进制保持原始字节。')}</p></>:<><label>{tr('FTP命令')}<input autoFocus required maxLength={2048} value={command} onChange={event=>setCommand(event.target.value)}/></label><p>NOOP · SYST · FEAT · HELP · STAT · PWD · SITE · CWD · CDUP · MKD · RMD · DELE</p><pre className="ftp-command-output" role="log">{replies}</pre></>}<div className="modal-actions"><button type="button" onClick={close}>{tr('关闭')}</button><button disabled={busy}>{tr(page==='mode'?'保存':'发送')}</button></div></form></div>;
+}

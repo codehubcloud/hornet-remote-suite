@@ -7,7 +7,7 @@ import type { Storage } from '../../packages/storage/database';
 import { Challenges } from '../../packages/security/challenges';
 import { AppError } from '../../packages/core/errors';
 
-interface Session {id:string;owner:string;profile:Profile;client:Client;secret:string;generation:number;leases:Set<string>;tail:Promise<unknown>}
+interface Session {mode?:'binary'|'text'|'auto';id:string;owner:string;profile:Profile;client:Client;secret:string;generation:number;leases:Set<string>;tail:Promise<unknown>}
 export class FtpConnections {
  private items=new Map<string,Session>();
  private pending=new Map<AbortController,string>();
@@ -49,6 +49,14 @@ export class FtpConnections {
   const session=this.get(owner,id);
   const next=session.tail.then(()=>{this.get(owner,id);if(session.client.closed)throw new AppError('FTP_CLOSED','FTP 连接已断开，请重新打开会话。');return action(session.client);});
   session.tail=next.catch(()=>{});return next;
+ }
+ async configure(owner:string,id:string,mode?:'binary'|'text'|'auto'){const session=this.get(owner,id);if(mode)session.mode=mode;return session.mode??'binary';}
+ async command(owner:string,id:string,command:string){
+  if(!/^[A-Za-z]{3,5}(?: [^\r\n\x00]{0,2000})?$/.test(command))throw new AppError('IPC002','FTP 命令格式无效。');
+  // Commands which change authentication, TLS, data endpoints or transfer state
+  // cannot be mixed into a managed client. Actual file operations have dedicated APIs.
+  if(!/^(NOOP|SYST|FEAT|HELP|STAT|PWD|SITE|CWD|CDUP|MKD|RMD|DELE)(?: |$)/i.test(command))throw new AppError('IPC002','此命令会改变连接或传输状态，请使用对应菜单。');
+  return this.use(owner,id,async client=>(await client.send(command)).message);
  }
  release(owner:string,id:string){const session=[...this.items.values()].find(c=>c.leases.has(id));if(!session)return;if(session.owner!==owner)throw new AppError('IPC005','无权释放此连接。');session.leases.delete(id);if(!session.leases.size)this.close(owner,session.id,session.generation);}
  close(owner:string,id:string,generation:number){const session=this.get(owner,id);if(session.generation!==generation)throw new AppError('IPC005','连接版本已失效。');this.items.delete(id);session.secret='';session.client.close();this.emit(owner,{type:'connection.state',connectionId:id,profileId:session.profile.profileId,generation,state:'closed'});}

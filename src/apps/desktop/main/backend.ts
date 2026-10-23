@@ -11,7 +11,7 @@ export class Backend {
   private pending=new Map<string,{resolve:(data:unknown)=>void;reject:(e:Error)=>void;deadline:number}>();
   private health=new Liveness();private watchdog?:ReturnType<typeof setInterval>;private available=false;private stopping=false;private terminated=false;
   private suspend=()=>this.health.suspend();private resume=()=>this.health.resume();
-  constructor(private vault:Vault,private emit:(event:HornetEvent)=>void,private stopped:()=>void=()=>{}) {}
+  constructor(private vault:Vault,private emit:(event:HornetEvent)=>void,private stopped:()=>void=()=>{},private storedSecret?:(profile:Profile)=>string|undefined) {}
   async start(userData:string){
     this.health=new Liveness();this.stopping=false;this.terminated=false;
     await new Promise<void>((resolve,reject)=>{
@@ -24,7 +24,7 @@ export class Backend {
         this.health.activity();
         if(m.type==='ready'){this.available=true;clearTimeout(timeout);resolve();}
         if(m.type==='event'&&m.event)this.emit(m.event);
-        if(m.type==='vault.get'&&m.profile)this.child.postMessage({type:'vault.reply',requestId:m.requestId,secret:this.vault.get(m.profile)});
+        if(m.type==='vault.get'&&m.profile)this.child.postMessage({type:'vault.reply',requestId:m.requestId,secret:this.storedSecret?this.storedSecret(m.profile):this.vault.get(m.profile)});
         if(m.type==='result'&&m.result){const p=this.pending.get(m.requestId);if(!p)return;this.pending.delete(m.requestId);m.result.ok?p.resolve(m.result.data):p.reject(new AppError(m.result.error.code,m.result.error.message,m.result.error.retryable));}
       });
       this.child.stderr?.on('data',data=>{if(process.env.HORNET_DIAGNOSTICS==='1')process.stderr.write(data);});

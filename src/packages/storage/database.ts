@@ -133,6 +133,8 @@ export class Storage {
   trust(host:string,port:number):string[] {
     return (this.db.prepare('SELECT fingerprint FROM known_host WHERE host=? AND port=? AND trust_scope=?').all(host,port,'local') as {fingerprint:string}[]).map(r=>r.fingerprint);
   }
+  knownHosts(){return this.db.prepare('SELECT id,host,port,algorithm,fingerprint,public_key AS publicKey,verified_at AS createdAt FROM known_host WHERE trust_scope=? ORDER BY host,port').all('local') as unknown as import('../contracts/identities').KnownHost[];}
+  forgetHost(id:string,fingerprint:string){const result=this.db.prepare('DELETE FROM known_host WHERE id=? AND fingerprint=? AND trust_scope=?').run(id,fingerprint,'local');if(!result.changes)throw new AppError('FILE_CONFLICT','主机密钥记录已改变，请刷新后重试。');}
   rememberHost(host:string,port:number,key:Buffer) {
     const size=key.readUInt32BE(0); const algorithm=key.subarray(4,4+size).toString('ascii');
     const fingerprint='SHA256:'+createHash('sha256').update(key).digest('base64').replace(/=+$/,'');

@@ -1,7 +1,8 @@
 import { createReadStream } from 'node:fs';
 import { hashFile } from './hash-file';
 import { randomUUID } from 'node:crypto';
-import { lstat,realpath,opendir,mkdir } from 'node:fs/promises';
+import { lstat,realpath,opendir,mkdir,rename,unlink,rmdir,copyFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { resolve,relative,isAbsolute,sep,join } from 'node:path';
 import { AppError } from '../../packages/core/errors';
 import { PathGrants } from '../../packages/security/path-grants';
@@ -50,6 +51,39 @@ export class LocalFiles {
  async mkdir(owner:string,id:string,parent:string,name:string){
   this.name(name);const p=await this.path(owner,id,parent);await mkdir(join(p.path,name));
  }
+  async rename(owner:string,id:string,value:string,name:string){
+    this.name(name);const source=await this.path(owner,id,value);if(!source.rel)throw new AppError('IPC005','不能重命名授权根目录。');
+    const destination=join(source.root.path,source.rel.split(sep).slice(0,-1).join(sep),name);
+    try{await lstat(destination);throw new AppError('FILE_CONFLICT','目标名称已存在。');}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+    await rename(source.path,destination);
+  }
+  async remove(owner:string,id:string,value:string){
+    const source=await this.path(owner,id,value);if(!source.rel)throw new AppError('IPC005','不能删除授权根目录。');
+    const info=await lstat(source.path);if(info.isDirectory())await rmdir(source.path);else if(info.isFile())await unlink(source.path);else throw new AppError('IPC005','仅支持普通文件或空目录。');
+  }
+  async copy(owner:string,sourceId:string,value:string,targetId:string,parent:string){
+    const source=await this.path(owner,sourceId,value),target=await this.path(owner,targetId,parent),name=source.rel.split(sep).at(-1);if(!name)throw new AppError('IPC005','不能复制授权根目录。');
+    this.name(name);const destination=join(target.path,name),nested=relative(source.path,destination);
+    if(!nested||(!nested.startsWith('..'+sep)&&nested!=='..'&&!isAbsolute(nested)))throw new AppError('FILE_CONFLICT','不能复制到源目录内部。');
+    const created:{path:string;directory:boolean}[]=[];let count=0,bytes=0;
+    const visit=async(from:string,to:string,depth:number):Promise<void>=>{
+      if(++count>10000||depth>32)throw new AppError('FILE_LIMIT','复制目录超过条目或深度上限。');
+      const checked=await this.path(owner,sourceId,from),info=await lstat(checked.path);
+      await this.path(owner,targetId,to,true);
+      if(info.isDirectory()){
+        await mkdir(join(target.root.path,to));created.push({path:join(target.root.path,to),directory:true});
+        const dir=await opendir(checked.path);for await(const entry of dir){this.name(entry.name);await visit(join(from,entry.name),join(to,entry.name),depth+1);}
+      }else if(info.isFile()){
+        bytes+=info.size;if(bytes>5*1024**3)throw new AppError('FILE_LIMIT','单次复制超过 5 GiB。');
+        const path=join(target.root.path,to);await copyFile(checked.path,path,constants.COPYFILE_EXCL);created.push({path,directory:false});
+        const after=await lstat(checked.path);if(after.isSymbolicLink()||after.size!==info.size||after.mtimeMs!==info.mtimeMs)throw new AppError('FILE_CONFLICT','复制期间源文件改变。');
+      }else throw new AppError('IPC005','复制目录不能包含链接或特殊文件。');
+    };
+    try{await visit(source.rel,join(target.rel,name),0);}catch(error){
+      for(const entry of created.reverse())try{await this.path(owner,targetId,relative(target.root.path,entry.path));if(entry.directory)await rmdir(entry.path);else await unlink(entry.path);}catch{/* Preserve anything that changed since creation. */}
+      throw error;
+    }
+  }
  async tree(owner:string,id:string,value:string){
   const base=await this.path(owner,id,value);
   return scanTree(base.path,async relative=>{

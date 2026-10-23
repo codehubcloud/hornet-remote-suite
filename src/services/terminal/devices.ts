@@ -48,6 +48,7 @@ export class DeviceTerminals {
   if(s.ended&&s.attached&&!s.queued){void this.finish(s,s.error);return;}
   if(!s.attached||s.queued+s.outstanding>=524288)s.driver?.pause();else s.driver?.resume();
  }
+ detach(owner:string,id:string){const s=this.get(owner,id);s.attached=false;return {inputSeq:s.input,seq:s.seq};}
  attach(owner:string,id:string){const s=this.get(owner,id);s.attached=true;this.flush(s);}
  ack(owner:string,id:string,seq:number){const s=this.get(owner,id),bytes=s.pending.get(seq);if(bytes===undefined||seq!==s.ack+1)throw new AppError('IPC002','终端确认序号不正确。');s.pending.delete(seq);s.ack=seq;s.outstanding-=bytes;this.flush(s);}
  write(owner:string,id:string,generation:number,seq:number,data:string){

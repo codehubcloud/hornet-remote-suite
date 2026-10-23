@@ -1,4 +1,4 @@
-import { Client, type SFTPWrapper,type ClientChannel } from 'ssh2';
+import { Client,utils,type SFTPWrapper,type ClientChannel } from 'ssh2';
 import { randomUUID, createHash } from 'node:crypto';
 import type { Storage } from '../../packages/storage/database';
 import type { Profile, HornetEvent, Lease } from '../../packages/contracts';
@@ -145,8 +145,10 @@ export class Connections {
     let password:string|undefined, privateKey:string|undefined, passphrase:string|undefined;
     if(p.authType==='password') password=await abortable(this.cachedSecret(owner,p),signal)??await this.challenges.ask(owner,{kind:'password',profileId:p.profileId,title:'SSH 身份认证',message:p.username+'@'+p.host},signal);
     if(p.authType==='privateKey') {
-      privateKey=await this.challenges.ask(owner,{kind:'privateKey',profileId:p.profileId,title:'选择 SSH 私钥',message:'私钥仅在本次认证中使用，不写入连接配置。'},signal);
-      passphrase=await this.challenges.ask(owner,{kind:'passphrase',profileId:p.profileId,title:'私钥口令',message:'无口令的密钥可留空。'},signal);
+      privateKey=await abortable(this.cachedSecret(owner,p),signal);
+      const managed=!!privateKey;
+      privateKey??=await this.challenges.ask(owner,{kind:'privateKey',profileId:p.profileId,title:'选择 SSH 私钥',message:'私钥仅在本次认证中使用，不写入连接配置。'},signal);
+      if(!managed||utils.parseKey(privateKey) instanceof Error)passphrase=await this.challenges.ask(owner,{kind:'passphrase',profileId:p.profileId,title:'私钥口令',message:'无口令的密钥可留空。'},signal);
     }
     state('connecting');
     return await new Promise<Connection>((resolve,reject)=>{

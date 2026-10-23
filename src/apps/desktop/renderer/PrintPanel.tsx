@@ -6,7 +6,7 @@ import { useStore } from './store';
 import { formatBytes } from './FileView';
 const labels:Record<PrintJob['state'],string>={held:'待提交',submitting:'提交中',submitted:'已提交系统',failed:'失败',unknown:'结果待核实',cancelled:'已取消'};
 export function PrintPanel(){
- const [settings,setSettings]=useState(false);
+ const [settings,setSettings]=useState(false),[selectedJob,setSelectedJob]=useState(''),[showLog,setShowLog]=useState(false);
  const fail=useStore(s=>s.fail),[status,setStatus]=useState<PrintStatus>({listening:false,jobs:[]}),[busy,setBusy]=useState(false);
  const [draft,setDraft]=useState<PrintQueue>({queue:'hornet',printer:'',mode:'text',enabled:true}),[printers,setPrinters]=useState<string[]>([]),[editing,setEditing]=useState(false);
  const [bind,setBind]=useState('127.0.0.1'),[port,setPort]=useState(515),[sources,setSources]=useState('127.0.0.1'),[startup,setStartup]=useState('');
@@ -16,11 +16,20 @@ export function PrintPanel(){
  const refresh=async()=>{const n=++revision.current;const value=await window.hornet.print.status();if(live.current&&n===revision.current)setStatus(value);};
  useEffect(()=>{live.current=true;let timer:ReturnType<typeof setTimeout>;const poll=async()=>{try{await refresh();}catch(e){if(live.current)fail(e);}finally{if(live.current)timer=setTimeout(poll,2000);}};void poll();return()=>{live.current=false;clearTimeout(timer);};},[]);
  async function run(action:()=>Promise<unknown>){if(running.current)return;running.current=true;setBusy(true);try{await action();await refresh();}catch(e){fail(e);}finally{running.current=false;if(live.current)setBusy(false);}}
- const queues=status.queues??[],primary=queues.find(q=>q.queue===startup)??queues[0];
+ const queues=status.queues??[],primary=queues.find(q=>q.queue===startup)??queues.find(q=>q.queue===status.defaultQueue)??queues[0];
  const jobs=status.jobs.filter(j=>(!selected||j.queue===selected)&&(state==='all'||j.state===state)&&[j.name,j.queue,j.source,j.owner??'',j.host??''].some(v=>v.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))).sort((a,b)=>b.createdAt-a.createdAt);
  useEffect(()=>{
-  const queue=queues.find(q=>q.queue===selected);
+  const queue=queues.find(q=>q.queue===selected),job=status.jobs.find(j=>j.jobId===selectedJob);
+  const pending=status.jobs.filter(j=>(!selected||j.queue===selected)&&j.state==='held');
+  const removable=status.jobs.filter(j=>(!selected||j.queue===selected)&&j.state!=='submitting');
+  const completed=removable.filter(j=>['submitted','cancelled','failed'].includes(j.state));
+  const removeJobs=(jobs:PrintJob[])=>{if(window.confirm(tr('删除所选打印作业记录和暂存文件？不会取消已提交给系统的打印。')))void run(()=>window.hornet.print.removeJobs(jobs.map(j=>j.jobId)));};
   useWorkspaceCommands.getState().publish('tool:print',{
+   export:busy||!job||job.state==='cancelled'?undefined:()=>void run(()=>window.hornet.print.exportJob(job.jobId)),
+   print:busy||job?.state!=='held'?undefined:()=>void run(()=>window.hornet.print.submit(job.jobId)),
+   submitAll:busy||!pending.length?undefined:()=>{if(window.confirm(tr('提交所有待打印作业？')+' '+pending.length))void run(async()=>{for(const item of pending){const result=await window.hornet.print.submit(item.jobId) as PrintJob;if(result.state!=='submitted')throw new Error(tr('打印结果不确定，已停止后续提交。'));}});},
+   setDefault:busy||!queue?undefined:()=>void run(()=>window.hornet.print.setDefault(queue.queue)),
+   removeAll:busy||!removable.length?undefined:()=>removeJobs(removable),removeCompleted:busy||!completed.length?undefined:()=>removeJobs(completed),logs:()=>setShowLog(value=>!value),
    new:busy?undefined:()=>{setSettings(true);setEditing(false);setDraft({queue:'',printer:'',mode:'text',enabled:true});},
    settings:()=>setSettings(true),properties:!queue?undefined:()=>{setSettings(true);setEditing(true);setDraft(queue);},
    toggle:busy||!queue?undefined:()=>void run(()=>window.hornet.print.saveQueue({...queue,enabled:!queue.enabled})),
@@ -48,6 +57,7 @@ export function PrintPanel(){
   </div>
   <p aria-label={tr("LPD 监听状态")}>{status.listening?tr("监听 ")+status.config?.bindHost+':'+status.config?.port:tr("LPD 未监听")}</p>
   <div className="print-filter"><input ref={searchInput} aria-label={tr("搜索打印作业")} placeholder={tr("搜索文件、队列、主机或用户…")} value={filter} onChange={e=>setFilter(e.target.value)}/><select aria-label={tr("打印作业状态")} value={state} onChange={e=>setState(e.target.value)}><option value="all">{tr("全部状态")}</option>{Object.entries(labels).map(([key,label])=><option key={key} value={key}>{tr(label)}</option>)}</select></div>
-  <div className="table-scroll"><table><thead><tr><th>{tr("时间")}</th><th>{tr("状态")}</th><th>{tr("文件名")}</th><th>{tr("大小")}</th><th>{tr("队列 / 打印机")}</th><th>{tr("主机 / 用户")}</th><th>{tr("操作")}</th></tr></thead><tbody>{jobs.map(j=><tr key={j.jobId}><td>{formatDate(j.createdAt)}</td><td title={j.error}>{tr(labels[j.state])}{j.osJobId!==undefined?' #'+j.osJobId:''}{j.error&&<p>{j.error}</p>}</td><td title={j.jobId}>{j.name}</td><td>{formatBytes(j.bytes)}</td><td>{j.queue}<br/>{j.printer}</td><td>{j.source}<br/>{j.host} / {j.owner}</td><td><button disabled={busy||j.state!=='held'} onClick={()=>void run(()=>window.hornet.print.submit(j.jobId))}>{tr("提交打印")}</button><button disabled={busy||j.state!=='held'} onClick={()=>void run(()=>window.hornet.print.cancel(j.jobId))}>{tr("取消任务")}</button></td></tr>)}</tbody></table>{!jobs.length&&<p className="empty">{tr("没有匹配的打印作业")}</p>}</div>
+  <div className="table-scroll"><table><thead><tr><th>{tr("时间")}</th><th>{tr("状态")}</th><th>{tr("文件名")}</th><th>{tr("大小")}</th><th>{tr("队列 / 打印机")}</th><th>{tr("主机 / 用户")}</th><th>{tr("操作")}</th></tr></thead><tbody>{jobs.map(j=><tr key={j.jobId} className={selectedJob===j.jobId?'selected':''} onClick={()=>setSelectedJob(j.jobId)}><td><input type="radio" aria-label={tr('选择打印作业')+j.name} checked={selectedJob===j.jobId} onChange={()=>setSelectedJob(j.jobId)}/>{formatDate(j.createdAt)}</td><td title={j.error}>{tr(labels[j.state])}{j.osJobId!==undefined?' #'+j.osJobId:''}{j.error&&<p>{j.error}</p>}</td><td title={j.jobId}>{j.name}</td><td>{formatBytes(j.bytes)}</td><td>{j.queue}<br/>{j.printer}</td><td>{j.source}<br/>{j.host} / {j.owner}</td><td><button disabled={busy||j.state!=='held'} onClick={()=>void run(()=>window.hornet.print.submit(j.jobId))}>{tr("提交打印")}</button><button disabled={busy||j.state!=='held'} onClick={()=>void run(()=>window.hornet.print.cancel(j.jobId))}>{tr("取消任务")}</button></td></tr>)}</tbody></table>{!jobs.length&&<p className="empty">{tr("没有匹配的打印作业")}</p>}</div>
+  {showLog&&<section className="print-event-log" aria-label={tr('日志查看器')}><h3>{tr('日志查看器')}</h3><button onClick={()=>setShowLog(false)}>{tr('关闭')}</button><ol>{(status.events??[]).map((event,index)=><li key={index}>{formatDate(event.at)} · {event.message}</li>)}</ol></section>}
  </section>;
 }

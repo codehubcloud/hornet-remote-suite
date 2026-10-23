@@ -15,7 +15,7 @@ import type { TransferContext } from './tree-transfers';
 import type { FtpTransfers } from '../ftp/transfers';
 import { hashTransferStream,hashRemoteFile,type HashProgress } from './transfer-hash';
 
-interface Plan { transport?:'ftp'|'s3';expectedTarget?:TransferContext['expectedTarget'];preserveModified?:boolean;expectedSource?:TransferContext['expectedSource'];remoteParent?:string; localPath:string; localParent:string; remotePath:string; temp:string; profileRevision:number; sourceHash?:string; sourceSize?:number; committing?:boolean }
+interface Plan { ftpText?:boolean; transport?:'ftp'|'s3';expectedTarget?:TransferContext['expectedTarget'];preserveModified?:boolean;expectedSource?:TransferContext['expectedSource'];remoteParent?:string; localPath:string; localParent:string; remotePath:string; temp:string; profileRevision:number; sourceHash?:string; sourceSize?:number; committing?:boolean }
 export interface TransferTask { snapshot:TaskSnapshot;owner:string;key:string;hash:string;plan:Plan; abort?:AbortController; stop?:'paused'|'cancelled' }
 type Task=TransferTask;
 export class Transfers {
@@ -34,11 +34,12 @@ export class Transfers {
     const isS3=this.s3?.connections.has(connectionId),isFtp=this.ftp?.connections.has(connectionId),c=isS3?this.s3!.connections.get(owner,connectionId):isFtp?this.ftp!.connections.get(owner,connectionId):this.connections.get(owner,connectionId);
     if(isS3)this.s3!.validate(remotePath,context);
     if(isFtp)this.ftp!.validate(remotePath,context);
-    const hash=createHash('sha256').update(JSON.stringify({profileId:c.profile.profileId,direction,localPath,remotePath,expectedSource:context?.expectedSource,expectedTarget:context?.expectedTarget,preserveModified:context?.preserveModified,remoteParent:context?.remoteParent})).digest('hex');
+    const ftpMode=isFtp?this.ftp!.connections.get(owner,connectionId).mode:undefined,ftpText=isFtp&&(ftpMode==='text'||ftpMode==='auto'&&/\.(txt|csv|tsv|json|xml|html?|css|js|ts|py|sh|ini|conf|cfg|md|log|yaml|yml)$/i.test(remotePath));
+    const hash=createHash('sha256').update(JSON.stringify({ftpText,profileId:c.profile.profileId,direction,localPath,remotePath,expectedSource:context?.expectedSource,expectedTarget:context?.expectedTarget,preserveModified:context?.preserveModified,remoteParent:context?.remoteParent})).digest('hex');
     const previous=[...this.tasks.values()].find(t=>t.owner===owner&&t.key===key);
     if(previous){if(previous.hash!==hash)throw new AppError('TASK_STATE_CONFLICT','同一请求标识不能用于不同传输。');return previous.snapshot;}
     const id=randomUUID();
-    const plan:Plan={expectedTarget:context?.expectedTarget,preserveModified:context?.preserveModified,expectedSource:context?.expectedSource,remoteParent:context?.remoteParent,localPath,localParent,remotePath,profileRevision:c.profile.revision,temp:direction==='upload'?posix.join(posix.dirname(remotePath),'.hornet-'+id+'.part'):join(dirname(localPath),'.hornet-'+id+'.part')};
+    const plan:Plan={ftpText,expectedTarget:context?.expectedTarget,preserveModified:context?.preserveModified,expectedSource:context?.expectedSource,remoteParent:context?.remoteParent,localPath,localParent,remotePath,profileRevision:c.profile.revision,temp:direction==='upload'?posix.join(posix.dirname(remotePath),'.hornet-'+id+'.part'):join(dirname(localPath),'.hornet-'+id+'.part')};
     if(isFtp)plan.transport='ftp';
     if(isS3)plan.transport='s3';
     const task:Task={owner,key,hash,plan,snapshot:{taskId:id,profileId:c.profile.profileId,direction,name:direction==='upload'?basename(localPath):posix.basename(remotePath),state:'queued',totalBytes:0,transferredBytes:0,revision:1,updatedAt:Date.now()}};
