@@ -78,8 +78,7 @@ function Wait-Condition([scriptblock]$Condition, [string]$Description, [int]$Sec
 
 function Start-FixtureInstaller([string]$InstallerPath=$script:installer,[switch]$Resume) {
     $arguments = if ($Resume) { '--hornet-restart-after-install' } else { "/currentuser /D=$installDirectory" }
-    # The persistent logon entry launches the resumed interactive wizard normally. SW_HIDE would
-    # hide its first window, leaving the simulated sign-in unable to proceed.
+    # A manually resumed wizard needs a visible first page for UI automation.
     $windowStyle = if ($Resume) { 'Normal' } else { 'Hidden' }
     $process = Start-Process -FilePath $InstallerPath -ArgumentList $arguments -WindowStyle $windowStyle -PassThru
     $fixtureProcesses.Add($process)
@@ -265,30 +264,29 @@ public class FixtureApp {
     Wait-Condition {
         foreach ($window in [InstallerUI]::Windows($fixtureName)) {
             $text=([InstallerUI]::Children($window) | ForEach-Object { [InstallerUI]::Text($_) }) -join "`n"
-            if ($text -match 'Setup has been scheduled') { $script:scheduledNotice=$window;return $true }
+            if ($text -match 'Installation postponed') { $script:scheduledNotice=$window;return $true }
         }
         $false
     } 'deferred install notice'
     [InstallerUI]::Click($script:scheduledNotice,1)
     Wait-Condition { $script:installerProcess.Refresh();$script:installerProcess.HasExited } 'deferred installer exit'
     $runningApp.Refresh()
-    if ($script:installerProcess.ExitCode -ne 3010 -or $runningApp.HasExited -or (Get-FileHash -LiteralPath $appPath).Hash -ne $beforeHash) { throw 'Deferred install closed or modified the existing app.' }
+    if ($script:installerProcess.ExitCode -ne 0 -or $runningApp.HasExited -or (Get-FileHash -LiteralPath $appPath).Hash -ne $beforeHash) { throw 'Deferred install requested a reboot, closed or modified the existing app.' }
     $cachedInstaller=Join-Path $fixtureCache 'pending.exe'
-    $pendingCommand=(Get-ItemProperty -LiteralPath $startupPath -Name $startupName).$startupName
-    $expectedCommand='"'+$cachedInstaller+'" --hornet-restart-after-install'
-    if ($pendingCommand -ne $expectedCommand -or (Get-FileHash -LiteralPath $cachedInstaller).Hash -ne (Get-FileHash -LiteralPath $script:installer).Hash) { throw 'Deferred logon command or cached payload mismatch.' }
+    $pendingCommand=(Get-ItemProperty -LiteralPath $startupPath -Name $startupName -ErrorAction SilentlyContinue).$startupName
+    if ($pendingCommand -or (Get-FileHash -LiteralPath $cachedInstaller).Hash -ne (Get-FileHash -LiteralPath $script:installer).Hash) { throw 'Deferred setup registered a logon command or cached payload mismatch.' }
     if ((Get-ItemProperty -LiteralPath $oldRunOncePath -Name $oldRunOnceName -ErrorAction SilentlyContinue).$oldRunOnceName) { throw 'Deferred setup retained a competing RunOnce registration.' }
-    # Simulate a new sign-in only for this fixture; do not reboot the computer
-    # or execute command text read from the registry.
+    # The user can manually retry the cached installer without signing out or
+    # rebooting. The application updater is tested separately across restarts.
     Stop-Process -Id $runningApp.Id -Force
-    Start-Sleep -Milliseconds 1000 # A real reboot also releases the old setup mutex.
+    Start-Sleep -Milliseconds 1000 # Allow the old setup mutex to be released.
     Write-Output ('Resuming cached fixture: '+$cachedInstaller)
     Start-FixtureInstaller -InstallerPath $cachedInstaller -Resume
     Complete-RunningInstall $marker 2
     if ((Get-ItemProperty -LiteralPath $startupPath -Name $startupName -ErrorAction SilentlyContinue).$startupName) { throw 'Successful resume retained its logon registration.' }
     $runningApp=Get-Process -Id ([int](@(Get-Content -LiteralPath $marker)[-1]))
     $fixtureProcesses.Add($runningApp)
-    Write-Output 'Deferred branch passed: app retained, installer cached, persistent logon registration and reboot-required status, resumed install reopens once and clears registration.'
+    Write-Output 'Deferred branch passed: app retained, installer cached, no logon registration or reboot request; manually resumed install reopens once and clears pending state.'
     $expectedStarts=@(Get-Content -LiteralPath $marker).Count+1
     Start-FixtureInstaller
     $confirmation = Wait-InstallerPage 'confirm' -NoAdvance

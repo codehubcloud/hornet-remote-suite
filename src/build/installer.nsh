@@ -7,7 +7,6 @@
   Var HornetPowerShell
   Var HornetDidStart
   Var HornetDeferredDirectory
-  Var HornetDeferredCommand
 
   !macro customInit
     StrCpy $HornetWasRunning "0"
@@ -16,8 +15,7 @@
     ${StdUtils.TestParameter} $R0 "hornet-restart-after-install"
     ${If} $R0 == "true"
       StrCpy $HornetWasRunning "1"
-      ; Clear the retrying logon entry only after the deferred installer starts.
-      ; A persistent entry permits another sign-in attempt if startup is blocked.
+      ; Clean up registrations left by older installers when manually resumed.
       DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "HornetSetup-${APP_GUID}"
       DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "!HornetSetup-${APP_GUID}"
       ReadRegStr $R1 HKCU "Software\${APP_GUID}\PendingInstall" InstallMode
@@ -85,8 +83,9 @@
       ${If} $R0 == 1
         Goto hornet_ready
       ${ElseIf} $R0 == 11
-        Call HornetScheduleInstall
-        SetErrorLevel 3010
+        Call HornetDeferInstall
+        ; This is a postponed installation, not a Windows reboot request.
+        SetErrorLevel 0
         Quit
       ${ElseIf} $R0 != 10
         Goto hornet_cancel
@@ -115,7 +114,7 @@
     hornet_ready:
   FunctionEnd
 
-  Function HornetScheduleInstall
+  Function HornetDeferInstall
     StrCpy $HornetDeferredDirectory "$LOCALAPPDATA\${APP_FILENAME}\Installer\${APP_GUID}"
     ClearErrors
     CreateDirectory "$HornetDeferredDirectory"
@@ -128,23 +127,16 @@
         Goto hornet_schedule_failed
       ${EndIf}
     ${EndIf}
-    ; Keep the logon command under Windows' 260-character limit. The chosen
-    ; directory/mode live in product-specific setup state, not command text.
-    StrCpy $HornetDeferredCommand '$\"$HornetDeferredDirectory\pending.exe$\" --hornet-restart-after-install'
-    StrLen $R1 $HornetDeferredCommand
-    ${If} $R1 > 260
-      Goto hornet_schedule_failed
-    ${EndIf}
     ClearErrors
     WriteRegStr HKCU "Software\${APP_GUID}\PendingInstall" InstallLocation "$INSTDIR"
     WriteRegStr HKCU "Software\${APP_GUID}\PendingInstall" InstallMode "$installMode"
-    ; Keep retrying at sign-in until resumed setup reaches customInit.
-    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "!HornetSetup-${APP_GUID}"
-    ClearErrors
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "HornetSetup-${APP_GUID}" "$HornetDeferredCommand"
     ${If} ${Errors}
       Goto hornet_schedule_failed
     ${EndIf}
+    ; The updater retains its verified download across app restarts. Do not
+    ; schedule anything at Windows sign-in or ask the user to reboot the PC.
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "HornetSetup-${APP_GUID}"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "!HornetSetup-${APP_GUID}"
     nsExec::Exec `"$HornetPowerShell" -STA -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\hornet-installer-processes.ps1" -Mode DeferredNotice`
     Pop $R0
     Return

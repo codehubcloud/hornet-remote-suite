@@ -8,7 +8,7 @@ import { AutoReconnect } from './AutoReconnect';
 import { t as tr } from './i18n';
 import { challengeCopy } from './challenge-copy';
 import { useAppearance } from './appearance';
-import { useEffect,useState } from 'react';
+import { useEffect,useRef,useState } from 'react';
 import type { Profile,HornetEvent } from '../../../packages/contracts';
 import type { UpdateInfo } from '../../../packages/contracts/help';
 import { useStore,refreshProfiles,openView,closeTerminalView,isTerminalClosed,type View } from './store';
@@ -39,7 +39,7 @@ export function App(){
  function closeTool(tool:SuiteTool){setToolTabs(tabs=>tabs.filter(t=>t!==tool));if(useStore.getState().active===tool)useStore.getState().setActive('home');}
  const [sessionsOpen,setSessionsOpen]=useState(showStartupSessions),[profilesLoading,setProfilesLoading]=useState(true);
  const [guide,setGuide]=useState<'startup'|'manual'|null>(()=>showFirstRunGuide()?'startup':null);
- const [autoUpdate,setAutoUpdate]=useState<UpdateInfo|null>(null);
+ const [autoUpdate,setAutoUpdate]=useState<UpdateInfo|null>(null),startupUpdateChecked=useRef(false);
  function closeGuide(){acknowledgeUserGuide();setGuide(null);}
  const [tourOpen,setTourOpen]=useState(false);
  function startTour(){acknowledgeUserGuide();setGuide(null);setTourOpen(true);}
@@ -56,7 +56,7 @@ export function App(){
  },[]);
  useEffect(()=>window.hornet.workbench.onClose(()=>{void (async()=>{for(const view of [...useStore.getState().views])if(!await close(view))return;await window.hornet.workbench.close();})().catch(s.fail);}),[]);
  useEffect(()=>{
-  if(profilesLoading||guide||tourOpen||sessionsOpen||form||groupParent!==null||s.challenges.length)return;
+  if(startupUpdateChecked.current||profilesLoading||guide||tourOpen||sessionsOpen||form||groupParent!==null||s.challenges.length)return;
   let live=true;
   const timer=window.setTimeout(()=>{
    void (async()=>{
@@ -66,10 +66,12 @@ export function App(){
      // a newly published release from the user.
      const update=await window.hornet.help.checkUpdates();
      if(!live)return;
+     startupUpdateChecked.current=true;
      localStorage.setItem(key,String(now));
      if(!update.available)return;
      const notified='hornet.update.last-notified';
-     if(localStorage.getItem(notified)===update.latest)return;
+     // A deferred installer is still ready on the next application launch.
+     if(!update.downloaded&&localStorage.getItem(notified)===update.latest)return;
      localStorage.setItem(notified,update.latest);setAutoUpdate(update);
     }catch{/* Automatic update checks stay quiet when offline. */}
    })();

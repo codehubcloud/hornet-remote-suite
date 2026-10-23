@@ -278,8 +278,10 @@ async function bootstrap(){
     event.preventDefault();chromeWindow.webContents.send('hornet:chrome-context',{x,y});
   });
   const fullscreen=new FullscreenController(()=>window.isFullScreen(),value=>window.setFullScreen(value));controllers.set(window.id,fullscreen);
-  const fullscreenChanged=()=>{window?.webContents.send('hornet:fullscreen',window.isFullScreen());setImmediate(()=>fullscreen.completed());};
-  window.on('enter-full-screen',fullscreenChanged);window.on('leave-full-screen',fullscreenChanged);
+  // Windows emits these events before isFullScreen() changes. Publish the
+  // event's state, then reconcile queued requests after the native transition.
+  const fullscreenChanged=(value:boolean)=>{window.webContents.send('hornet:fullscreen',value);setImmediate(()=>fullscreen.completed());};
+  window.on('enter-full-screen',()=>fullscreenChanged(true));window.on('leave-full-screen',()=>fullscreenChanged(false));
   window.removeMenu();window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_webContents,_permission,callback)=>callback(false));
