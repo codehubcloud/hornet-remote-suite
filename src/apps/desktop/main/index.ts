@@ -42,6 +42,7 @@ const pendingPasswords=new Map<string,string>();
 const terminalSizes=new Map<string,{cols:number;rows:number}>();
 const logs=new TerminalLogs((_owner,log)=>emit({type:'terminal.log',log}));
 const emit=(event:HornetEvent)=>{
+  if(event.type==='challenge'&&![...workbenches].some(target=>!target.isDestroyed()&&target.webContents.id===challengeWindows.get(event.profileId))){const focused=BrowserWindow.getFocusedWindow(),target=focused&&workbenches.has(focused)?focused:[...workbenches].find(target=>!target.isDestroyed());if(target)challengeWindows.set(event.profileId,target.webContents.id);}
   if(event.type==='task.state')taskCache.set(event.task.taskId,event.task);
   logs.observe('local-user',event);
   if(event.type==='terminal.closed')terminalSizes.delete(event.terminalId);
@@ -49,7 +50,7 @@ const emit=(event:HornetEvent)=>{
   if(event.type==='challenge.closed')challenges.delete(event.challengeId);
   if(event.type==='connection.state'&&event.state==='ready'){
     const secret=pendingPasswords.get(event.profileId);pendingPasswords.delete(event.profileId);
-    if(secret)void backend.call<Profile[]>('profile.list').then(profiles=>{const p=profiles.find(p=>p.profileId===event.profileId);if(p)vault.save(p,secret);}).catch(()=>window?.webContents.send('hornet:event',{type:'service.error',message:'系统凭据保存失败，密码未持久化。'}));
+    if(secret)void backend.call<Profile[]>('profile.list').then(profiles=>{const p=profiles.find(p=>p.profileId===event.profileId);if(p)vault.save(p,secret);}).catch(()=>emit({type:'service.error',message:'系统凭据保存失败，密码未持久化。'}));
   }
   if(event.type==='connection.state'&&event.state==='failed')pendingPasswords.delete(event.profileId);
   for(const target of workbenches)if(!target.isDestroyed()&&(event.type!=='challenge'||!challengeWindows.has(event.profileId)||target.webContents.id===challengeWindows.get(event.profileId)))target.webContents.send('hornet:event',event);
@@ -268,8 +269,8 @@ async function bootstrap(){
   createWorkbench=async(initial={secondary:true})=>{
   if(workbenches.size>=8)throw new AppError('FILE_LIMIT','最多打开 8 个工作窗口。');
   const window=new BrowserWindow({title:'Hornet Remote Suite',titleBarStyle:'hidden',...(process.platform==='darwin'?{trafficLightPosition:{x:12,y:11}}:{titleBarOverlay:{color:'#f0f0f0',symbolColor:'#20252b',height:36}}),icon:join(__dirname,process.platform==='win32'?'icon.ico':'icon.png'),width:1440,height:900,minWidth:1024,minHeight:720,backgroundColor:'#0c1220',show:process.env.HORNET_SMOKE!=='1',webPreferences:{preload:join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
-  workbenches.add(window);initialWindows.set(window.id,initial);
-  window.on('closed',()=>{workbenches.delete(window);controllers.delete(window.id);initialWindows.delete(window.id);});
+  workbenches.add(window);initialWindows.set(window.id,initial);const webContentsId=window.webContents.id;
+  window.on('closed',()=>{for(const [profileId,id]of challengeWindows)if(id===webContentsId)challengeWindows.delete(profileId);workbenches.delete(window);controllers.delete(window.id);initialWindows.delete(window.id);});
   const chromeWindow=window;
   chromeWindow.on('system-context-menu',(event,point)=>{
     const dip=screen.screenToDipPoint(point),bounds=chromeWindow.getContentBounds(),x=dip.x-bounds.x,y=dip.y-bounds.y;
