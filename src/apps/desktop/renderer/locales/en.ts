@@ -1,5 +1,6 @@
 // Application copy only. Never translate user names, paths or terminal output.
 export const english:Record<string,string> = {
+"此版本尚未提供所选语言的更新说明，请访问发布页面。":"Release notes are not available in the selected language for this version. Visit the release page.",
 "传输类型":"Transfer type",
 "二进制":"Binary",
 "文本（ASCII）":"Text (ASCII)",

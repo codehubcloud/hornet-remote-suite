@@ -1,0 +1,13 @@
+{
+  "version": "0.0.27",
+  "notes": {
+    "zh-CN": "Hornet Remote Suite 0.0.27\n\n- 检查更新窗口按内容调整宽度，检查中、已是最新版本和错误提示使用紧凑窗口。\n- 有更新详情、下载进度或已下载安装包时展开，展开宽度比上一版更窄。\n- 下载量、网速和剩余时间在桌面窗口内保持单行，小视口可换行。",
+    "zh-TW": "Hornet Remote Suite 0.0.27\n\n- 檢查更新視窗依內容調整寬度，檢查中、已是最新版本及錯誤提示使用精簡視窗。\n- 顯示更新詳情、下載進度或已下載套件時展開，寬度比上一版更窄。\n- 下載量、速度及剩餘時間在桌面視窗維持單行，小視窗可換行。",
+    "en": "Hornet Remote Suite 0.0.27\n\n- The update dialog uses a compact layout when checking, up to date, or showing an error.\n- It expands for release details, download progress, and saved installers, with a narrower width than before.\n- Download size, speed, and remaining time stay on one line on desktop and wrap on small screens.",
+    "ja": "Hornet Remote Suite 0.0.27\n\n- 更新確認中、最新版の通知、エラーはコンパクトなウィンドウに表示します。\n- 更新内容、ダウンロード状況、保存済みインストーラーの表示時は、以前より狭い幅で展開します。\n- ダウンロード量、速度、残り時間はデスクトップでは一行に、小さい画面では折り返して表示します。",
+    "ko": "Hornet Remote Suite 0.0.27\n\n- 업데이트 확인 중, 최신 버전 안내 및 오류는 간결한 창으로 표시합니다.\n- 업데이트 내용, 다운로드 진행률 및 저장된 설치 파일을 표시할 때 창을 확장하며 이전보다 폭이 좁습니다.\n- 다운로드 용량, 속도 및 남은 시간은 데스크톱에서 한 줄로 표시하고 작은 화면에서는 줄바꿈합니다.",
+    "de": "Hornet Remote Suite 0.0.27\n\n- Bei der Updateprüfung, aktuellem Versionsstand und Fehlern bleibt das Fenster kompakt.\n- Für Versionshinweise, Downloadfortschritt und gespeicherte Installationspakete wird es erweitert, jedoch schmaler als zuvor.\n- Downloadgröße, Geschwindigkeit und Restzeit stehen auf dem Desktop in einer Zeile und werden auf kleinen Bildschirmen umgebrochen.",
+    "fr": "Hornet Remote Suite 0.0.27\n\n- La fenêtre reste compacte pendant la vérification, lorsque la version est à jour ou en cas d’erreur.\n- Elle s’élargit pour les notes de version, la progression et les programmes d’installation enregistrés, tout en restant moins large qu’avant.\n- La taille, la vitesse et le temps restant tiennent sur une ligne sur ordinateur et passent à la ligne sur petit écran.",
+    "es": "Hornet Remote Suite 0.0.27\n\n- La ventana es compacta al buscar actualizaciones, cuando ya está actualizada o si aparece un error.\n- Se amplía para mostrar las novedades, el progreso y los instaladores guardados, con menos anchura que antes.\n- El tamaño, la velocidad y el tiempo restante se muestran en una línea en escritorio y se ajustan en pantallas pequeñas."
+  }
+}

@@ -34,7 +34,7 @@
 | [src/tools/check-release-version.mjs](../src/tools/check-release-version.mjs) | 核对请求版本与 package.json，确认 Actions 来源是私有仓库 |
 | [src/tools/release-assets.mjs](../src/tools/release-assets.mjs) | 验证完整七安装包集合并生成 SHA256SUMS |
 | [src/tools/publish-release.mjs](../src/tools/publish-release.mjs) | 创建草稿、上传附件、检查完整性后公开发布 |
-| [src/release-notes.md](../src/release-notes.md) | 直接作为公开 Release 正文 |
+| [src/release-notes.json](../src/release-notes.json) | 八种语言的发布说明，校验后生成公开 Release 正文 |
 | [src/VALIDATION.md](../src/VALIDATION.md) | 历史验证结果和发布记录 |
 
 ## 3. 编译环境
@@ -244,7 +244,7 @@ npm.cmd run check
 npm.cmd run test:release
 ```
 
-`npm version` 同步更新 package.json 和 package-lock.json 的版本，不自动创建 Git 标签。更新 `src/release-notes.md`，明确本版本改动、验证和平台范围；它会原样成为公开 Release 正文，不应包含令牌、私有环境地址或用户数据。
+`npm version` 同步更新 package.json 和 package-lock.json 的版本，不自动创建 Git 标签。同步更新 `src/release-notes.json` 的版本及八种语言内容（zh-CN、zh-TW、en、ja、ko、de、fr、es），明确本版本改动、验证和平台范围。版本检查和发布脚本会拒绝版本不一致、语言缺失或过长的内容；发布正文按语言分段，软件只显示设置语言对应的段落。`src/release-notes.md` 可保留中文概要，但不再直接作为发布正文。说明不得包含令牌、私有环境地址或用户数据。
 
 如果还要通过 Actions 手动发布，可同步修改工作流 `workflow_dispatch.inputs.version.default` 作为表单默认值；该默认值不影响标签发布，手动输入仍必须与构建提交的 package.json 完全一致。
 
@@ -255,7 +255,7 @@ npm.cmd run test:release
 ```powershell
 git status --short
 git diff --check
-git add src/package.json src/package-lock.json src/release-notes.md
+git add src/package.json src/package-lock.json src/release-notes.json src/release-notes.md
 git commit -m "release: prepare 0.0.4"
 git push origin master
 git tag v0.0.4

@@ -1,6 +1,7 @@
 // Reviewed interface copy. Detailed protocol help falls back to the English catalog.
 // Columns: Japanese, Korean, German, French, Spanish. Keep user data out of this table.
 export const nativeUi:Record<string,readonly [string,string,string,string,string]>={
+"此版本尚未提供所选语言的更新说明，请访问发布页面。":["このバージョンには選択した言語の更新内容がありません。リリースページをご覧ください。","이 버전에는 선택한 언어의 업데이트 내용이 없습니다. 릴리스 페이지를 확인하세요.","Für diese Version sind keine Hinweise in der gewählten Sprache verfügbar. Besuchen Sie die Release-Seite.","Les notes de cette version ne sont pas disponibles dans la langue choisie. Consultez la page des versions.","Las notas de esta versión no están disponibles en el idioma seleccionado. Visite la página de versiones."],
 "横向":["横向き","가로","Querformat","Paysage","Horizontal"],
 "连接错误：{error}":["接続エラー: {error}","연결 오류: {error}","Verbindungsfehler: {error}","Erreur de connexion : {error}","Error de conexión: {error}"],
 "已主动断开连接。":["ユーザーが接続を切断しました。","사용자가 연결을 끊었습니다.","Verbindung vom Benutzer getrennt.","Connexion interrompue par l’utilisateur.","Conexión cerrada por el usuario."],

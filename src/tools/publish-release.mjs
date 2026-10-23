@@ -2,6 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { openAsBlob } from 'node:fs';
 import { join } from 'node:path';
 import { checksumAssets, validateVersion } from './release-assets.mjs';
+import { releaseNotesBody } from './release-notes.mjs';
 
 const repository = 'codehubcloud/hornet-remote-suite-release';
 const version = validateVersion(process.env.RELEASE_VERSION);
@@ -23,7 +24,7 @@ if (!repo || repo.private) throw new Error('Binary release repository must exist
 const tag = 'v' + version;
 const existing = await api('/releases/tags/' + tag);
 if (existing && !existing.draft) throw new Error('This version is already published; published releases are immutable in this pipeline. Increment the version.');
-const body = await readFile(new URL('../release-notes.md', import.meta.url), 'utf8');
+const body = releaseNotesBody(JSON.parse(await readFile(new URL('../release-notes.json', import.meta.url), 'utf8')),version);
 const release = existing ?? await api('/releases', 'POST', {
   tag_name: tag, target_commitish: repo.default_branch, name: `Hornet Remote Suite ${version}`, body, draft: true, prerelease: false,
 });

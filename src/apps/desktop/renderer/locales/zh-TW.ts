@@ -1,5 +1,6 @@
 // Traditional Chinese application copy; user data is never converted.
 export const traditionalChinese:Record<string,string> = {
+"此版本尚未提供所选语言的更新说明，请访问发布页面。":"此版本尚未提供所選語言的更新說明，請前往發佈頁面。",
 "传输类型":"傳輸類型",
 "二进制":"二進位",
 "文本（ASCII）":"文字（ASCII）",
