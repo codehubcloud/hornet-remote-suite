@@ -29,7 +29,8 @@ describe('application help and release checks',()=>{
   const fetcher=vi.fn<typeof fetch>(async()=>release('v0.0.12',{html_url:'https://untrusted.example'}));
   const result=await checkForUpdates('0.0.11',fetcher as typeof fetch);expect(result).toEqual({current:'0.0.11',latest:'0.0.12',available:true,url:helpBase+'/releases/tag/v0.0.12',notes:'release notes',installerAvailable:false});
   expect(fetcher.mock.calls[0][0]).toContain('/hornet-remote-suite-release/releases/latest');expect(fetcher.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
-  expect(Object.values(helpLinks).every(url=>url.startsWith(helpBase))).toBe(true);
+  expect(helpLinks.website).toBe('https://codehub.org.cn/products/hornet-remote-suite/');
+  expect([helpLinks.support,helpLinks.feedback,helpLinks.releases].every(url=>url.startsWith(helpBase))).toBe(true);
  });
  it('rejects failures, drafts, malformed versions and oversized response streams',async()=>{
   for(const response of [new Response('',{status:403}),release('v0.0.12',{draft:true}),release('v0.0.12',{prerelease:true}),release('../other'),new Response('x'.repeat(262145)),new Response('{}',{headers:{'content-length':'262145'}})])await expect(checkForUpdates('0.0.11',async()=>response)).rejects.toThrow();

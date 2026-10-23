@@ -260,15 +260,7 @@ public class FixtureApp {
     [InstallerUI]::ClickControl($deferred)
     Wait-Condition { Is-RadioChecked $deferred } 'deferred radio selection'
     [InstallerUI]::Click($confirmation,1)
-    $script:scheduledNotice=[IntPtr]::Zero
-    Wait-Condition {
-        foreach ($window in [InstallerUI]::Windows($fixtureName)) {
-            $text=([InstallerUI]::Children($window) | ForEach-Object { [InstallerUI]::Text($_) }) -join "`n"
-            if ($text -match 'Installation postponed') { $script:scheduledNotice=$window;return $true }
-        }
-        $false
-    } 'deferred install notice'
-    [InstallerUI]::Click($script:scheduledNotice,1)
+    # No additional informational dialog should require another confirmation.
     Wait-Condition { $script:installerProcess.Refresh();$script:installerProcess.HasExited } 'deferred installer exit'
     $runningApp.Refresh()
     if ($script:installerProcess.ExitCode -ne 0 -or $runningApp.HasExited -or (Get-FileHash -LiteralPath $appPath).Hash -ne $beforeHash) { throw 'Deferred install requested a reboot, closed or modified the existing app.' }
@@ -286,7 +278,7 @@ public class FixtureApp {
     if ((Get-ItemProperty -LiteralPath $startupPath -Name $startupName -ErrorAction SilentlyContinue).$startupName) { throw 'Successful resume retained its logon registration.' }
     $runningApp=Get-Process -Id ([int](@(Get-Content -LiteralPath $marker)[-1]))
     $fixtureProcesses.Add($runningApp)
-    Write-Output 'Deferred branch passed: app retained, installer cached, no logon registration or reboot request; manually resumed install reopens once and clears pending state.'
+    Write-Output 'Deferred branch passed: no extra confirmation, app retained, installer cached, no logon registration or reboot request; manually resumed install reopens once and clears pending state.'
     $expectedStarts=@(Get-Content -LiteralPath $marker).Count+1
     Start-FixtureInstaller
     $confirmation = Wait-InstallerPage 'confirm' -NoAdvance

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { HelpLink,UpdateInfo } from '../contracts/help';
 import { releaseNotesFromCatalog } from './release-notes';
 export const helpBase='https://github.com/codehubcloud/hornet-remote-suite-release';
-export const helpLinks:Record<HelpLink,string>={website:helpBase,support:helpBase+'/issues',feedback:helpBase+'/issues/new?title=Feedback&body=',releases:helpBase+'/releases/latest'};
+export const helpLinks:Record<HelpLink,string>={website:'https://codehub.org.cn/products/hornet-remote-suite/',support:helpBase+'/issues',feedback:helpBase+'/issues/new?title=Feedback&body=',releases:helpBase+'/releases/latest'};
 const version=z.string().regex(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/).max(32);
 export function newerVersion(latest:string,current:string){
  const a=version.parse(latest).split('.').map(Number),b=version.parse(current).split('.').map(Number);

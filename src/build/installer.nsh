@@ -137,8 +137,8 @@
     ; schedule anything at Windows sign-in or ask the user to reboot the PC.
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "HornetSetup-${APP_GUID}"
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "!HornetSetup-${APP_GUID}"
-    nsExec::Exec `"$HornetPowerShell" -STA -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\hornet-installer-processes.ps1" -Mode DeferredNotice`
-    Pop $R0
+    ; Deferral was already confirmed in the files-in-use dialog. Exit without
+    ; asking the user to dismiss a second informational message.
     Return
     hornet_schedule_failed:
       nsExec::Exec `"$HornetPowerShell" -STA -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\hornet-installer-processes.ps1" -Mode ScheduleFailed`
