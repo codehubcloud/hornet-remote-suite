@@ -13,6 +13,7 @@ import { useStore,type View } from './store';
 
 export function FileWorkspace({view}:{view:View}){
  const [sync,setSync]=useState(false),[syncTarget,setSyncTarget]=useState<{terminalId:string;path:string}>();
+ const [remotePath,setRemotePath]=useState<string|null>(null);
  const syncBase=useRef<{local:string;remote:string}|null>(null),expectedLocal=useRef<string|null>(null),expectedRemote=useRef<string|null>(null);
  const clipboard=useFileClipboard(state=>state.value),filterInput=useRef<HTMLInputElement>(null);
  const fileDisplay=useWorkspacePreferences(s=>s.value.fileDisplay);
@@ -34,7 +35,7 @@ export function FileWorkspace({view}:{view:View}){
  function under(base:string,path:string){base=base.replaceAll('\\','/').replace(/\/$/,'');path=path.replaceAll('\\','/').replace(/\/$/,'');return path===base?'':path.startsWith(base+'/')?path.slice(base.length+1):null;}
  function stopSync(){syncBase.current=null;expectedLocal.current=null;expectedRemote.current=null;setSync(false);setSyncTarget(undefined);}
  function toggleSync(){if(syncBase.current){stopSync();return;}if(current.current&&remote.current){syncBase.current={local:current.current.path,remote:remote.current};setSync(true);}}
- function remoteChanged(value:string|null){remote.current=value;if(!value)return;if(expectedRemote.current===value){expectedRemote.current=null;return;}if(!syncBase.current)return;const suffix=under(syncBase.current.remote,value);if(suffix===null){stopSync();return;}const destination=[syncBase.current.local,suffix].filter(Boolean).join('/');if(current.current?.path.replaceAll('\\','/')!==destination){expectedLocal.current=destination;void load(destination);}}
+ function remoteChanged(value:string|null){remote.current=value;setRemotePath(value);if(!value)return;if(expectedRemote.current===value){expectedRemote.current=null;return;}if(!syncBase.current)return;const suffix=under(syncBase.current.remote,value);if(suffix===null){stopSync();return;}const destination=[syncBase.current.local,suffix].filter(Boolean).join('/');if(current.current?.path.replaceAll('\\','/')!==destination){expectedLocal.current=destination;void load(destination);}}
  async function run(action:()=>Promise<void>){if(working.current)return;working.current=true;setBusy(true);try{await action();}catch(e){if(alive.current)fail(e);}finally{working.current=false;if(alive.current)setBusy(false);}}
  async function choose(){await run(async()=>{const next=await window.hornet.localFiles.choose();if(!next)return;if(!alive.current){await window.hornet.localFiles.release(next.rootId);return;}stopSync();request.current++;const previous=current.current;current.current=next;setLocal(next);setPath(next.path);setSelected([]);if(previous)await window.hornet.localFiles.release(previous.rootId);});}
  async function compare(direction:TreeRequest['direction'],names?:string[],policy:SyncPolicy='skip'){
@@ -67,7 +68,7 @@ export function FileWorkspace({view}:{view:View}){
   useStore.getState().event({type:'task.state',task});
  }
  useEffect(()=>{const one=local?.entries.find(entry=>selected.length===1&&entry.path===selected[0]);useWorkspaceCommands.getState().setFlags(view.id,{sync});useWorkspaceCommands.getState().publish(view.id+':local',{
-  syncBrowse:local&&remote.current&&!busy?toggleSync:undefined,
+  syncBrowse:local&&(sync||remotePath)&&!busy?toggleSync:undefined,
   refresh:local&&!busy?()=>void load(local.path):undefined,up:local?.path&&!busy?()=>void load(local.path.split(/[\\/]/).slice(0,-1).join('/')):undefined,
   copy:busy||!local||!selected.length?undefined:()=>useFileClipboard.getState().set({source:'local',rootId:local.rootId,paths:[...selected]}),
   paste:busy||!local||!clipboard?undefined:()=>void run(async()=>{await pasteToLocal(clipboard,local);await load(local.path);}),

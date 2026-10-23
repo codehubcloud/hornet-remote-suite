@@ -8,7 +8,7 @@ import { createConnection } from 'node:net';
 import { dismissStartupSessions } from './session-dialog-helper.mjs';
 await mkdir('test-results',{recursive:true});
 await build({entryPoints:['tests/fixtures/ssh-server.ts'],outfile:'test-results/advanced-menus-fixture.cjs',bundle:true,platform:'node',format:'cjs',external:['ssh2']});
-const server=await createRequire(import.meta.url)(resolve('test-results/advanced-menus-fixture.cjs')).sshFixture(),data=await mkdtemp(join(tmpdir(),'hornet-menu-'));
+const server=await createRequire(import.meta.url)(resolve('test-results/advanced-menus-fixture.cjs')).sshFixture({directoryReadDelayMs:2000}),data=await mkdtemp(join(tmpdir(),'hornet-menu-'));
 const local=join(data,'files');await mkdir(local);await mkdir(join(local,'tmp'));await writeFile(join(local,'upload.txt'),'scheduled upload\n');
 const env={...process.env,HORNET_USER_DATA:data,HORNET_SMOKE:'1'};delete env.ELECTRON_RUN_AS_NODE;
 let app;const errors=[];

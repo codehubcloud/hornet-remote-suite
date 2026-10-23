@@ -3,7 +3,7 @@ import { generateKeyPairSync,createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import { createServer,createConnection,type Socket,type Server as TcpServer } from 'node:net';
 interface Handle { path:string;directory?:boolean;read?:boolean }
-export async function sshFixture(options:{authorizedKey?:string;networkProxy?:boolean;hashDelayMs?:number;remoteHash?:'supported'|'corrupt';atomicRename?:boolean;password?:string;writeDelay?:number;key?:string;directoryTracking?:boolean;procReadlink?:boolean;procProbeDelayMs?:number;rejectTrackingExec?:boolean}={}){
+export async function sshFixture(options:{directoryReadDelayMs?:number;authorizedKey?:string;networkProxy?:boolean;hashDelayMs?:number;remoteHash?:'supported'|'corrupt';atomicRename?:boolean;password?:string;writeDelay?:number;key?:string;directoryTracking?:boolean;procReadlink?:boolean;procProbeDelayMs?:number;rejectTrackingExec?:boolean}={}){
  const key=options.key??generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs1',format:'pem'},publicKeyEncoding:{type:'pkcs1',format:'pem'}}).privateKey;
  const directories=new Set(['/','/tmp','/tmp/space dir']);const shellCwds=new Map<number,string>(),shellInputs=new Map<number,string>();
  const shellBytes=new Map<number,Buffer>();
@@ -89,6 +89,7 @@ export async function sshFixture(options:{authorizedKey?:string;networkProxy?:bo
   }));
  });
  function serve(sftp:SFTPWrapper){
+  let closed=false;sftp.once('close',()=>{closed=true;});
   if(options.atomicRename){
    // ssh2's server API advertises no extensions. Extend the fixture VERSION
    // frame on this channel so the real client negotiates posix-rename normally.
@@ -109,7 +110,7 @@ export async function sshFixture(options:{authorizedKey?:string;networkProxy?:bo
   sftp.on('FSTAT',(id:number,h:Buffer)=>{const v=handles.get(h.toString());v?sftp.attrs(id,attrs(v.path)):status(id,4);});
   sftp.on('OPENDIR',(id:number,path:string)=>directories.has(normalized(path))?handle(id,{path:normalized(path),directory:true}):status(id,2));
   sftp.on('READLINK',(id:number,path:string)=>{const pid=Number(/^\/proc\/(\d+)\/cwd$/.exec(path)?.[1]),cwd=options.directoryTracking===false||options.procReadlink===false?undefined:path==='/proc/self'?'999':shellCwds.get(pid);const reply=()=>{cwd?sftp.name(id,[{filename:cwd,longname:cwd,attrs:attrs(cwd)}]):status(id,2);};if(path==='/proc/self'&&options.procProbeDelayMs)setTimeout(reply,options.procProbeDelayMs);else reply();});
-  sftp.on('READDIR',(id:number,h:Buffer)=>{const v=handles.get(h.toString());if(!v)return status(id,4);if(v.read)return status(id,1);v.read=true;const entries=[...files.keys(),...directories].filter(path=>path!==v.path&&posix.dirname(path)===v.path).map(path=>({filename:posix.basename(path),longname:posix.basename(path),attrs:attrs(path)}));entries.length?sftp.name(id,entries):status(id,1);});
+  sftp.on('READDIR',(id:number,h:Buffer)=>{const v=handles.get(h.toString());if(!v)return status(id,4);if(v.read)return status(id,1);v.read=true;const entries=[...files.keys(),...directories].filter(path=>path!==v.path&&posix.dirname(path)===v.path).map(path=>({filename:posix.basename(path),longname:posix.basename(path),attrs:attrs(path)}));const reply=()=>{if(!closed){if(entries.length)sftp.name(id,entries);else status(id,1);}};if(options.directoryReadDelayMs)setTimeout(reply,options.directoryReadDelayMs);else reply();});
   sftp.on('MKDIR',(id:number,path:string)=>{const p=normalized(path);if(exists(p)||!directories.has(posix.dirname(p)))return status(id,4);directories.add(p);status(id);});
   sftp.on('OPEN',(id:number,path:string,flags:number)=>{
    const p=normalized(path),mode=utils.sftp.flagsToString(flags);
