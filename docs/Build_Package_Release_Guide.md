@@ -34,7 +34,7 @@
 | [src/tools/check-release-version.mjs](../src/tools/check-release-version.mjs) | 核对请求版本与 package.json，确认 Actions 来源是私有仓库 |
 | [src/tools/release-assets.mjs](../src/tools/release-assets.mjs) | 验证完整七安装包集合并生成 SHA256SUMS |
 | [src/tools/publish-release.mjs](../src/tools/publish-release.mjs) | 创建草稿、上传附件、检查完整性后公开发布 |
-| [src/release-notes.json](../src/release-notes.json) | 八种语言的发布说明，校验后生成公开 Release 正文 |
+| [src/release-notes.json](../src/release-notes.json) | 八种语言的发布说明附件；公开正文使用纯英文以兼容旧客户端 |
 | [src/VALIDATION.md](../src/VALIDATION.md) | 历史验证结果和发布记录 |
 
 ## 3. 编译环境
@@ -244,7 +244,7 @@ npm.cmd run check
 npm.cmd run test:release
 ```
 
-`npm version` 同步更新 package.json 和 package-lock.json 的版本，不自动创建 Git 标签。同步更新 `src/release-notes.json` 的版本及八种语言内容（zh-CN、zh-TW、en、ja、ko、de、fr、es），明确本版本改动、验证和平台范围。版本检查和发布脚本会拒绝版本不一致、语言缺失或过长的内容；发布正文按语言分段，软件只显示设置语言对应的段落。`src/release-notes.md` 可保留中文概要，但不再直接作为发布正文。说明不得包含令牌、私有环境地址或用户数据。
+`npm version` 同步更新 package.json 和 package-lock.json 的版本，不自动创建 Git 标签。同步更新 `src/release-notes.json` 的版本及八种语言内容（zh-CN、zh-TW、en、ja、ko、de、fr、es），明确本版本改动、验证和平台范围。版本检查和发布脚本会拒绝版本不一致、语言缺失或 UTF-8 编码后超过 64 KiB 的内容。公开正文仅使用纯英文，不添加 HTML 或语言分段标记，兼容直接显示正文的旧客户端；完整八语内容另作为 `release-notes.json` 附件上传。修复后的软件从相同版本的官方附件读取并校验版本、语言完整性及大小，再按设置语言显示，读取失败不阻止更新检查。`src/release-notes.md` 可保留中文概要。说明不得包含令牌、私有环境地址或用户数据。
 
 如果还要通过 Actions 手动发布，可同步修改工作流 `workflow_dispatch.inputs.version.default` 作为表单默认值；该默认值不影响标签发布，手动输入仍必须与构建提交的 package.json 完全一致。
 
@@ -282,7 +282,7 @@ flowchart TD
     F --> H
     G --> H
     H --> I[验证七个安装包并生成 SHA256SUMS]
-    I --> J[公开仓库创建草稿并上传八个附件]
+    I --> J[公开仓库创建草稿并上传九个附件]
     J --> K[检查上传完整性，公开并设置 latest]
 ```
 
@@ -325,7 +325,7 @@ node tools/release-assets.mjs release-assets 0.0.4
 
 1. 私有 Actions 中 verify、五个 build、publish 均成功。
 2. 公开 Release 版本正确，不是 draft 或 prerelease，并被设置为 latest。
-3. 附件总计八个：七个安装包和 SHA256SUMS；校验文件含七行，文件名对应本版本。
+3. 附件总计九个：七个安装包、SHA256SUMS 和 release-notes.json；校验文件仅包含七个安装包的哈希，文件名对应本版本。说明 JSON 是限长纯文本元数据，版本须匹配；公开正文应只含英文概要，不能出现 HTML 或多语言分段标记。
 4. 从公开下载链接取得安装包并核对 SHA-256，完成所需的实际安装和启动验收。
 5. 更新公开仓库 README 的最新版本和下载说明，在 `src/VALIDATION.md` 记录构建提交、Actions 链接、验收结果及限制。这两项文档更新没有自动完成，应分别提交。
 

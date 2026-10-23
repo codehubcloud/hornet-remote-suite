@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { openAsBlob } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { checksumAssets, validateVersion } from './release-assets.mjs';
 import { releaseNotesBody } from './release-notes.mjs';
 
@@ -25,6 +26,7 @@ const tag = 'v' + version;
 const existing = await api('/releases/tags/' + tag);
 if (existing && !existing.draft) throw new Error('This version is already published; published releases are immutable in this pipeline. Increment the version.');
 const body = releaseNotesBody(JSON.parse(await readFile(new URL('../release-notes.json', import.meta.url), 'utf8')),version);
+assets.push('release-notes.json');
 const release = existing ?? await api('/releases', 'POST', {
   tag_name: tag, target_commitish: repo.default_branch, name: `Hornet Remote Suite ${version}`, body, draft: true, prerelease: false,
 });
@@ -33,7 +35,7 @@ const previous = await api('/releases/' + release.id + '/assets?per_page=100');
 // A failed upload can be retried, but only on an unpublished draft.
 for (const asset of previous) await api('/releases/assets/' + asset.id, 'DELETE');
 for (const name of assets) {
-  const path = join(directory, name), info = await stat(path);
+  const path = name==='release-notes.json'?fileURLToPath(new URL('../release-notes.json',import.meta.url)):join(directory, name), info = await stat(path);
   const url = release.upload_url.replace(/\{.*$/, '') + '?name=' + encodeURIComponent(name);
   const response = await fetch(url, {
     method: 'POST', headers: { ...headers, 'Content-Type': 'application/octet-stream', 'Content-Length': String(info.size) },

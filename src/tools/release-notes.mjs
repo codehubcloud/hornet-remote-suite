@@ -5,7 +5,8 @@ export function releaseNotesBody(catalog,version){
   const text=catalog.notes?.[language];
   if(typeof text!=='string'||!text.trim()||text.length>14000||text.includes('<!--'))throw new Error('Missing or invalid release notes: '+language);
  }
- const body=releaseLanguages.map(language=>`<details>\n<summary>${language}</summary>\n\n<!-- hornet-notes:${language} -->\n${catalog.notes[language].trim()}\n<!-- /hornet-notes -->\n\n</details>`).join('\n\n');
- if(body.length>65000)throw new Error('Multilingual release notes are too large.');
- return body+'\n';
+ if(Buffer.byteLength(JSON.stringify(catalog),'utf8')>65536)throw new Error('Multilingual release notes are too large.');
+ // Older clients render the body verbatim, so never put markup or all
+ // translations here. New clients read the separate release-notes.json asset.
+ return catalog.notes.en.trim()+'\n';
 }

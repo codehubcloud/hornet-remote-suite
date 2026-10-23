@@ -2,8 +2,26 @@ import { describe,it,expect,vi } from 'vitest';
 import { checkForUpdates,newerVersion,helpLinks,helpBase } from '../../packages/core/help';
 import { manualHtml,manualSections } from '../../packages/core/help-content';
 import { userGuideSections } from '../../packages/core/user-guide';
+import { localizedReleaseNotes } from '../../packages/core/release-notes';
+import translations from '../../release-notes.json';
 const release=(tag_name='v0.0.12',extra={})=>new Response(JSON.stringify({tag_name,draft:false,prerelease:false,body:'release notes',...extra}));
 describe('application help and release checks',()=>{
+ it('fetches bounded, version-bound translation metadata',async()=>{
+  const latest=translations.version,url=`${helpBase}/releases/download/v${latest}/release-notes.json`;
+  const fetcher=vi.fn<typeof fetch>(async address=>String(address)===url?new Response(JSON.stringify(translations)):release('v'+latest,{body:'Plain English release notes',assets:[{name:'release-notes.json',browser_download_url:url}]}));
+  const result=await checkForUpdates('0.0.27',fetcher);
+  for(const [language,text]of Object.entries(translations.notes))expect(localizedReleaseNotes(result.notes,language,latest)).toBe(text);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+ });
+ it('ignores untrusted, mismatched, oversized or unavailable optional notes while preserving update checks',async()=>{
+  const latest=translations.version,url=`${helpBase}/releases/download/v${latest}/release-notes.json`;
+  for(const metadata of [new Response('',{status:503}),new Response(JSON.stringify({...translations,version:'99.0.0'})),new Response('x'.repeat(65537)),new Response('{}')]){
+   const result=await checkForUpdates('0.0.27',async address=>String(address)===url?metadata:release('v'+latest,{assets:[{name:'release-notes.json',browser_download_url:url}]}));
+   expect(result.available).toBe(true);expect(result.notes).toBe('release notes');
+  }
+  const fetcher=vi.fn<typeof fetch>(async()=>release('v'+latest,{assets:[{name:'release-notes.json',browser_download_url:'https://untrusted.example/notes.json'}]}));
+  await checkForUpdates('0.0.27',fetcher);expect(fetcher).toHaveBeenCalledTimes(1);
+ });
  it('compares numeric stable versions without offering downgrades',()=>{
   expect(newerVersion('0.0.12','0.0.9')).toBe(true);expect(newerVersion('0.0.12','0.0.12')).toBe(false);expect(newerVersion('0.0.11','0.0.12')).toBe(false);expect(()=>newerVersion('v1.0.0','0.0.1')).toThrow();
  });
