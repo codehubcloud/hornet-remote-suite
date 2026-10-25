@@ -1169,4 +1169,6 @@ export const english:Record<string,string> = {
   "下载后会校验安装包，准备好后点击安装。": "The installer is verified after download. Click Install when ready.",
   "此平台没有可直接下载的安装包，请访问发布页面。": "No direct installer is available for this platform. Visit the release page.",
   "安装包已保留。暂不安装时，下次启动软件或检查更新可直接安装，无需重新下载或重启电脑。": "The installer is saved. If you postpone installation, restart the app or check for updates to install it without downloading again or restarting your computer.",
+"您已连接到 {address}。\n您要断开这个会话吗？":"You are connected to {address}.\nDo you want to disconnect this session?",
+"您已连接到 {address}。\n您要断开并关闭这个标签吗？":"You are connected to {address}.\nDo you want to disconnect and close this tab?",
 };

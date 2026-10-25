@@ -93,7 +93,7 @@ export function App(){
   }catch(e){s.fail(e);}finally{setPending(false);}
  }
  async function close(v:View):Promise<boolean>{
-  if(v.kind==='terminal'){try{await closeTerminalView(v.id);return true;}catch(e){s.fail(e);return false;}}
+  if(v.kind==='terminal'){try{return await closeTerminalView(v.id);}catch(e){s.fail(e);return false;}}
   if(v.desktop){try{await window.hornet.vnc.close(v.desktop.desktopId);s.removeView(v.id);return true;}catch(e){s.fail(e);return false;}}
   if(v.kind==='editor'&&!window.confirm(tr("关闭编辑器？请先保存未提交的更改。")))return false;
   try{for(const id of v.terminalIds??(v.terminalId?[v.terminalId]:[]))await window.hornet.terminal.close(id);if(v.leaseId)await window.hornet.connection.release(v.leaseId);s.removeView(v.id);

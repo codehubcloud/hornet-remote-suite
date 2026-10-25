@@ -5,6 +5,7 @@ import { tabGroup,selectTab,removeTab,createTabGroup,moveTab } from './terminal-
 import type { TerminalLog } from '../../../packages/contracts/terminal-log';
 import { create } from 'zustand';
 import { useBroadcast } from './broadcast';
+import { t as tr } from './i18n';
 import type { HornetApi,Profile,TaskSnapshot,Capability,HornetEvent } from '../../../packages/contracts';
 declare global {interface Window {hornet:HornetApi}}
 export interface View {
@@ -151,13 +152,19 @@ async function releaseTerminalView(view:View){
  for(const id of view.terminalIds??(view.terminalId?[view.terminalId]:[]))await window.hornet.terminal.close(id);
  if(view.leaseId)await window.hornet.connection.release(view.leaseId);
 }
-export async function closeTerminalView(id:string){
- const view=useStore.getState().views.find(v=>v.id===id&&v.kind==='terminal');if(!view)return;
- if(view.locked)return;
+function confirmTerminalAction(view:View,close:boolean){
+ if(!view.terminalId||view.connectionAttempt||isTerminalClosed(view,useStore.getState()))return true;
+ const host=view.profile.host.replace(/[\x00-\x1f\x7f]/g,''),address=view.source==='local'?view.profile.name:view.profile.port>0?(host.includes(':')?'['+host+']':host)+':'+view.profile.port:host;
+ return window.confirm(tr(close?'您已连接到 {address}。\n您要断开并关闭这个标签吗？':'您已连接到 {address}。\n您要断开这个会话吗？',{address}));
+}
+export async function closeTerminalView(id:string):Promise<boolean>{
+ const view=useStore.getState().views.find(v=>v.id===id&&v.kind==='terminal');if(!view||view.locked)return true;
+ if(!confirmTerminalAction(view,true))return false;
  await releaseTerminalView(view);useStore.getState().removeView(id);
  await window.hornet.layout.save({profileIds:[...new Set(useStore.getState().views.filter(v=>!v.source).map(v=>v.profile.profileId))]});
+ return true;
 }
-export async function closeTerminalTabs(ids:string[]){for(const id of ids)await closeTerminalView(id);}
+export async function closeTerminalTabs(ids:string[]){for(const id of ids)if(!await closeTerminalView(id))return false;return true;}
 export async function duplicateTerminal(id:string,channel=false){
  const s=useStore.getState(),view=s.views.find(v=>v.id===id&&v.kind==='terminal');if(!view)return;
  if(view.source==='local'){addDeviceView(await window.hornet.localTerminal.open({shell:/CMD/i.test(view.profile.name)?'cmd':'powershell',cwd:view.profile.host,cols:120,rows:36}),tabGroup(view));return;}
@@ -191,6 +198,7 @@ export async function reconnectView(id:string){
 
 export async function disconnectView(id:string){
  const s=useStore.getState(),view=s.views.find(v=>v.id===id);if(!view?.terminalId)return;
+ if(!confirmTerminalAction(view,false))return;
  s.replaceView(id,{...view,autoReconnectPaused:true});
  try{await window.hornet.terminal.close(view.terminalId);}catch(error){const current=useStore.getState().views.find(v=>v.id===id);if(current?.terminalId===view.terminalId)useStore.getState().replaceView(id,{...current,autoReconnectPaused:view.autoReconnectPaused});throw error;}
 }

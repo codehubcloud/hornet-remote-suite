@@ -1,6 +1,6 @@
 {
   "name": "hornet-remote-suite",
-  "version": "0.0.33",
+  "version": "0.0.34",
   "private": true,
   "description": "Unified remote workstation",
   "main": "dist/main.cjs",
@@ -24,6 +24,7 @@
     "test:startup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/startup-smoke.ps1",
     "test:suite-ui": "node tools/suite-workspace-smoke.mjs",
     "test:terminal-ui": "node tools/terminal-tools-smoke.mjs",
+    "test:session-confirm": "node tools/session-confirm-smoke.mjs",
     "test:telnet-logs": "node tools/telnet-logs-smoke.mjs",
     "test:device-terminals": "node tools/device-terminals-smoke.mjs",
     "test:workspace-navigation": "node tools/workspace-navigation-smoke.mjs",

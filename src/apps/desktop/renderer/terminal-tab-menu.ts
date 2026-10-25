@@ -9,7 +9,7 @@ export function terminalTabItems(view:View):MenuItem[]{
  const s=useStore.getState(),terminals=s.views.filter(v=>v.kind==='terminal'),peers=terminals.filter(v=>tabGroup(v)===tabGroup(view)),groups=[...new Set(terminals.map(tabGroup))];
  const run=(operation:()=>Promise<unknown>)=>()=>void operation().catch(useStore.getState().fail);
  const batch=(views:View[])=>run(()=>closeTerminalTabs(views.filter(v=>!v.locked).map(v=>v.id)));
- const closeItem=(label:string,views:View[],extra:Partial<MenuItem>={},blanks:string[]=[]):MenuItem=>({label:tr(label),disabled:!views.some(v=>!v.locked)&&!blanks.length,action:run(async()=>{await closeTerminalTabs(views.filter(v=>!v.locked).map(v=>v.id));for(const id of blanks)useStore.getState().closeBlankTab(id);}),...extra});
+ const closeItem=(label:string,views:View[],extra:Partial<MenuItem>={},blanks:string[]=[]):MenuItem=>({label:tr(label),disabled:!views.some(v=>!v.locked)&&!blanks.length,action:run(async()=>{if(!await closeTerminalTabs(views.filter(v=>!v.locked).map(v=>v.id)))return;for(const id of blanks)useStore.getState().closeBlankTab(id);}),...extra});
  const splits:MenuItem[]=[{label:tr('水平分割'),disabled:terminals.length<2,action:()=>s.tileTerminals('horizontal')},{label:tr('垂直分割'),disabled:terminals.length<2,action:()=>s.tileTerminals('vertical')},{label:tr('取消分屏'),disabled:!s.terminalLayout,action:()=>s.setTerminalLayout(null)}];
  return [
   {label:tr('新选项卡'),shortcut:'Shift+Alt+N',action:s.newTab},
