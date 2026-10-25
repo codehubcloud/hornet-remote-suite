@@ -5,6 +5,7 @@ import { useStore,openView,hasRemoteFiles,isTerminalClosed } from './store';
 import { FileView } from './FileView';
 import { QuickCommandSurface } from './QuickCommandWorkspace';
 import { useQuickCommands } from './quick-commands-store';
+import { useWorkspacePreferences } from './workspace-preferences';
 import { TerminalView } from './TerminalView';
 import { layoutRects,setRatio } from './terminal-layout';
 
@@ -14,6 +15,7 @@ export function TerminalWorkspace({splitActive,renderTabs}:{splitActive:boolean;
  const view=panes.find(v=>v.id===s.active)??panes[0],active=view?.id??'';
  const disconnected=view?isTerminalClosed(view,s):false;
  const commands=useQuickCommands();
+ const transferQueue=useWorkspacePreferences(state=>state.value.transferQueue);
  const [requests,setRequests]=useState<Record<string,number>>({});
  const [follow,setFollow]=useState(true),[followStatus,setFollowStatus]=useState(''),[target,setTarget]=useState<{terminalId:string;path:string}>();
  useEffect(()=>{const search=()=>{const id=useStore.getState().active;setRequests(r=>({...r,[id]:(r[id]??0)+1}));};window.addEventListener('hornet:terminal-search',search);return()=>window.removeEventListener('hornet:terminal-search',search);},[]);
@@ -44,11 +46,13 @@ export function TerminalWorkspace({splitActive,renderTabs}:{splitActive:boolean;
  const geometry=layout?.panes.has(active)?layout:layoutRects({kind:'leaf',id:active});
  const filesVisible=visible&&hasRemoteFiles(view),firstPane=geometry.panes.keys().next().value;
  return <div className="terminal-workspace" ref={host}>
-  <aside className="terminal-files" aria-label={tr("终端远程文件")} style={{width,display:filesVisible?'flex':'none'}}>
+  <aside className={hasRemoteFiles(view)?'terminal-files':'terminal-task-sidebar'} aria-label={tr(hasRemoteFiles(view)?'终端远程文件':'任务中心')} style={{width,display:(hasRemoteFiles(view)?filesVisible:transferQueue)?'flex':'none'}}>
+   <div className="terminal-file-content" style={{display:hasRemoteFiles(view)?'flex':'none'}}>
    {splitActive&&filesVisible&&renderTabs('')}
    <div className="terminal-files-heading"><strong>{tr("远程文件 · SFTP")}</strong><span className="follow-controls"><input type="checkbox" aria-label={tr("跟随终端")} checked={follow} onChange={e=>{setFollow(e.target.checked);if(!e.target.checked)setTarget(undefined);}}/><button aria-pressed={follow} title={tr("跟随当前选中的终端目录（Linux）")} onClick={()=>{setFollow(!follow);if(follow)setTarget(undefined);}}>{tr("跟随终端")}</button></span><button onClick={()=>setVisible(false)} aria-label={tr("隐藏远程文件")}>‹</button></div>
    {follow&&<div className="follow-status" role="status">{followStatus}</div>}
-   <div className="workspace-file-views">{panes.filter(p=>hasRemoteFiles(p)).map(p=><div key={p.id+":"+p.connectionId} className="terminal-file-view" style={{display:p.id===active?'flex':'none'}}><FileView view={p} compact followTarget={follow&&p.id===active&&target?.terminalId===p.terminalId?target:undefined}/></div>)}</div>{hasRemoteFiles(view)&&<div className="task-dock-slot"/>}
+   <div className="workspace-file-views">{panes.filter(p=>hasRemoteFiles(p)).map(p=><div key={p.id+":"+p.connectionId} className="terminal-file-view" style={{display:p.id===active?'flex':'none'}}><FileView view={p} compact followTarget={follow&&p.id===active&&target?.terminalId===p.terminalId?target:undefined}/></div>)}</div>
+   </div><div className="task-dock-slot"/>
   </aside>
   {visible&&hasRemoteFiles(view)&&<div className="file-splitter" role="separator" aria-label={tr("调整文件栏宽度")} aria-orientation="vertical" aria-valuemin={240} aria-valuemax={520} aria-valuenow={width} tabIndex={0}
    onPointerDown={e=>{drag.current={x:e.clientX,width};e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault();}}

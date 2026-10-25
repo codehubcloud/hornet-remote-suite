@@ -24,6 +24,8 @@ try{
  app=await electron.launch({args:['.'],env,timeout:30000});
  app.process().stderr.on('data',chunk=>process.stderr.write(chunk));
  const page=await app.firstWindow();await dismissStartupSessions(page);
+ // Simulate upgrading an installation with a previously saved bottom panel.
+ await page.evaluate(()=>localStorage.setItem('hornet.tasks.layout',JSON.stringify({dock:'bottom',x:360,y:160,width:420,height:210,collapsed:false})));await page.reload();await page.locator('.app-shell').waitFor();
  page.setDefaultTimeout(15000);
  page.on('pageerror',error=>console.error('UI ERROR:',error.message));
  await expect(page.getByRole('region',{name:'快速开始',exact:true})).toBeVisible();
@@ -219,6 +221,7 @@ try{
  await expect(sidebar.locator('.terminal-file-view:visible').getByLabel('远端路径',{exact:true})).toHaveValue('/');
  await sidebar.getByRole('button',{name:'跟随终端',exact:true}).click();
  const tasks=page.getByRole('region',{name:'任务中心',exact:true});
+ await expect(tasks).toHaveAttribute('data-dock','left');
  await tasks.getByLabel('任务中心位置',{exact:true}).selectOption('left');
  await expect(sidebar.getByRole('region',{name:'任务中心',exact:true})).toBeVisible();
  const fileBox=await sidebar.locator('.files').boundingBox(),taskBox=await tasks.boundingBox();
@@ -255,6 +258,7 @@ try{
  await page.screenshot({path:'test-results/terminal-sidebar.png'});
  await page.getByRole('button',{name:'隐藏文件栏',exact:true}).first().click();
  await expect(sidebar).toBeHidden();
+ await expect(tasks).toBeHidden();
  await page.getByRole('button',{name:'显示文件栏',exact:true}).click();
  await expect(sidebar).toBeVisible();
  await page.getByRole('button',{name:'打开文件',exact:true}).click();

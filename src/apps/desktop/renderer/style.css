@@ -36,6 +36,10 @@
 .task-dock-slot{display:flex;flex-direction:column;max-height:45%;flex-shrink:0;min-height:0}
 .dockable-tasks{position:relative;min-height:30px;max-height:50vh;overflow:hidden}
 .task-dock-slot .dockable-tasks{flex-shrink:1;max-height:100%}
+.terminal-file-content{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.terminal-task-sidebar{display:flex;flex-direction:column;justify-content:flex-end;flex-shrink:0;min-height:0;background:var(--c-101c2b);border-right:1px solid var(--c-27394c)}
+.terminal-task-sidebar .task-dock-slot{max-height:100%}
+.task-body .compact-transfer-metrics{display:flex;gap:7px;font-variant-numeric:tabular-nums}
 .dockable-tasks .task-heading{padding:0 5px;height:29px;min-height:29px;gap:4px}
 .dockable-tasks .task-heading button{margin:0;padding:2px 5px;font-size:10px}
 .dockable-tasks .task-heading .task-drag{flex:1;text-align:left;border:0;background:transparent;cursor:move;touch-action:none;user-select:none;min-width:80px;overflow:hidden}

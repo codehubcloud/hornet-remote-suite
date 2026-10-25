@@ -25,6 +25,8 @@ function restore():Layout {
 export function TaskCenter({activeId,quiet=false}:{activeId:string;quiet?:boolean}) {
  const [layout,setLayout]=useState(restore),[slot,setSlot]=useState<HTMLElement|null>(null),[target,setTarget]=useState<Dock|null>(null);
  const current=useRef(layout);current.current=layout;
+ const view=useStore(state=>state.views.find(view=>view.id===activeId)),terminal=view?.kind==='terminal';
+ const preferredDock:Dock=terminal?'left':'bottom';
  const activity=useTransferActivity();
  const preferences=useWorkspacePreferences(state=>state.value),[tab,setTab]=useState<'transfers'|'log'>('transfers');
  const mountedAt=useRef(Date.now()),seen=useRef(new Set<string>()),previousActive=useRef(new Set<string>()),lastStates=useRef(new Map<string,string>());
@@ -32,14 +34,15 @@ export function TaskCenter({activeId,quiet=false}:{activeId:string;quiet?:boolea
  const panel=useRef<HTMLElement>(null);
  const gesture=useRef<{kind:'move'|'resize';x:number;y:number;layout:Layout;original:Layout;floating:boolean}|null>(null);
  const tasks=useStore(s=>s.tasks),active=tasks.filter(t=>['queued','running','verifying','committing','pausing'].includes(t.state)).length;
- useEffect(()=>{if(!activity.requests)return;setLayout(value=>fit({...value,dock:'bottom',collapsed:false,height:Math.max(190,value.height)}));setTab('transfers');if(!useWorkspacePreferences.getState().value.transferQueue)useWorkspacePreferences.getState().change({transferQueue:true});},[activity.requests]);
+ useLayoutEffect(()=>{setLayout(value=>fit({...value,dock:preferredDock}));},[activeId,preferredDock]);
+ useEffect(()=>{if(!activity.requests)return;setLayout(value=>fit({...value,dock:preferredDock,collapsed:false,height:Math.max(190,value.height)}));setTab('transfers');if(!useWorkspacePreferences.getState().value.transferQueue)useWorkspacePreferences.getState().change({transferQueue:true});},[activity.requests]);
  useEffect(()=>{
   const activeIds=new Set(tasks.filter(task=>activeTransferStates.has(task.state)).map(task=>task.taskId));
   const started=tasks.some(task=>(!seen.current.has(task.taskId)&&(task.createdAt??0)>=mountedAt.current)||(activeIds.has(task.taskId)&&!previousActive.current.has(task.taskId)));
   const entries=tasks.filter(task=>lastStates.current.get(task.taskId)!==task.state).map(task=>({at:task.updatedAt,name:task.name,state:task.state,error:task.error}));
   if(entries.length)setJournal(value=>[...value,...entries].slice(-500));
   for(const task of tasks){seen.current.add(task.taskId);lastStates.current.set(task.taskId,task.state);}previousActive.current=activeIds;
-  if(started){setLayout(value=>fit({...value,dock:'bottom',collapsed:false,height:Math.max(190,value.height)}));setTab('transfers');if(!useWorkspacePreferences.getState().value.transferQueue)useWorkspacePreferences.getState().change({transferQueue:true});}
+  if(started){setLayout(value=>fit({...value,dock:preferredDock,collapsed:false,height:Math.max(190,value.height)}));setTab('transfers');if(!useWorkspacePreferences.getState().value.transferQueue)useWorkspacePreferences.getState().change({transferQueue:true});}
  },[tasks]);
  useLayoutEffect(()=>{
   const view=Array.from(document.querySelectorAll<HTMLElement>('.view')).find(el=>el.dataset.viewId===activeId);
@@ -92,5 +95,5 @@ export function TaskCenter({activeId,quiet=false}:{activeId:string;quiet?:boolea
   {target&&<div className="task-drop-hint">{tr("松开停靠到")}{target==='left'?tr("文件列表下方"):tr("工作区底部")}{tr("· Esc 取消")}</div>}
   {floating&&!layout.collapsed&&<div className="task-size-grip" role="separator" aria-label={tr("调整浮动任务中心大小")} tabIndex={0} onPointerDown={e=>begin(e,'resize')} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();setLayout(s=>fit({...s,width:s.width+(e.key==='ArrowRight'?20:e.key==='ArrowLeft'?-20:0),height:s.height+(e.key==='ArrowDown'?20:e.key==='ArrowUp'?-20:0)}));}}}/>}
  </section>;
- return floating?createPortal(content,document.body):layout.dock==='left'&&slot?createPortal(content,slot):content;
+ return floating?createPortal(content,document.body):layout.dock==='left'?(slot?createPortal(content,slot):terminal?null:content):content;
 }
