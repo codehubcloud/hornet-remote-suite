@@ -1,6 +1,6 @@
 # Hornet Remote Suite — 桌面源码
 
-当前版本为 **0.0.11**，按设计文档 M1 路线建设。整个工程位于 `src`，其内部目录遵循设计第20章。没有把尚未实现的原生能力用外部启动器或模拟成功代替。
+应用版本以 [package.json](package.json) 为准，整个工程位于 `src`，其内部目录遵循设计第20章。编译、安装包验收及全平台发布的详细操作见 [构建发布指南](../docs/Build_Package_Release_Guide.md)。没有把尚未实现的原生能力用外部启动器或模拟成功代替。
 
 ## 启动
 
@@ -140,7 +140,7 @@ npm run test:native
 - 传输执行全文件/前缀校验，可靠性优先，尚未达到第12章吞吐门槛。取消/冲突留下的 `.hornet-<taskId>.part` 暂存文件保留供诊断，可在确认任务结束后手动清理。
 - 普通下载使用同卷硬链接实现不覆盖提交；同步中明确选择的覆盖使用同目录临时文件校验后重命名替换。服务端覆盖需要 OpenSSH posix-rename 扩展，缺失时拒绝覆盖。
 - 单机单用户、单主窗口。安全存储保护依赖操作系统账户，不抵御同账户恶意进程。未实现应用内容锁屏。
-- 还没有签名安装包、自动更新和跨平台认证，不能作为生产环境完整替代品发布。
+- 应用内已提供检查更新、下载校验、手动安装及缓存复用；安装包尚未配置 Windows 商业签名与 Apple 签名/公证。构建发布与更新验收范围以 [操作指南](../docs/Build_Package_Release_Guide.md) 为准。
 
 ## 工程与设计映射
 
@@ -354,7 +354,7 @@ SSH/Telnet 会话属性可保存字符编码，导入导出保留；串口对话
 
 ## 二进制安装包发布
 
-版本从 `0.0.1` 开始。安装包发布到 [公开 release 仓库](https://github.com/codehubcloud/hornet-remote-suite-release/releases)，项目源码保留在私有仓库。支持 Windows x64 EXE、macOS x64/arm64 DMG、Linux x64/arm64 AppImage/DEB。构建与发布方法见 [RELEASING.md](RELEASING.md)。
+版本从 `0.0.1` 开始。安装包发布到 [公开 release 仓库](https://github.com/codehubcloud/hornet-remote-suite-release/releases)，源码与构建位于独立源码仓库；其可见性与公开构建授权按实际设置核对。支持 Windows x64 EXE、macOS x64/arm64 DMG、Linux x64/arm64 AppImage/DEB。简要入口见 [RELEASING.md](RELEASING.md)，完整环境、命令、验收、发布及排错流程见 [构建发布指南](../docs/Build_Package_Release_Guide.md)。
 
 ### 0.0.2 启动兼容性修复
 
