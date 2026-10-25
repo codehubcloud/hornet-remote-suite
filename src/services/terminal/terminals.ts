@@ -11,6 +11,9 @@ import { AppError } from '../../packages/core/errors';
 interface Session {raw?:{consume:(data:Buffer)=>void;close:()=>void}; codec:TerminalCodec; directoryViaExec:boolean;identity?:ShellIdentity;cwdPending?:Promise<{path:string|null;reason?:string}>;id:string;owner:string;connectionId:string;leaseId:string;generation:number;stream:ClientChannel;attached:boolean;seq:number;inputSeq:number;ackSeq:number;pending:Map<number,number>;bytes:number }
 export class Terminals {
   private sessions=new Map<string,Session>();
+  // Buffered renderer ACKs/resize requests can arrive after the close event.
+  // Retain a bounded ownership receipt so only those harmless calls are idempotent.
+  private closed=new Map<string,{owner:string;generation:number}>();
   private unsubscribe:()=>void;
   constructor(private connections:Connections,private emit:(owner:string,event:HornetEvent)=>void) {
     // Transport failure must close every shell, including paused channels that
@@ -81,6 +84,7 @@ export class Terminals {
     try{return await s.cwdPending;}finally{s.cwdPending=undefined;}
   }
   ack(owner:string,id:string,seq:number){
+    if(this.closed.get(id)?.owner===owner)return;
     const s=this.get(owner,id),bytes=s.pending.get(seq);
     if(bytes===undefined||seq!==s.ackSeq+1)throw new AppError('IPC002','终端确认序号不正确。');
     s.pending.delete(seq);s.bytes-=bytes;s.ackSeq=seq;this.flush(s);
@@ -91,7 +95,7 @@ export class Terminals {
     if(Buffer.byteLength(data)>32768||s.stream.writableLength>65536)throw new AppError('IPC002','终端输入过快。');
     s.inputSeq=seq;s.stream.write(s.codec.encode(data));
   }
-  resize(owner:string,id:string,generation:number,cols:number,rows:number){const s=this.get(owner,id);if(s.generation!==generation)throw new AppError('IPC005','终端版本已改变。');s.stream.setWindow(rows,cols,0,0);}
-  close(owner:string,id:string,disconnect:TerminalDisconnect={reason:'user',at:Date.now()}){const s=this.sessions.get(id);if(!s)return;if(s.owner!==owner)throw new AppError('IPC005','无权关闭终端。');s.raw?.close();this.output(s,s.codec.end());this.sessions.delete(id);s.stream.destroy();this.connections.release(owner,s.leaseId);this.emit(owner,{type:'terminal.closed',terminalId:id,generation:s.generation,disconnect});}
+  resize(owner:string,id:string,generation:number,cols:number,rows:number){const closed=this.closed.get(id);if(closed?.owner===owner&&closed.generation===generation)return;const s=this.get(owner,id);if(s.generation!==generation)throw new AppError('IPC005','终端版本已改变。');s.stream.setWindow(rows,cols,0,0);}
+  close(owner:string,id:string,disconnect:TerminalDisconnect={reason:'user',at:Date.now()}){const s=this.sessions.get(id);if(!s)return;if(s.owner!==owner)throw new AppError('IPC005','无权关闭终端。');s.raw?.close();this.output(s,s.codec.end());this.closed.set(id,{owner,generation:s.generation});if(this.closed.size>512)this.closed.delete(this.closed.keys().next().value!);this.sessions.delete(id);s.stream.destroy();this.connections.release(owner,s.leaseId);this.emit(owner,{type:'terminal.closed',terminalId:id,generation:s.generation,disconnect});}
   stop(){this.unsubscribe();for(const s of [...this.sessions.values()])this.close(s.owner,s.id);}
 }

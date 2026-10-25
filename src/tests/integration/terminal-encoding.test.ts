@@ -35,6 +35,22 @@ it('uses saved SSH encoding on both directions, isolates runtime changes and rec
   await logs.stop('a',log.id);const recording=await readRecording(log.path);expect(Buffer.concat(recording.frames.filter(f=>f[1]==='o').map(f=>Buffer.from(f[2] as string,'base64'))).toString()).toContain('中文');
  }finally{terminals.stop();await connections.stop();db.close();await server.close();await rm(dir,{recursive:true,force:true});}
 });
+it('accepts late flow acknowledgements and resize only for a known closed SSH terminal owned by the caller',async()=>{
+ const server=await sshFixture(),db=new Storage(':memory:',resolve('packages/storage/schema.sql')),events:HornetEvent[]=[];
+ const challenges=new Challenges((owner,e)=>{if(e.type==='challenge')queueMicrotask(()=>challenges.respond(owner,e.challengeId,e.kind==='trust'?'accept':'test-password',e.kind==='trust'));});
+ const connections=new Connections(db,challenges,()=>{}),terminals=new Terminals(connections,(_owner,event)=>events.push(event));
+ try{
+  const p=db.saveProfile({...profile(server.port),encoding:'utf8'},0),connection=await connections.acquire('a',p.profileId),terminal=await terminals.create('a',connection.connectionId,80,24);
+  const {terminalId:id,generation}=terminal;terminals.attach('a',id);await expect.poll(()=>output(events,id)).toContain('fixture ready');
+  expect(()=>terminals.ack('a',id,999)).toThrow('确认序号');
+  server.disconnect();await expect.poll(()=>events.some(e=>e.type==='terminal.closed'&&e.terminalId===id)).toBe(true);
+  for(const event of events)if(event.type==='terminal.data'&&event.terminalId===id)expect(()=>terminals.ack('a',id,event.seq)).not.toThrow();
+  expect(()=>terminals.resize('a',id,generation,120,36)).not.toThrow();
+  expect(()=>terminals.ack('other',id,1)).toThrow('无权');expect(()=>terminals.ack('a',randomUUID(),1)).toThrow('无权');
+  expect(()=>terminals.resize('other',id,generation,120,36)).toThrow('无权');expect(()=>terminals.resize('a',id,generation+1,120,36)).toThrow('无权');
+  expect(()=>terminals.write('a',id,generation,1,'must not send')).toThrow('已关闭');expect(()=>terminals.attach('a',id)).toThrow('已关闭');
+ }finally{terminals.stop();await connections.stop();db.close();await server.close();}
+});
 it('decodes Telnet legacy bytes after negotiation and encodes/escapes input with per-session isolation',async()=>{
  const server=await telnetFixture(),events:HornetEvent[]=[],terminals=new TelnetTerminals((_owner,e)=>events.push(e));
  try{
