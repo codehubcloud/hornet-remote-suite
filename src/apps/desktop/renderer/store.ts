@@ -50,12 +50,13 @@ export const useStore=create<State>((set)=>({
  renameTerminal:(id,title)=>set(s=>({views:s.views.map(v=>v.id===id&&v.kind==='terminal'?{...v,title}:v)})),
  setTerminalMenu:terminalMenu=>set({terminalMenu}),
  profiles:[],tasks:[],capabilities:[],views:[],active:'home',error:'',challenges:[],connectionStates:{},
- setProfiles:profiles=>set(s=>({profiles,views:s.views.map(v=>{const p=profiles.find(p=>p.profileId===v.profile.profileId);return p?{...v,profile:{...v.profile,name:p.name,description:p.description,session:p.session,revision:p.revision}}:v;})})),setTasks:tasks=>set({tasks}),setCapabilities:capabilities=>set({capabilities}),
+ setProfiles:profiles=>set(s=>({profiles,views:s.views.map(v=>{const p=profiles.find(p=>p.profileId===v.profile.profileId);return p?{...v,profile:{...v.profile,name:p.name,description:p.description,session:p.session,revision:p.revision,remoteSystem:p.remoteSystem}}:v;})})),setTasks:tasks=>set({tasks}),setCapabilities:capabilities=>set({capabilities}),
  setTerminalIds:(id,ids)=>set(s=>({views:s.views.map(v=>v.id===id?{...v,terminalIds:ids}:v)})),
  addView:view=>set(s=>{const current=s.views.find(v=>v.id===s.active&&v.kind==='terminal'),next={...view,tabGroupId:view.tabGroupId??current?.tabGroupId??s.blankGroups[s.active]};const views=[...s.views,next],blankGroups={...s.blankGroups};delete blankGroups[s.active];return {views,blankGroups,blankTabs:s.blankTabs.filter(id=>id!==s.active),terminalLayout:selectTab(views,s.terminalLayout,next.id),active:view.id};}),
  removeView:id=>set(s=>{const view=s.views.find(v=>v.id===id),remaining=s.views.filter(v=>v.id!==id),next=view&&remaining.find(v=>v.kind==='terminal'&&tabGroup(v)===tabGroup(view));return {views:remaining,terminalLayout:removeTab(s.views,s.terminalLayout,id),active:s.active===id?(next?.id??remaining.find(v=>v.kind==='terminal')?.id??'home'):s.active};}),
  setActive:active=>set(s=>({active,terminalLayout:selectTab(s.views,s.terminalLayout,active)})),fail:e=>set({error:e instanceof Error?e.message:String(e)}),clearError:()=>set({error:''}),
  event:event=>set(s=>{
+  if(event.type==='profile.system')return {profiles:s.profiles.map(p=>p.profileId===event.profileId?{...p,remoteSystem:event.system}:p),views:s.views.map(v=>v.profile.profileId===event.profileId?{...v,profile:{...v.profile,remoteSystem:event.system}}:v)};
   if(event.type==='terminal.binary')return {binaryTerminals:{...s.binaryTerminals,[event.terminalId]:event.active}};
   if(event.type==='terminal.closed'){
    const view=s.views.find(v=>v.terminalId===event.terminalId);

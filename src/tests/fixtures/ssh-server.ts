@@ -3,7 +3,7 @@ import { generateKeyPairSync,createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import { createServer,createConnection,type Socket,type Server as TcpServer } from 'node:net';
 interface Handle { path:string;directory?:boolean;read?:boolean }
-export async function sshFixture(options:{directoryReadDelayMs?:number;authorizedKey?:string;networkProxy?:boolean;hashDelayMs?:number;remoteHash?:'supported'|'corrupt';atomicRename?:boolean;password?:string;writeDelay?:number;key?:string;directoryTracking?:boolean;procReadlink?:boolean;procProbeDelayMs?:number;rejectTrackingExec?:boolean}={}){
+export async function sshFixture(options:{remoteSystem?:string;directoryReadDelayMs?:number;authorizedKey?:string;networkProxy?:boolean;hashDelayMs?:number;remoteHash?:'supported'|'corrupt';atomicRename?:boolean;password?:string;writeDelay?:number;key?:string;directoryTracking?:boolean;procReadlink?:boolean;procProbeDelayMs?:number;rejectTrackingExec?:boolean}={}){
  const key=options.key??generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs1',format:'pem'},publicKeyEncoding:{type:'pkcs1',format:'pem'}}).privateKey;
  const directories=new Set(['/','/tmp','/tmp/space dir']);const shellCwds=new Map<number,string>(),shellInputs=new Map<number,string>();
  const shellBytes=new Map<number,Buffer>();
@@ -72,6 +72,7 @@ export async function sshFixture(options:{directoryReadDelayMs?:number;authorize
    };
    session.on('shell',accept=>startShell(accept()));
    session.on('exec',(accept,reject,info)=>{
+      if(info.command==='uname -s; cat /etc/os-release 2>/dev/null'&&options.remoteSystem){const stream=accept();stream.write(options.remoteSystem);stream.exit(0);stream.end();return;}
     if(info.command.startsWith('LC_ALL=C sha256sum < ')){
      if(!options.remoteHash){reject();return;}
      const encoded=info.command.slice('LC_ALL=C sha256sum < '.length),path=encoded.slice(1,-1).replace(/'"'"'/g,"'");remoteHashes.push(path);

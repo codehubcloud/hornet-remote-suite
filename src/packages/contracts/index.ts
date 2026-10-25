@@ -1,3 +1,4 @@
+import { remoteSystemSchema } from './remote-system';
 import type { ManagedKey,IdentityConfig,KnownHost } from './identities';
 import { terminalEncodingSchema,type TerminalEncoding } from './terminal-encoding';
 import type { TerminalRecording } from './terminal-recording';
@@ -17,6 +18,7 @@ export const profileSchema = z.object({
   username: z.string().max(255).refine(v=>!/[\x00-\x1f\x7f]/.test(v)), group: z.string().max(128), authType: z.enum(['password', 'privateKey', 'agent']),
   description: z.string().max(2048).optional(), updatedAt: z.number().int().nonnegative().optional(),
   encoding:terminalEncodingSchema.optional(),
+  remoteSystem:remoteSystemSchema.optional(),
   jumpProfileIds:z.array(id).max(4).optional(),
   session:sessionOptionsSchema.optional(),
   revision: z.number().int().nonnegative(),
@@ -140,6 +142,7 @@ export type HornetEvent =
   | { type: 'tunnel.state'; tunnel: TunnelSnapshot }
   | { type: 'challenge'; challengeId: string; kind: 'password'|'privateKey'|'passphrase'|'keyboard'|'trust'; profileId: string; title: string; message: string; echo?: boolean }
   | { type: 'challenge.closed'; challengeId: string }
+  | { type:'profile.system'; profileId:string; system:import('./remote-system').RemoteSystem }
   | { type: 'connection.state'; connectionId: string; profileId: string; generation: number; state: string; error?: string; disconnect?: import('./terminal-disconnect').TerminalDisconnect }
   | { type: 'terminal.data'; terminalId: string; generation: number; seq: number; data: Uint8Array }
   | { type: 'terminal.closed'; terminalId: string; generation?:number; disconnect?: import('./terminal-disconnect').TerminalDisconnect }
@@ -149,6 +152,7 @@ export type HornetEvent =
 export interface Layout { profileIds: string[]; activeProfileId?: string }
 export interface MovedTerminal {view:{id:string;kind:'terminal';profile:Profile;connectionId:string;leaseId?:string;terminalId:string;terminalIds?:string[];generation:number;source?:'local'|'serial'|'mosh';title?:string;tabColor?:string;terminalTitle?:string};snapshot:string;inputSeq:number}
 export interface HornetApi {
+  fileDrag:{dropped(files:File[]):Promise<{pathGrantId:string;name:string}[]>;prepare(connectionId:string,files:{path:string;name:string}[]):Promise<{token:string}>;start(token:string):void};
  zmodem:{start(terminalId:string,direction:'send'|'receive'):Promise<import('../../services/terminal/zmodem').ZmodemStatus|null>;list():Promise<import('../../services/terminal/zmodem').ZmodemStatus[]>;cancel(id:string):Promise<void>};
  workbench:{create():Promise<void>;cascade():Promise<void>;move(payload:MovedTerminal):Promise<void>;initial():Promise<{secondary:boolean;view?:MovedTerminal}>;close():Promise<void>;onClose(listener:()=>void):()=>void};
  schedules:{list():Promise<import('./transfer-schedules').TransferSchedule[]>;create(input:import('./transfer-schedules').ScheduleInput):Promise<import('./transfer-schedules').TransferSchedule|null>;run(id:string):Promise<import('./transfer-schedules').TransferSchedule>;cancel(id:string):Promise<void>;remove(id:string):Promise<void>};

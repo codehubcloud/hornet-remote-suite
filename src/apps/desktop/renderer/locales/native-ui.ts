@@ -1,6 +1,12 @@
 // Reviewed interface copy. Detailed protocol help falls back to the English catalog.
 // Columns: Japanese, Korean, German, French, Spanish. Keep user data out of this table.
 export const nativeUi:Record<string,readonly [string,string,string,string,string]>={
+"可拖入本地文件上传；下载到桌面请先点击“准备拖出”。":["ローカルファイルをドロップしてアップロードします。デスクトップへのダウンロードは、先に「ドラッグを準備」をクリックします。","로컬 파일을 놓아 업로드하세요. 바탕 화면으로 다운로드하려면 먼저 드래그 준비를 클릭하세요.","Lokale Dateien zum Hochladen ablegen. Für den Desktop zuerst Ziehen vorbereiten anklicken.","Déposez des fichiers locaux pour les envoyer. Pour le bureau, cliquez d’abord sur Préparer le glissement.","Suelte archivos locales para subirlos. Para descargar al escritorio, pulse primero Preparar para arrastrar."],
+"先下载并校验文件，再拖到桌面或资源管理器。":["ファイルをダウンロードして検証してから、デスクトップやファイルマネージャーにドラッグします。","파일을 다운로드하고 검증한 다음 바탕 화면이나 파일 관리자로 드래그하세요.","Die Datei zuerst herunterladen und prüfen, dann auf den Desktop oder in den Dateimanager ziehen.","Téléchargez et vérifiez le fichier, puis faites-le glisser vers le bureau ou le gestionnaire de fichiers.","Descargue y verifique el archivo antes de arrastrarlo al escritorio o al gestor de archivos."],
+"正在准备拖出…":["ドラッグの準備中…","드래그 준비 중…","Ziehen wird vorbereitet…","Préparation du glissement…","Preparando para arrastrar…"],
+"拖到桌面":["デスクトップへドラッグ","바탕 화면으로 드래그","Auf Desktop ziehen","Glisser vers le bureau","Arrastrar al escritorio"],
+"准备拖出":["ドラッグを準備","드래그 준비","Ziehen vorbereiten","Préparer le glissement","Preparar para arrastrar"],
+"可拖入本地文件上传；将远端文件拖到左侧下载。":["ローカルファイルをドロップしてアップロード、リモートファイルを左へドラッグしてダウンロードします。","로컬 파일을 놓아 업로드하거나 원격 파일을 왼쪽으로 드래그하여 다운로드하세요.","Lokale Dateien zum Hochladen ablegen; entfernte Dateien zum Herunterladen nach links ziehen.","Déposez des fichiers locaux pour les envoyer ; glissez les fichiers distants vers le volet gauche pour les télécharger.","Suelte archivos locales para subirlos; arrastre archivos remotos al panel izquierdo para descargarlos."],
 "此版本尚未提供所选语言的更新说明，请访问发布页面。":["このバージョンには選択した言語の更新内容がありません。リリースページをご覧ください。","이 버전에는 선택한 언어의 업데이트 내용이 없습니다. 릴리스 페이지를 확인하세요.","Für diese Version sind keine Hinweise in der gewählten Sprache verfügbar. Besuchen Sie die Release-Seite.","Les notes de cette version ne sont pas disponibles dans la langue choisie. Consultez la page des versions.","Las notas de esta versión no están disponibles en el idioma seleccionado. Visite la página de versiones."],
 "横向":["横向き","가로","Querformat","Paysage","Horizontal"],
 "连接错误：{error}":["接続エラー: {error}","연결 오류: {error}","Verbindungsfehler: {error}","Erreur de connexion : {error}","Error de conexión: {error}"],

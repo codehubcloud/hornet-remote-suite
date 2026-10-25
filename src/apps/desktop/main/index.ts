@@ -1,8 +1,9 @@
+import { FileDrags } from './file-drag';
 import { TransferSchedules } from './transfer-schedules';
 import { scheduleInput } from '../../../packages/contracts/transfer-schedules';
 import { IdentityStore } from './identity-store';
 import { identitySchema } from '../../../packages/contracts/identities';
-import { app,BrowserWindow,dialog,clipboard,ClipboardItem,ipcMain,protocol,net,screen,type IpcMainInvokeEvent,type IpcMainEvent } from 'electron';
+import { app,BrowserWindow,dialog,clipboard,ClipboardItem,ipcMain,protocol,net,screen,nativeImage,type IpcMainInvokeEvent,type IpcMainEvent } from 'electron';
 import { FullscreenController } from './fullscreen';
 import { plainRtf } from './rtf';
 import { join,basename,resolve,sep } from 'node:path';
@@ -34,6 +35,7 @@ const challengeWindows=new Map<string,number>();
 let createWorkbench:(initial?:unknown)=>Promise<BrowserWindow>;
 let identities:IdentityStore;
 let schedules:TransferSchedules;
+let fileDrags:FileDrags;
 const taskCache=new Map<string,TaskSnapshot>();
 const grants=new PathGrants();
 const localFiles=new LocalFiles(grants);
@@ -61,6 +63,8 @@ function authorize(event:IpcMainInvokeEvent|IpcMainEvent){
 }
 function responseError(e:unknown,requestId='local'){return {ok:false,requestId,error:e instanceof z.ZodError?{code:'IPC002',message:'请求参数无效。',retryable:false}:safeError(e)};}
 async function setupIpc(){
+  fileDrags=new FileDrags(join(app.getPath('temp'),'hornet-remote-suite'),backend,taskCache,sender=>[...workbenches].some(window=>!window.isDestroyed()&&window.webContents.id===sender));
+  ipcMain.on('hornet:file-drag',(event,raw:unknown)=>{try{authorize(event);const paths=fileDrags.paths(event.sender.id,z.string().uuid().parse(raw));event.sender.startDrag({file:paths[0],files:paths,icon:nativeImage.createFromPath(join(__dirname,'icon.png'))});}catch(error){if(!event.sender.isDestroyed())event.sender.send('hornet:event',{type:'service.error',message:safeError(error).message});}});
   const treeTransfers=new TreeTransfers(localFiles,grants,backend);
   const credentials=new ProfileCredentials(vault,()=>backend.call('profile.list'),(profile,expectedRevision)=>backend.call('profile.save',{profile,expectedRevision}));
   ipcMain.handle('hornet:request',async(event,raw:unknown)=>{
@@ -91,6 +95,8 @@ async function setupIpc(){
       authorize(event);const window=BrowserWindow.fromWebContents(event.sender)!,fullscreen=controllers.get(window.id)!;const m=z.object({method:z.string(),payload:z.unknown()}).strict().parse(raw);
       let data:unknown;
       switch(m.method){
+        case 'fileDrag.dropped':{const {paths}=z.object({paths:z.array(z.string().min(1).max(32768)).min(1).max(1000)}).strict().parse(m.payload);const dropped=[];for(const path of [...new Set(paths)]){const grant=await grants.create('local-user',path,'upload');dropped.push({pathGrantId:grant.id,name:basename(grant.path)});}data=dropped;break;}
+        case 'fileDrag.prepare':{const p=z.object({connectionId:z.string().uuid(),files:z.array(z.object({path:z.string().min(1).max(4096),name:z.string().min(1).max(255)}).strict()).min(1).max(100)}).strict().parse(m.payload);data=await fileDrags.prepare(event.sender.id,p.connectionId,p.files);break;}
         case 'zmodem.start':{const p=z.object({terminalId:z.string().uuid(),direction:z.enum(['send','receive'])}).strict().parse(m.payload);await backend.call('terminal.inspect',{terminalId:p.terminalId});const selected=await dialog.showOpenDialog(window!,{title:p.direction==='send'?'选择发送文件':'选择 ZMODEM 接收目录',properties:[p.direction==='send'?'openFile':'openDirectory']});data=null;if(!selected.canceled&&selected.filePaths[0]){const path=selected.filePaths[0];const {realpath,lstat}=await import('node:fs/promises'),{dirname}=await import('node:path');if((await lstat(path)).isSymbolicLink())throw new Error('请选择普通文件或目录。');const canonical=await realpath(path);data=await backend.call('zmodem.start',p,{localPath:canonical,localParent:await realpath(dirname(canonical))});}break;}
         case 'workbench.create':z.object({}).strict().parse(m.payload);await createWorkbench();data=null;break;
         case 'workbench.initial':z.object({}).strict().parse(m.payload);data=initialWindows.get(window.id)??{secondary:false};initialWindows.delete(window.id);break;
@@ -290,7 +296,7 @@ async function bootstrap(){
       const active=[...taskCache.values()].filter(t=>['running','queued','verifying','committing','pausing','cancelling'].includes(t.state));
       const choice=await dialog.showMessageBox(window!,{type:'question',buttons:['退出','取消'],defaultId:1,cancelId:1,message:'退出 Hornet？',detail:(active.length?'将尝试暂停活动传输；异常提交需在重启后核对目标文件。':'连接和配置会保留。')+'后台无响应时最多等待 5 秒后退出。终端、图形会话与 LPD 接收将关闭；系统已接收的打印可能继续。'});
       return choice.response===0;
-  },()=>Promise.allSettled([backend.stop(),logs.stopAll('local-user')]),()=>{
+  },()=>Promise.allSettled([backend.stop(),logs.stopAll('local-user')]).then(()=>fileDrags?.stop()),()=>{
       try{backend.forceStop();rdp.stop(true);grants.clear('local-user');pendingPasswords.clear();}
       finally{try{window?.destroy();}finally{app.exit(0);}}
   });

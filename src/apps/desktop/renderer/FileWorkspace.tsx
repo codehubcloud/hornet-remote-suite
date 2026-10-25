@@ -1,3 +1,4 @@
+import { startFileDrag,endFileDrag,useFileDrop } from './file-drag';
 import { pasteToLocal } from './paste-files';
 import { useFileClipboard } from './file-clipboard';
 import { useWorkspacePreferences } from './workspace-preferences';
@@ -26,6 +27,7 @@ export function FileWorkspace({view}:{view:View}){
  const activePreview=useRef(preview);activePreview.current=preview;
  const current=useRef(local);current.current=local;
  const remote=useRef<string|null>(null),request=useRef(0),alive=useRef(true),working=useRef(false);
+ const localDrop=useFileDrop(!!local&&!busy,value=>value.source==='remote',async value=>{const destination=current.current;if(destination)await run(async()=>{await pasteToLocal(value,destination);await load(destination.path);});},undefined,fail);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;request.current++;if(activePreview.current)void window.hornet.treeTransfer.discard(activePreview.current.planId).catch(()=>{});if(current.current)void window.hornet.localFiles.release(current.current.rootId).catch(()=>{});};},[]);
  useEffect(()=>window.hornet.onEvent(event=>{if(event.type==='task.state'&&event.task.state==='succeeded'&&event.task.profileId===view.profile.profileId){setRemoteRefresh(v=>v+1);const p=current.current;if(p)void load(p.path);}}),[]);
  async function load(value:string){
@@ -85,7 +87,7 @@ export function FileWorkspace({view}:{view:View}){
  const entries=local?.entries.filter(e=>e.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))??[];
  return <div className="file-workspace">
   <div className="directory-sync-bar" hidden={ftp||s3}><strong>{tr("目录比较 / 同步")}</strong><label><input type="checkbox" checked={sync} disabled={!local} onChange={toggleSync}/>{tr('同步浏览')}</label><button disabled={busy||!local} onClick={()=>void run(()=>compare('upload'))}>{tr("比较并补齐远端 →")}</button><button disabled={busy||!local} onClick={()=>void run(()=>compare('download'))}>{tr("← 比较并补齐本地")}</button><button disabled={busy||!local} onClick={()=>void run(()=>compare('bidirectional',undefined,'newer'))}>{tr("双向同步…")}</button><span role="status">{busy?tr("正在处理…"):notice}</span></div>
-  <section onPointerDownCapture={()=>useWorkspaceCommands.getState().focus(view.id,'local')} data-file-display={fileDisplay} className="local-file-pane" aria-label={tr("本地文件")}>
+  <section onPointerDownCapture={()=>useWorkspaceCommands.getState().focus(view.id,'local')} data-file-display={fileDisplay} className={"local-file-pane"+localDrop.className} {...localDrop.handlers} aria-label={tr("本地文件")}>
    <div className="file-panel-heading"><strong>{tr("本地文件")}</strong><button disabled={busy} onClick={()=>void choose()}>{tr("选择本地目录")}</button></div>
    {local?<>
     <div className="file-summary" title={local.rootPath}>{local.rootPath}</div>
@@ -98,7 +100,7 @@ export function FileWorkspace({view}:{view:View}){
     </form>
     <input ref={filterInput} className="file-filter" aria-label={tr("筛选本地文件")} placeholder={tr("筛选本地文件…")} value={filter} onChange={e=>setFilter(e.target.value)}/>
     <div className="table-scroll"><table><thead><tr><th><input type="checkbox" aria-label={tr("选择全部本地文件")} checked={entries.some(e=>(e.kind==='file'||e.kind==='directory'))&&entries.filter(e=>(e.kind==='file'||e.kind==='directory')).every(e=>selected.includes(e.path))} onChange={e=>setSelected(e.target.checked?entries.filter(e=>(e.kind==='file'||e.kind==='directory')).map(e=>e.path):[])}/></th><th>{tr("名称")}</th><th>{tr("大小")}</th><th>{tr("修改时间")}</th></tr></thead><tbody>
-     {entries.map(file=><tr key={file.path} onDoubleClick={()=>{if(file.kind==='directory')void load(file.path);}}><td>{(file.kind==='file'||file.kind==='directory')&&<input type="checkbox" aria-label={tr("选择本地文件 ")+file.name} checked={selected.includes(file.path)} onChange={e=>setSelected(old=>e.target.checked?[...old,file.path]:old.filter(p=>p!==file.path))}/>}</td><td>{file.kind==='directory'?<button onClick={()=>void load(file.path)}>▰ {file.name}</button>:file.name}{file.kind==='link'?' ↗':''}</td><td>{file.kind==='file'?formatBytes(file.size):'—'}</td><td>{formatDate(file.modified)}</td></tr>)}
+     {entries.map(file=><tr key={file.path} draggable={file.kind==='file'||file.kind==='directory'} onDragStart={event=>{if((event.target as HTMLElement).closest('input')){event.preventDefault();return;}const paths=selected.includes(file.path)?selected:[file.path];startFileDrag(event,{source:'local',rootId:local.rootId,paths});}} onDragEnd={endFileDrag} onDoubleClick={()=>{if(file.kind==='directory')void load(file.path);}}><td>{(file.kind==='file'||file.kind==='directory')&&<input type="checkbox" aria-label={tr("选择本地文件 ")+file.name} checked={selected.includes(file.path)} onChange={e=>setSelected(old=>e.target.checked?[...old,file.path]:old.filter(p=>p!==file.path))}/>}</td><td>{file.kind==='directory'?<button onClick={()=>void load(file.path)}>▰ {file.name}</button>:file.name}{file.kind==='link'?' ↗':''}</td><td>{file.kind==='file'?formatBytes(file.size):'—'}</td><td>{formatDate(file.modified)}</td></tr>)}
     </tbody></table>{!entries.length&&<p className="empty">{tr("此目录没有匹配文件")}</p>}</div>
     <p className="footnote">{local.entries.length}{tr(" 个条目")}{local.truncated?tr(" · 仅显示前 5000 项"):''}{tr("。文件传输进度显示在任务中心。")}</p>
    </>:<div className="empty">{tr("选择本地工作目录后，可浏览子目录、批量上传，并将右侧文件下载到当前目录。")}</div>}

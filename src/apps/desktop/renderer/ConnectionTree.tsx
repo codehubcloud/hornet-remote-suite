@@ -1,3 +1,4 @@
+import { SystemIcon } from './SystemIcon';
 import { t as tr } from './i18n';
 import { useEffect,useRef,useState,type MouseEvent,type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -52,7 +53,7 @@ export function ConnectionTree({profiles,groups,query,pending,revealGroup,curren
    {open&&<ul className="group-children">
     {[...node.groups.values()].sort((a,b)=>a.name.localeCompare(b.name)).filter(visible).map(render)}
     {node.profiles.filter(matches).map(p=><li className={'host'+(selected===p.profileId?' selected':'')} key={p.profileId} tabIndex={0} aria-label={tr("会话 ")+p.name} title={p.name+' · '+p.host+':'+p.port+(p.protocol==='ftp'||p.session?.s3?tr(' · 双击打开文件'):tr(' · 双击打开终端'))} onClick={()=>setSelected(p.profileId)} onDoubleClick={e=>{if(!pending&&!(e.target as HTMLElement).closest('button'))onConnect(p,'terminal');}} onContextMenu={e=>profileContext(e,p)} onKeyDown={e=>{if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10'))profileContext(e,p);else if(e.target===e.currentTarget&&e.key==='Enter'&&!pending){e.preventDefault();onConnect(p,'terminal');}}}>
-     <div className="host-top"><span className="host-symbol">›_</span><div><strong>{p.name}</strong><small>{p.protocol==='telnet'?'Telnet · ':p.protocol==='local'?'LOCAL · ':p.protocol==='serial'?'SERIAL · ':p.username+'@'}{p.host}:{p.port}</small></div><button title={tr("会话操作")} aria-label={tr("操作 ")+p.name} onClick={e=>profileContext(e,p)}>⋯</button></div>
+     <div className="host-top"><SystemIcon profile={p}/><div><strong>{p.name}</strong><small>{p.protocol==='telnet'?'Telnet · ':p.protocol==='local'?'LOCAL · ':p.protocol==='serial'?'SERIAL · ':p.username+'@'}{p.host}:{p.port}</small></div><button title={tr("会话操作")} aria-label={tr("操作 ")+p.name} onClick={e=>profileContext(e,p)}>⋯</button></div>
     </li>)}
     {!term&&!node.groups.size&&!node.profiles.length&&<li className="group-empty">{tr("暂无连接，点击 ＋ 添加")}</li>}
    </ul>}

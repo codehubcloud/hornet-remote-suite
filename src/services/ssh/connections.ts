@@ -1,3 +1,4 @@
+import { detectRemoteSystem } from './remote-system';
 import { Client,utils,type SFTPWrapper,type ClientChannel } from 'ssh2';
 import { randomUUID, createHash } from 'node:crypto';
 import type { Storage } from '../../packages/storage/database';
@@ -175,6 +176,7 @@ export class Connections {
         settled=true;pauseNetwork();clearTimeout(deadline);signal.removeEventListener('abort',cancel);password=undefined;privateKey=undefined;passphrase=undefined;
         if(this.stopped){client.destroy();reject(new AppError('IPC006','服务已停止。'));return;}
         this.items.set(id,c);state('ready');resolve(c);
+        if(!isolated)void detectRemoteSystem(client).then(system=>{if(system&&this.items.has(id)&&this.store.rememberSystem(p,system))this.emit(owner,{type:'profile.system',profileId:p.profileId,system});}).catch(()=>{});
       });
       try {
         if(signal.aborted){cancel();return;}

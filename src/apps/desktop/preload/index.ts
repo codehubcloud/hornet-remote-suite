@@ -1,4 +1,4 @@
-import { contextBridge,ipcRenderer } from 'electron';
+import { contextBridge,ipcRenderer,webUtils } from 'electron';
 import type { HornetApi,HornetEvent,Method,Result } from '../../../packages/contracts';
 function requestId(){// crypto.randomUUID is available in the isolated preload global.
   return crypto.randomUUID();
@@ -14,6 +14,7 @@ function clipboardCall<T>(method:string,payload:unknown={}):Promise<T>{
  clipboardSequence=request.catch(()=>{});return request;
 }
 const api:HornetApi={
+ fileDrag:{dropped:files=>{const paths=files.map(file=>webUtils.getPathForFile(file));if(!paths.length||paths.length>1000||paths.some(path=>!path))return Promise.reject(new Error('Please drop files from your file manager.'));return local('fileDrag.dropped',{paths});},prepare:(connectionId,files)=>local('fileDrag.prepare',{connectionId,files}),start:token=>ipcRenderer.send('hornet:file-drag',token)},
  zmodem:{start:(terminalId,direction)=>local('zmodem.start',{terminalId,direction}),list:()=>call('zmodem.list'),cancel:id=>call('zmodem.cancel',{id})},
  workbench:{create:()=>local('workbench.create'),cascade:()=>local('workbench.cascade'),move:payload=>local('workbench.move',payload),initial:()=>local('workbench.initial'),close:()=>local('workbench.close'),onClose:listener=>{ipcRenderer.on('hornet:close-workbench',listener);return()=>ipcRenderer.removeListener('hornet:close-workbench',listener);}},
  schedules:{list:()=>local('schedules.list'),create:input=>local('schedules.create',input),run:id=>local('schedules.run',{id}),cancel:id=>local('schedules.cancel',{id}),remove:id=>local('schedules.remove',{id})},

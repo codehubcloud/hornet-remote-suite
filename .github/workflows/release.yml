@@ -8,7 +8,7 @@ on:
       version:
         description: 'Version matching src/package.json, without v'
         required: true
-        default: '0.0.30'
+        default: '0.0.31'
       allow_public_source_release:
         description: 'Explicitly authorize publishing from this public source repository for this run'
         type: boolean
@@ -46,10 +46,12 @@ jobs:
         env:
           REQUESTED_VERSION: ${{ github.event.inputs.version || github.ref_name }}
           SOURCE_PRIVATE: ${{ github.event.repository.private }}
-          ALLOW_PUBLIC_SOURCE_RELEASE: ${{ (github.event_name == 'workflow_dispatch' && inputs.allow_public_source_release) || github.ref == 'refs/tags/v0.0.30' }}
+          ALLOW_PUBLIC_SOURCE_RELEASE: ${{ (github.event_name == 'workflow_dispatch' && inputs.allow_public_source_release) || github.ref == 'refs/tags/v0.0.31' }}
         run: node tools/check-release-version.mjs
       - run: npm ci
       - run: npm run check
+      - name: Test system icons and drag-and-drop transfers with real SSH/SFTP
+        run: npm run test:file-drag
       - run: npm run test:release
       - name: Test Windows installer running-app choices and resumed setup
         run: npm run test:installer

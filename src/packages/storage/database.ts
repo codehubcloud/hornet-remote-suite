@@ -1,3 +1,4 @@
+import { remoteSystemSchema,type RemoteSystem } from '../contracts/remote-system';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -79,9 +80,13 @@ export class Storage {
   profiles(): Profile[] {
     return (this.db.prepare('SELECT c.*, h.group_path, k.kind FROM connection_profile c JOIN host_profile h ON c.host_id=h.id JOIN credential_profile k ON k.id=c.credential_id ORDER BY c.name').all() as Record<string,unknown>[]).map(row => {
       const endpoint = JSON.parse(String(row.endpoint_json)) as {host:string;port:number};
-      const options=JSON.parse(String(row.options_json)) as {description?:string;jumpProfileIds?:string[];encoding?:string;ftpSecurity?:string;session?:Profile['session']};
-      return profileSchema.parse({...(options.session?{session:options.session}:{}),...(row.protocol==='ftp'?{ftpSecurity:options.ftpSecurity??'none'}:{}),...(options.encoding?{encoding:options.encoding}:{}),...(options.jumpProfileIds?.length?{jumpProfileIds:options.jumpProfileIds}:{}),...(options.description?{description:options.description}:{}),updatedAt:row.updated_at,...(row.protocol==='telnet'||row.protocol==='rlogin'||row.protocol==='ftp'||row.protocol==='local'||row.protocol==='serial'||row.protocol==='rdp'?{protocol:row.protocol}:{}),profileId:row.id,name:row.name,...endpoint,username:row.username,group:row.group_path,authType:row.kind,revision:row.revision});
+      const options=JSON.parse(String(row.options_json)) as {remoteSystem?:RemoteSystem;description?:string;jumpProfileIds?:string[];encoding?:string;ftpSecurity?:string;session?:Profile['session']};
+      return profileSchema.parse({...(options.remoteSystem?{remoteSystem:options.remoteSystem}:{}),...(options.session?{session:options.session}:{}),...(row.protocol==='ftp'?{ftpSecurity:options.ftpSecurity??'none'}:{}),...(options.encoding?{encoding:options.encoding}:{}),...(options.jumpProfileIds?.length?{jumpProfileIds:options.jumpProfileIds}:{}),...(options.description?{description:options.description}:{}),updatedAt:row.updated_at,...(row.protocol==='telnet'||row.protocol==='rlogin'||row.protocol==='ftp'||row.protocol==='local'||row.protocol==='serial'||row.protocol==='rdp'?{protocol:row.protocol}:{}),profileId:row.id,name:row.name,...endpoint,username:row.username,group:row.group_path,authType:row.kind,revision:row.revision});
     });
+  }
+  rememberSystem(profile:Profile,system:RemoteSystem){
+    const result=this.db.prepare("UPDATE connection_profile SET options_json=json_set(options_json,'$.remoteSystem',?) WHERE id=? AND protocol=? AND endpoint_json=? AND username=?").run(remoteSystemSchema.parse(system),profile.profileId,profile.protocol??'ssh',JSON.stringify({host:profile.host,port:profile.port}),profile.username);
+    return Number(result.changes)===1;
   }
   profile(id: string):Profile { const p=this.profiles().find(p=>p.profileId===id); if(!p) throw new AppError('PROFILE_MISSING','连接配置不存在。'); return p; }
   saveProfile(profile:Profile, expectedRevision:number):Profile { return this.transaction(()=>{const saved=this.saveInner(profile,expectedRevision);this.validateRoutes();return saved;}); }
@@ -91,14 +96,16 @@ export class Storage {
   }
   private saveInner(input:Profile,expected:number):Profile {
     const p=profileSchema.parse(input);
-    const existing=this.db.prepare('SELECT revision FROM connection_profile WHERE id=?').get(p.profileId) as {revision:number}|undefined;
+    const existing=this.db.prepare('SELECT revision,protocol,endpoint_json FROM connection_profile WHERE id=?').get(p.profileId) as {revision:number;protocol:string;endpoint_json:string}|undefined;
     if((existing?.revision??0)!==expected) throw new AppError('PROFILE_CONFLICT','配置已被修改，请刷新后重试。');
     const revision=expected+1,updatedAt=Date.now();
     this.db.prepare('INSERT INTO host_profile(id,name,group_path) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,group_path=excluded.group_path,revision=revision+1').run(p.profileId,p.name,p.group);
     this.db.prepare('INSERT INTO credential_profile(id,name,kind) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,kind=excluded.kind,revision=revision+1').run(p.profileId,p.name,p.authType);
     this.db.prepare(`INSERT INTO connection_profile(id,host_id,credential_id,name,protocol,endpoint_json,username,revision,updated_at,options_json) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,protocol=excluded.protocol,endpoint_json=excluded.endpoint_json,username=excluded.username,revision=excluded.revision,identity_revision=identity_revision+1,updated_at=excluded.updated_at,options_json=json_patch(json_remove(json_set(CASE WHEN excluded.protocol='ftp' THEN json_set(connection_profile.options_json,'$.ftpSecurity',json_extract(excluded.options_json,'$.ftpSecurity')) ELSE json_remove(connection_profile.options_json,'$.ftpSecurity') END,'$.encoding',json_extract(excluded.options_json,'$.encoding'),'$.description',json_extract(excluded.options_json,'$.description'),'$.jumpProfileIds',json_extract(excluded.options_json,'$.jumpProfileIds')),'$.session'),json_object('session',json_extract(excluded.options_json,'$.session')))`).run(p.profileId,p.profileId,p.profileId,p.name,p.protocol??'ssh',JSON.stringify({host:p.host,port:p.port}),p.username,revision,updatedAt,JSON.stringify({session:p.session,ftpSecurity:p.ftpSecurity,encoding:p.encoding??'utf8',description:p.description??'',jumpProfileIds:p.jumpProfileIds??[]}));
-    const {protocol,description,jumpProfileIds,...fields}=p;
-    return {...fields,encoding:p.encoding??'utf8',...(protocol==='telnet'||protocol==='rlogin'||protocol==='ftp'||protocol==='local'||protocol==='serial'||protocol==='rdp'?{protocol}:{}),...(description?{description}:{}),...(jumpProfileIds?.length?{jumpProfileIds}:{}),revision,updatedAt};
+    if(existing&&(existing.protocol!==(p.protocol??'ssh')||existing.endpoint_json!==JSON.stringify({host:p.host,port:p.port})))this.db.prepare("UPDATE connection_profile SET options_json=json_remove(options_json,'$.remoteSystem') WHERE id=?").run(p.profileId);
+    const {protocol,description,jumpProfileIds,remoteSystem,...fields}=p;
+    const detected=this.profile(p.profileId).remoteSystem;
+    return {...fields,...(detected?{remoteSystem:detected}:{}),encoding:p.encoding??'utf8',...(protocol==='telnet'||protocol==='rlogin'||protocol==='ftp'||protocol==='local'||protocol==='serial'||protocol==='rdp'?{protocol}:{}),...(description?{description}:{}),...(jumpProfileIds?.length?{jumpProfileIds}:{}),revision,updatedAt};
   }
   removeGroup(path:string,members:{profileId:string;revision:number}[]) {
     const normalize=(value:string)=>value.split('/').map(s=>s.trim()).filter(Boolean).join('/')||'默认分组';

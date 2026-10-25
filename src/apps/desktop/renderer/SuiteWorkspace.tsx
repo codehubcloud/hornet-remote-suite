@@ -1,3 +1,4 @@
+import { SystemIcon } from './SystemIcon';
 import { t as tr } from './i18n';
 import { useState } from 'react';
 import type { Profile } from '../../../packages/contracts';
@@ -24,7 +25,7 @@ export function StartPage({recent,pending,create,connect,openTool}:{recent:strin
  return <section className="start-page" aria-label={tr("快速开始")}>
   <div className="start-connect"><h1>{tr("快速连接")}</h1><form onSubmit={e=>{e.preventDefault();quick();}}><input autoComplete="off" aria-label={tr("开始页连接地址")} list="saved-session-names" placeholder={tr("主机、IP 地址或会话名称")} value={address} onChange={e=>setAddress(e.target.value)}/><button className="primary" disabled={pending||!address.trim()}>{tr("连接")}</button><button type="button" onClick={()=>create()}>{tr("新建会话")}</button></form><p className="muted">{tr("SSH / SFTP · Telnet · 本地和串口终端可从“文件”菜单打开")}</p></div>
   <div className="start-tools" aria-label={tr("工作区入口")}>{suiteTools.filter(t=>t.id!=='tool:capabilities').map(t=><button key={t.id} onClick={()=>openTool(t.id)}><strong>{tr(t.name)}</strong><small>{tr(t.description)}</small></button>)}</div>
-  <section className="recent-sessions"><h2>{tr("最近会话")}</h2>{sessions.length?sessions.slice(0,8).map(p=><div className="recent-session" key={p.profileId}><button disabled={pending} onClick={()=>connect(p,'terminal')}><strong>{p.name}</strong><small>{p.group} · {p.host}:{p.port}</small></button>{!p.session?.mosh&&!['telnet','rlogin','serial','local','rdp'].includes(p.protocol??'ssh')&&<button disabled={pending} onClick={()=>connect(p,'files')}>{tr("文件")}</button>}</div>):<p className="muted">{tr("从左侧会话树选择连接，或在上方输入地址。")}</p>}</section>
+  <section className="recent-sessions"><h2>{tr("最近会话")}</h2>{sessions.length?sessions.slice(0,8).map(p=><div className="recent-session" key={p.profileId}><button disabled={pending} onClick={()=>connect(p,'terminal')}><SystemIcon profile={p}/><strong>{p.name}</strong><small>{p.group} · {p.host}:{p.port}</small></button>{!p.session?.mosh&&!['telnet','rlogin','serial','local','rdp'].includes(p.protocol??'ssh')&&<button disabled={pending} onClick={()=>connect(p,'files')}>{tr("文件")}</button>}</div>):<p className="muted">{tr("从左侧会话树选择连接，或在上方输入地址。")}</p>}</section>
  </section>;
 }
 

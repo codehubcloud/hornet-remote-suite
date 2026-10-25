@@ -1,5 +1,11 @@
 // Application copy only. Never translate user names, paths or terminal output.
 export const english:Record<string,string> = {
+"可拖入本地文件上传；下载到桌面请先点击“准备拖出”。":"Drop local files to upload. To download to the desktop, click Prepare to Drag first.",
+"先下载并校验文件，再拖到桌面或资源管理器。":"Download and verify the file first, then drag it to the desktop or file manager.",
+"正在准备拖出…":"Preparing to drag…",
+"拖到桌面":"Drag to desktop",
+"准备拖出":"Prepare to drag",
+"可拖入本地文件上传；将远端文件拖到左侧下载。":"Drop local files here to upload; drag remote files to the left pane to download.",
 "此版本尚未提供所选语言的更新说明，请访问发布页面。":"Release notes are not available in the selected language for this version. Visit the release page.",
 "传输类型":"Transfer type",
 "二进制":"Binary",

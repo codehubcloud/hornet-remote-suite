@@ -212,3 +212,8 @@
 .terminal-rules-dialog label.check{display:flex;align-items:center;gap:8px}.terminal-rules-dialog label.check input{width:auto;margin:0}.transfer-schedules{width:min(860px,94vw)}.schedule-list{max-height:32vh;overflow:auto}.schedule-list article{border-top:1px solid var(--border);padding:10px 0;overflow-wrap:anywhere}.ftp-command-output{max-height:35vh;overflow:auto;white-space:pre-wrap}.identity-manager .check input{width:auto}.identity-manager textarea{width:100%;min-height:90px}
 
 .file-workspace>.local-file-pane,.file-workspace>.remote-file-pane{overflow:auto}.file-workspace .table-scroll{min-height:140px;flex-shrink:0}.file-workspace .files{flex:1 0 auto;min-height:440px}.local-file-browser{overflow:auto}.local-file-browser>.table-scroll{min-height:140px}
+
+.system-icon{display:inline-flex;width:22px;height:22px;flex-shrink:0;vertical-align:middle;margin-right:7px}.system-icon svg{width:100%;height:100%}.host-top .system-icon{margin-right:0}.file-drop-active{outline:2px dashed var(--c-36c9b9);outline-offset:-3px;background:var(--c-17283c)}tr[draggable=true]{cursor:grab}.native-file-drag[draggable=true]{cursor:grab;border-color:var(--c-36c9b9)}
+.file-drag-hint{font-size:11px;color:var(--c-829bb6);padding:5px 10px;margin:0;border-bottom:1px solid var(--c-233347)}
+
+.recent-session .system-icon{float:left;margin-top:4px;margin-right:10px}
