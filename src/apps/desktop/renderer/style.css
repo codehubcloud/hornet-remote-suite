@@ -221,7 +221,7 @@
 /* File workspace: independent panes above a docked transfer grid. */
 .file-workspace>.local-file-pane,.file-workspace>.remote-file-pane{overflow:hidden;min-width:0;min-height:0;border:0}
 .file-workspace .files{flex:1 1 0;min-height:0;overflow:hidden}
-.file-workspace .table-scroll{flex:1 1 0;min-height:0;overflow:auto}
+.file-workspace .table-scroll{flex:1 1 0;min-height:0;overflow:auto;scroll-padding-top:38px}
 .file-workspace .local-filebar,.file-workspace .filebar{padding:6px 8px;gap:4px}
 .file-workspace .local-filebar button,.file-workspace .filebar button{padding:4px 7px}
 .file-workspace .file-panel-heading{min-height:36px;padding:5px 8px}
@@ -264,6 +264,13 @@
 .file-workspace .files>.filebar input{order:0;flex-basis:auto;min-width:100px}
 .file-workspace .files>.file-drag-hint{display:none}
 .file-workspace .file-filter{height:28px;margin:4px 8px;flex-shrink:0}
+.file-workspace{container-type:size}
+@container(max-height:420px){
+ .file-workspace>.local-file-pane,.file-workspace>.remote-file-pane{overflow:auto}
+ .file-workspace .local-file-pane>*{flex-shrink:0}
+ .file-workspace .files{flex:1 0 auto;min-height:340px}
+ .file-workspace .table-scroll{flex:1 0 110px;min-height:110px}
+}
 .transfer-table{min-width:1080px}
 .transfer-table th:nth-child(1){width:130px}.transfer-table th:nth-child(2){width:120px}.transfer-table th:nth-child(3){width:120px}.transfer-table th:nth-child(4){width:110px}.transfer-table th:nth-child(5),.transfer-table th:nth-child(7){width:auto}.transfer-table th:nth-child(6){width:30px}.transfer-table th:nth-child(8){width:75px}.transfer-table th:nth-child(9){width:90px}.transfer-table th:nth-child(10){width:70px}.transfer-table th:nth-child(11){width:95px}
 .transfer-table td{height:30px;padding:3px 7px}

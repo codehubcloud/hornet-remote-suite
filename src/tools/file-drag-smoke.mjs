@@ -27,6 +27,8 @@ try{
  await native.dispatchEvent('dragstart',{dataTransfer:await page.evaluateHandle(()=>new DataTransfer())});await expect.poll(()=>app.evaluate(()=>globalThis.dragPayload?.files?.length)).toBe(1);const payload=await app.evaluate(()=>globalThis.dragPayload);expect(payload.iconEmpty).toBe(false);expect(await readFile(payload.files[0],'utf8')).toBe('hello 世界\n');
  await page.getByRole('button',{name:'打开文件',exact:true}).click();await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},local);
  const left=page.locator('.local-file-pane'),right=page.locator('.remote-file-pane .files');await left.getByRole('button',{name:'选择本地目录',exact:true}).click();
+ // Keep both panes usable when the automatic bottom queue leaves little height.
+ await page.setViewportSize({width:1024,height:650});
  await left.getByLabel('选择本地文件 upload.txt',{exact:true}).check();await left.getByLabel('选择本地文件 second.txt',{exact:true}).check();await drag(page,left.getByRole('row').filter({hasText:'upload.txt'}),right);
  await expect.poll(()=>server.files.get('/upload.txt')?.toString()).toBe('LOCAL DRAG');await expect.poll(()=>server.files.get('/second.txt')?.toString()).toBe('SECOND DRAG');
  await drag(page,right.getByRole('row').filter({hasText:'hello.txt'}),left);await expect.poll(async()=>{try{return await readFile(join(local,'hello.txt'),'utf8');}catch{return '';}}).toBe('hello 世界\n');
