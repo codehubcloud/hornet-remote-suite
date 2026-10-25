@@ -68,6 +68,7 @@ try{
  if(process.platform==='win32'){
   const current=await page.locator('[data-tab-view-id]').getAttribute('data-tab-view-id');await sub(current,'新选项卡组','垂直分割');await expect(page.locator('.terminal-cell:visible')).toHaveCount(2);
   await expect(page.locator('.terminal-cell').nth(1)).toContainText('PowerShell');const local=await page.locator('[data-tab-view-id]').last().getAttribute('data-tab-view-id');
+  page.once('dialog',async dialog=>{expect(dialog.message()).toContain('PowerShell');expect(dialog.message()).toContain('断开并关闭这个标签');await dialog.accept();});
   await item(current,'关闭所有本地标签');await expect(page.locator('.terminal-cell')).toHaveCount(1);await expect(tab(local)).toHaveCount(0);
  }
  expect(errors).toEqual([]);await expect(page.locator('.error-banner')).toHaveCount(0);
