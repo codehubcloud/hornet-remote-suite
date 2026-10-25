@@ -1,4 +1,7 @@
-import { t as tr } from './i18n';
+import { t as tr,formatDate } from './i18n';
+import { useWorkspacePreferences } from './workspace-preferences';
+import { useTransferActivity } from './transfer-queue';
+import { activeTransferStates,transferStateLabels } from '../../../packages/core/transfer-progress';
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from './store';
@@ -7,7 +10,7 @@ import { TaskList } from './TaskList';
 type Dock = 'left' | 'bottom' | 'floating';
 type Layout = {dock:Dock;x:number;y:number;width:number;height:number;collapsed:boolean};
 const key='hornet.tasks.layout';
-const defaults:Layout={dock:'left',x:360,y:160,width:420,height:180,collapsed:false};
+const defaults:Layout={dock:'bottom',x:360,y:160,width:420,height:210,collapsed:false};
 function fit(layout:Layout):Layout {
  const width=Math.max(260,Math.min(layout.width,window.innerWidth));
  const height=Math.max(80,Math.min(layout.height,window.innerHeight-64));
@@ -22,9 +25,22 @@ function restore():Layout {
 export function TaskCenter({activeId,quiet=false}:{activeId:string;quiet?:boolean}) {
  const [layout,setLayout]=useState(restore),[slot,setSlot]=useState<HTMLElement|null>(null),[target,setTarget]=useState<Dock|null>(null);
  const current=useRef(layout);current.current=layout;
+ const activity=useTransferActivity();
+ const preferences=useWorkspacePreferences(state=>state.value),[tab,setTab]=useState<'transfers'|'log'>('transfers');
+ const mountedAt=useRef(Date.now()),seen=useRef(new Set<string>()),previousActive=useRef(new Set<string>()),lastStates=useRef(new Map<string,string>());
+ const [journal,setJournal]=useState<{at:number;name:string;state:string;error?:string}[]>([]);
  const panel=useRef<HTMLElement>(null);
  const gesture=useRef<{kind:'move'|'resize';x:number;y:number;layout:Layout;original:Layout;floating:boolean}|null>(null);
  const tasks=useStore(s=>s.tasks),active=tasks.filter(t=>['queued','running','verifying','committing','pausing'].includes(t.state)).length;
+ useEffect(()=>{if(!activity.requests)return;setLayout(value=>fit({...value,dock:'bottom',collapsed:false,height:Math.max(190,value.height)}));setTab('transfers');if(!useWorkspacePreferences.getState().value.transferQueue)useWorkspacePreferences.getState().change({transferQueue:true});},[activity.requests]);
+ useEffect(()=>{
+  const activeIds=new Set(tasks.filter(task=>activeTransferStates.has(task.state)).map(task=>task.taskId));
+  const started=tasks.some(task=>(!seen.current.has(task.taskId)&&(task.createdAt??0)>=mountedAt.current)||(activeIds.has(task.taskId)&&!previousActive.current.has(task.taskId)));
+  const entries=tasks.filter(task=>lastStates.current.get(task.taskId)!==task.state).map(task=>({at:task.updatedAt,name:task.name,state:task.state,error:task.error}));
+  if(entries.length)setJournal(value=>[...value,...entries].slice(-500));
+  for(const task of tasks){seen.current.add(task.taskId);lastStates.current.set(task.taskId,task.state);}previousActive.current=activeIds;
+  if(started){setLayout(value=>fit({...value,dock:'bottom',collapsed:false,height:Math.max(190,value.height)}));setTab('transfers');if(!useWorkspacePreferences.getState().value.transferQueue)useWorkspacePreferences.getState().change({transferQueue:true});}
+ },[tasks]);
  useLayoutEffect(()=>{
   const view=Array.from(document.querySelectorAll<HTMLElement>('.view')).find(el=>el.dataset.viewId===activeId);
   setSlot(view?.querySelector<HTMLElement>('.task-dock-slot')??null);
@@ -61,7 +77,7 @@ export function TaskCenter({activeId,quiet=false}:{activeId:string;quiet?:boolea
   gesture.current={kind,x:e.clientX,y:e.clientY,layout:initial,original,floating:original.dock==='floating'};
   e.preventDefault();
  }
- if(quiet&&!tasks.length)return null;
+ if((quiet&&!tasks.length&&!activity.pending)||!preferences.transferQueue)return null;
  const floating=layout.dock==='floating';
  const content=<section ref={panel} aria-label={tr("任务中心")} data-dock={layout.dock} className={'tasks dockable-tasks'+(floating?' floating-tasks':'')+(layout.collapsed?' tasks-collapsed':'')}
   style={{height:layout.collapsed?30:layout.height,...(floating?{left:layout.x,top:layout.y,width:layout.width}: {})}}>
@@ -72,7 +88,7 @@ export function TaskCenter({activeId,quiet=false}:{activeId:string;quiet?:boolea
    <select aria-label={tr("任务中心位置")} value={layout.dock} onChange={e=>setLayout(s=>fit({...s,dock:e.target.value as Dock}))}><option value="left">{tr("左侧")}</option><option value="bottom">{tr("底部")}</option><option value="floating">{tr("浮动")}</option></select>
    <button aria-label={layout.collapsed?tr("展开任务中心"):tr("折叠任务中心")} aria-expanded={!layout.collapsed} onClick={()=>setLayout(s=>fit({...s,collapsed:!s.collapsed}))}>{layout.collapsed?'＋':'−'}</button>
   </div>
-  {!layout.collapsed&&<TaskList/>}
+  {!layout.collapsed&&<><div className="transfer-tabs" role="tablist" aria-label={tr('传输队列')}><button role="tab" aria-selected={tab==='transfers'} onClick={()=>setTab('transfers')}>{tr('传输')} ({tasks.length})</button><button role="tab" aria-selected={tab==='log'} onClick={()=>setTab('log')}>{tr('日志')}</button></div>{activity.pending>0&&<div className="transfer-preparing" role="status">{tr('正在准备传输…')}</div>}{tab==='transfers'?<TaskList compact={layout.dock==='left'||floating&&layout.width<800}/>:<div className="transfer-log" role="log" aria-label={tr('传输日志')}>{journal.map((entry,index)=><div key={index}><time>{formatDate(entry.at)}</time> <strong>{entry.name}</strong> · {tr(transferStateLabels[entry.state])}{entry.error?' · '+entry.error:''}</div>)}</div>}</>}
   {target&&<div className="task-drop-hint">{tr("松开停靠到")}{target==='left'?tr("文件列表下方"):tr("工作区底部")}{tr("· Esc 取消")}</div>}
   {floating&&!layout.collapsed&&<div className="task-size-grip" role="separator" aria-label={tr("调整浮动任务中心大小")} tabIndex={0} onPointerDown={e=>begin(e,'resize')} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();setLayout(s=>fit({...s,width:s.width+(e.key==='ArrowRight'?20:e.key==='ArrowLeft'?-20:0),height:s.height+(e.key==='ArrowDown'?20:e.key==='ArrowUp'?-20:0)}));}}}/>}
  </section>;

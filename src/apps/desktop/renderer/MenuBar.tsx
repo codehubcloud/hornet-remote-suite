@@ -15,18 +15,20 @@ export function MenuBar({groups,reveal}:{groups:MenuGroup[];reveal?:()=>void}){
  useEffect(()=>{if(open&&!current)setOpen(null);},[open,current]);
  return <nav ref={root} className="session-menubar reference-menubar" aria-label={tr('应用菜单')}>{groups.map((g,i)=><div className="session-menu" key={g.label}><button aria-label={tr(g.label)} data-menu={g.label} aria-haspopup="menu" aria-expanded={open===g.label} onClick={()=>setOpen(open===g.label?null:g.label)} onPointerEnter={()=>{if(open)setOpen(g.label);}} onKeyDown={e=>{if(e.key==='ArrowDown'){e.preventDefault();setOpen(g.label);}if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const next=groups[(i+(e.key==='ArrowRight'?1:groups.length-1))%groups.length];root.current?.querySelector<HTMLButtonElement>('[data-menu="'+next.label+'"]')?.focus();if(open)setOpen(next.label);}}}>{tr(g.label)}<span aria-hidden="true">({g.access})</span></button>{open===g.label&&<Popup items={g.items} label={g.label} dismiss={()=>setOpen(null)} move={direction=>setOpen(groups[(i+direction+groups.length)%groups.length].label)}/>}</div>)}</nav>;
 }
-export function ContextMenu({items,label,x,y,dismiss}:{items:MenuItem[];label:string;x:number;y:number;dismiss:()=>void}){
+export function ContextMenu({items,label,x,y,dismiss,anchor}:{items:MenuItem[];label:string;x:number;y:number;dismiss:()=>void;anchor?:HTMLElement}){
  const root=useRef<HTMLDivElement>(null);
  useEffect(()=>{const outside=(event:Event)=>{if(!root.current?.contains(event.target as Node))dismiss();},key=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();dismiss();}};
-  window.addEventListener('pointerdown',outside,true);window.addEventListener('scroll',outside,true);window.addEventListener('keydown',key);window.addEventListener('resize',dismiss);window.addEventListener('blur',dismiss);
-  return()=>{window.removeEventListener('pointerdown',outside,true);window.removeEventListener('scroll',outside,true);window.removeEventListener('keydown',key);window.removeEventListener('resize',dismiss);window.removeEventListener('blur',dismiss);};
- },[dismiss]);
+  const initial=anchor?.getBoundingClientRect();
+  const scroll=(event:Event)=>{if(root.current?.contains(event.target as Node))return;const current=anchor?.getBoundingClientRect();if(anchor?.isConnected&&initial&&current&&Math.abs(initial.x-current.x)<1&&Math.abs(initial.y-current.y)<1)return;dismiss();};
+  window.addEventListener('pointerdown',outside,true);window.addEventListener('scroll',scroll,true);window.addEventListener('keydown',key);window.addEventListener('resize',dismiss);window.addEventListener('blur',dismiss);
+  return()=>{window.removeEventListener('pointerdown',outside,true);window.removeEventListener('scroll',scroll,true);window.removeEventListener('keydown',key);window.removeEventListener('resize',dismiss);window.removeEventListener('blur',dismiss);};
+ },[dismiss,anchor]);
  return createPortal(<div ref={root} className="terminal-tab-menu" onContextMenu={event=>event.preventDefault()}><Popup items={items} label={label} dismiss={dismiss} point={{x,y}}/></div>,document.body);
 }
 function Popup({items,label,dismiss,back,move,point}:{items:MenuItem[];label:string;dismiss:()=>void;back?:()=>void;move?:(direction:number)=>void;point?:{x:number;y:number}}){
  const [child,setChild]=useState<number|null>(null),ref=useRef<HTMLDivElement>(null),[position,setPosition]=useState<{left:number;top:number}>();
  useLayoutEffect(()=>{const node=ref.current;if(!node)return;setPosition(menuPosition(node.parentElement!.getBoundingClientRect(),{width:node.offsetWidth,height:node.offsetHeight},{width:window.innerWidth,height:window.innerHeight},!!back,point));},[label,point?.x,point?.y]);
- useEffect(()=>{ref.current?.querySelector<HTMLButtonElement>(':scope > .menu-entry > button:not(:disabled)')?.focus();},[]);
+ useEffect(()=>{ref.current?.querySelector<HTMLButtonElement>(':scope > .menu-entry > button:not(:disabled)')?.focus({preventScroll:true});},[]);
  return <div ref={ref} style={position} role="menu" aria-label={tr(label)} className={'session-menu-popup reference-popup'+(back?' nested-menu':'')} onKeyDown={e=>{
   if((e.target as HTMLElement).closest('[role=menu]')!==e.currentTarget)return;
   const buttons=Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>(':scope > .menu-entry > button:not(:disabled)')),index=buttons.indexOf(document.activeElement as HTMLButtonElement);

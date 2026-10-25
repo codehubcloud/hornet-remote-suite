@@ -1,4 +1,6 @@
 import { FileDrags } from './file-drag';
+import { FileTransfers } from './file-transfers';
+import { transferRequestSchema,conflictActionSchema } from '../../../packages/contracts/file-transfer';
 import { TransferSchedules } from './transfer-schedules';
 import { scheduleInput } from '../../../packages/contracts/transfer-schedules';
 import { IdentityStore } from './identity-store';
@@ -63,6 +65,7 @@ function authorize(event:IpcMainInvokeEvent|IpcMainEvent){
 }
 function responseError(e:unknown,requestId='local'){return {ok:false,requestId,error:e instanceof z.ZodError?{code:'IPC002',message:'请求参数无效。',retryable:false}:safeError(e)};}
 async function setupIpc(){
+  const fileTransfers=new FileTransfers(grants,backend);
   fileDrags=new FileDrags(join(app.getPath('temp'),'hornet-remote-suite'),backend,taskCache,sender=>[...workbenches].some(window=>!window.isDestroyed()&&window.webContents.id===sender));
   ipcMain.on('hornet:file-drag',(event,raw:unknown)=>{try{authorize(event);const paths=fileDrags.paths(event.sender.id,z.string().uuid().parse(raw));event.sender.startDrag({file:paths[0],files:paths,icon:nativeImage.createFromPath(join(__dirname,'icon.png'))});}catch(error){if(!event.sender.isDestroyed())event.sender.send('hornet:event',{type:'service.error',message:safeError(error).message});}});
   const treeTransfers=new TreeTransfers(localFiles,grants,backend);
@@ -95,6 +98,9 @@ async function setupIpc(){
       authorize(event);const window=BrowserWindow.fromWebContents(event.sender)!,fullscreen=controllers.get(window.id)!;const m=z.object({method:z.string(),payload:z.unknown()}).strict().parse(raw);
       let data:unknown;
       switch(m.method){
+        case 'transfer.prepare':data=await fileTransfers.prepare(event.sender.id,transferRequestSchema.parse(m.payload));break;
+        case 'transfer.resolve':{const p=z.object({id:z.string().uuid(),action:conflictActionSchema,name:z.string().min(1).max(255).optional()}).strict().parse(m.payload);data=await fileTransfers.resolve(event.sender.id,p.id,p.action,p.name);break;}
+        case 'transfer.checkName':{const p=z.object({id:z.string().uuid(),name:z.string().min(1).max(255)}).strict().parse(m.payload);await fileTransfers.checkName(event.sender.id,p.id,p.name);data=null;break;}
         case 'fileDrag.dropped':{const {paths}=z.object({paths:z.array(z.string().min(1).max(32768)).min(1).max(1000)}).strict().parse(m.payload);const dropped=[];for(const path of [...new Set(paths)]){const grant=await grants.create('local-user',path,'upload');dropped.push({pathGrantId:grant.id,name:basename(grant.path)});}data=dropped;break;}
         case 'fileDrag.prepare':{const p=z.object({connectionId:z.string().uuid(),files:z.array(z.object({path:z.string().min(1).max(4096),name:z.string().min(1).max(255)}).strict()).min(1).max(100)}).strict().parse(m.payload);data=await fileDrags.prepare(event.sender.id,p.connectionId,p.files);break;}
         case 'zmodem.start':{const p=z.object({terminalId:z.string().uuid(),direction:z.enum(['send','receive'])}).strict().parse(m.payload);await backend.call('terminal.inspect',{terminalId:p.terminalId});const selected=await dialog.showOpenDialog(window!,{title:p.direction==='send'?'选择发送文件':'选择 ZMODEM 接收目录',properties:[p.direction==='send'?'openFile':'openDirectory']});data=null;if(!selected.canceled&&selected.filePaths[0]){const path=selected.filePaths[0];const {realpath,lstat}=await import('node:fs/promises'),{dirname}=await import('node:path');if((await lstat(path)).isSymbolicLink())throw new Error('请选择普通文件或目录。');const canonical=await realpath(path);data=await backend.call('zmodem.start',p,{localPath:canonical,localParent:await realpath(dirname(canonical))});}break;}
@@ -185,7 +191,7 @@ async function setupIpc(){
         case 'localFiles.remove':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096)}).strict().parse(m.payload);await localFiles.remove('local-user',p.rootId,p.path);data=null;break;}
         case 'localFiles.copy':{const p=z.object({sourceId:z.string().uuid(),path:z.string().max(4096),targetId:z.string().uuid(),parent:z.string().max(4096)}).strict().parse(m.payload);await localFiles.copy('local-user',p.sourceId,p.path,p.targetId,p.parent);data=null;break;}
         case 'localFiles.mkdir':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),name:z.string().min(1).max(255)}).strict().parse(m.payload);data=await localFiles.mkdir('local-user',p.rootId,p.path,p.name);break;}
-        case 'localFiles.grant':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),direction:z.enum(['upload','download']),name:z.string().max(255).optional()}).strict().parse(m.payload);data=await localFiles.grant('local-user',p.rootId,p.path,p.direction,p.name);break;}
+        case 'localFiles.grant':{const p=z.object({rootId:z.string().uuid(),path:z.string().max(4096),direction:z.enum(['upload','download']),name:z.string().max(255).optional(),allowExisting:z.boolean().optional()}).strict().parse(m.payload);data=await localFiles.grant('local-user',p.rootId,p.path,p.direction,p.name,p.allowExisting?'prompt':false);break;}
         case 'localFiles.release':{const p=z.object({rootId:z.string().uuid()}).strict().parse(m.payload);localFiles.release('local-user',p.rootId);data=null;break;}
         case 'clipboard.writeRtf':{const {text}=z.object({text:z.string().max(131072)}).strict().parse(m.payload);await clipboard.write([new ClipboardItem({'text/plain':text,'text/rtf':plainRtf(text)})]);data=null;break;}
         case 'clipboard.read':z.object({}).strict().parse(m.payload??{});data=await clipboard.readText();if((data as string).length>131072)throw new AppError('FILE_LIMIT','Clipboard text exceeds 128 KiB.');break;
@@ -212,10 +218,10 @@ async function setupIpc(){
           data=false;if(!selected.canceled&&selected.filePath){await writeFile(selected.filePath,p.text,{encoding:'utf8',mode:0o600});data=true;}break;
         }
         case 'file.choose':{
-          const p=z.object({direction:z.enum(['upload','download']),name:z.string().max(255).optional()}).strict().parse(m.payload);
+          const p=z.object({direction:z.enum(['upload','download']),name:z.string().max(255).optional(),allowExisting:z.boolean().optional()}).strict().parse(m.payload);
           const result=p.direction==='upload'?await dialog.showOpenDialog(window!,{properties:['openFile']}):await dialog.showSaveDialog(window!,{defaultPath:basename(p.name??'download')});
           const path='filePaths' in result?result.filePaths[0]:result.filePath;
-          data=null;if(!result.canceled&&path){const grant=await grants.create('local-user',path,p.direction);data={pathGrantId:grant.id,name:basename(path)};}break;
+          data=null;if(!result.canceled&&path){const grant=await grants.create('local-user',path,p.direction,p.allowExisting?'prompt':false);data={pathGrantId:grant.id,name:basename(path)};}break;
         }
         case 'auth.key':{
           const p=z.object({challengeId:z.string().uuid()}).strict().parse(m.payload);

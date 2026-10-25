@@ -25,6 +25,7 @@ export async function ftpHash(client:Client,path:string,progress:(bytes:number)=
 }
 export class FtpFiles {
  constructor(private connections:FtpConnections){}
+ transferInfo(owner:string,id:string,path:string,withHash=false):Promise<import('../../packages/contracts/file-transfer').TransferInfo>{path=ftpPath(path);return this.connections.use(owner,id,async client=>{const info=await ftpStat(client,path);if(!info)return {transport:'ftp',path};const file:import('../../packages/contracts/file-transfer').TransferFile={path,kind:info.isSymbolicLink?'link':info.isFile?'file':info.isDirectory?'directory':'other',size:info.size,modified:info.modifiedAt?.getTime()??0};if(withHash&&file.kind==='file'){await client.send('TYPE I');file.hash=await ftpHash(client,path);const after=await ftpStat(client,path);if(!after?.isFile||after.isSymbolicLink||after.size!==file.size||(after.modifiedAt?.getTime()??0)!==file.modified)throw new AppError('FILE_CONFLICT','目标文件在比较期间发生变化。');}return {transport:'ftp',path,file};});}
  list(owner:string,id:string,path:string):Promise<FilePage>{
   ftpPath(path,false);
   return this.connections.use(owner,id,async client=>{

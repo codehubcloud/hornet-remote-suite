@@ -219,6 +219,7 @@ try{
  await expect(sidebar.locator('.terminal-file-view:visible').getByLabel('远端路径',{exact:true})).toHaveValue('/');
  await sidebar.getByRole('button',{name:'跟随终端',exact:true}).click();
  const tasks=page.getByRole('region',{name:'任务中心',exact:true});
+ await tasks.getByLabel('任务中心位置',{exact:true}).selectOption('left');
  await expect(sidebar.getByRole('region',{name:'任务中心',exact:true})).toBeVisible();
  const fileBox=await sidebar.locator('.files').boundingBox(),taskBox=await tasks.boundingBox();
  if(taskBox.y<fileBox.y+fileBox.height-1)throw new Error('Tasks must dock below the file list');
@@ -230,8 +231,8 @@ try{
  await page.screenshot({path:'test-results/terminal-collapsed.png'});
  await page.getByRole('button',{name:'展开工具栏',exact:true}).click();
  const heightGrip=page.getByRole('separator',{name:'调整任务中心高度',exact:true});
- await heightGrip.focus();await page.keyboard.press('ArrowUp');
- await expect(heightGrip).toHaveAttribute('aria-valuenow','200');
+ const initialTaskHeight=Number(await heightGrip.getAttribute('aria-valuenow'));await heightGrip.focus();await page.keyboard.press('ArrowUp');
+ await expect(heightGrip).toHaveAttribute('aria-valuenow',String(initialTaskHeight+20));
  async function dragTasks(x,y){const b=await page.getByRole('button',{name:'拖动任务中心',exact:true}).boundingBox();await page.mouse.move(b.x+30,b.y+b.height/2);await page.mouse.down();await page.mouse.move(x,y,{steps:12});await page.mouse.up();}
  await dragTasks(850,300);
  await expect(tasks).toHaveAttribute('data-dock','floating');
@@ -250,7 +251,7 @@ try{
  await expect(tasks.locator('.task-body')).toHaveCount(0);
  await page.getByRole('button',{name:'展开任务中心',exact:true}).click();
  await expect(tasks.locator('.task-body')).toBeVisible();
- await expect.poll(()=>page.evaluate(()=>{const saved=JSON.parse(localStorage.getItem('hornet.tasks.layout'));return saved.dock==='left'&&!saved.collapsed&&Math.abs(saved.height-240)<2;})).toBe(true);
+ await expect.poll(()=>page.evaluate(expected=>{const saved=JSON.parse(localStorage.getItem('hornet.tasks.layout'));return saved.dock==='left'&&!saved.collapsed&&Math.abs(saved.height-(expected+60))<2;},initialTaskHeight)).toBe(true);
  await page.screenshot({path:'test-results/terminal-sidebar.png'});
  await page.getByRole('button',{name:'隐藏文件栏',exact:true}).first().click();
  await expect(sidebar).toBeHidden();

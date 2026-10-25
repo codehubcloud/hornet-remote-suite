@@ -13,6 +13,13 @@ export function rename(sftp:SFTPWrapper,from:string,to:string):Promise<void>{ret
 export function hashBuffer(data:Buffer|string){return createHash('sha256').update(data).digest('hex');}
 export class Files {
   constructor(private connections:Connections) {}
+  async transferInfo(owner:string,id:string,path:string,withHash=false):Promise<import('../../packages/contracts/file-transfer').TransferInfo>{
+    const sftp=await this.connections.sftp(owner,id),parent=await realpath(sftp,posix.dirname(path)),canonical=posix.join(parent,posix.basename(path));
+    let info:Stats;try{info=await stat(sftp,canonical);}catch(error){if((error as {code?:number}).code===2)return {transport:'ssh',path:canonical};throw error;}
+    const file:import('../../packages/contracts/file-transfer').TransferFile={path:canonical,kind:info.isSymbolicLink()?'link':info.isFile()?'file':info.isDirectory()?'directory':'other',size:info.size,modified:info.mtime*1000};
+    if(withHash&&file.kind==='file'){file.hash=await hashFile(sftp.createReadStream(canonical));const after=await stat(sftp,canonical);if(!after.isFile()||after.isSymbolicLink()||after.size!==info.size||after.mtime!==info.mtime)throw new AppError('FILE_CONFLICT','目标文件在比较期间发生变化。');}
+    return {transport:'ssh',path:canonical,file};
+  }
   private async treeDirectory(owner:string,id:string,path:string){
     const sftp=await this.connections.sftp(owner,id);
     if(!posix.isAbsolute(path)||posix.normalize(path)!==path||await realpath(sftp,path)!==path||(await stat(sftp,path)).isSymbolicLink())throw new AppError('FILE_CONFLICT','远端目录已改变或包含符号链接，请重新预览。');

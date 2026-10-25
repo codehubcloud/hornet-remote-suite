@@ -67,6 +67,7 @@ const transfers=new Transfers(store,connections,emit,new FtpTransfers(ftp,emit),
 async function dispatch(m:Message):Promise<unknown>{
   const p=m.payload,owner=m.owner;
   switch(m.method){
+    case 'file.transferInfo':{const v=z.object({connectionId:z.string().uuid(),path:z.string().min(1).max(4096),withHash:z.boolean().optional()}).strict().parse(p);return fileService(v.connectionId).transferInfo(owner,v.connectionId,v.path,v.withHash);}
     case 'localTerminal.shells':return localShells();
     case 'localTerminal.open':return openLocal(devices,owner,schemas['localTerminal.open'].parse(p));
     case 'serialTerminal.list':return serialDevices();

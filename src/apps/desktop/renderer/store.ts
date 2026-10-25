@@ -69,7 +69,7 @@ export const useStore=create<State>((set)=>({
   if(event.type==='challenge')return {challenges:[...s.challenges,event]};
   if(event.type==='challenge.closed')return {challenges:s.challenges.filter(c=>c.challengeId!==event.challengeId)};
   if(event.type==='terminal.log')return {logs:[event.log,...s.logs.filter(l=>l.id!==event.log.id)],error:event.log.state==='failed'?(event.log.error??'终端日志写入失败。'):s.error};
-  if(event.type==='task.state')return {tasks:[event.task,...s.tasks.filter(t=>t.taskId!==event.task.taskId)]};
+  if(event.type==='task.state'){const existing=s.tasks.find(task=>task.taskId===event.task.taskId);if(existing&&existing.revision>event.task.revision)return {};return {tasks:existing?s.tasks.map(task=>task.taskId===event.task.taskId?event.task:task):[event.task,...s.tasks]};}
   if(event.type==='connection.state'){
    const closedTerminals={...s.closedTerminals},terminalDisconnects={...s.terminalDisconnects},connectionDisconnects={...s.connectionDisconnects};
    if(event.state==='closed'||event.state==='failed')connectionDisconnects[event.connectionId]??={...event.disconnect??{reason:event.error?'error':'remote',at:Date.now(),error:event.error},generation:event.generation};

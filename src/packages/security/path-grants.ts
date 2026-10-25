@@ -5,12 +5,12 @@ import { AppError } from '../core/errors';
 export interface PathGrant { id: string; owner: string; path: string; direction: 'upload'|'download'; expires: number; parent: string }
 export class PathGrants {
   private grants = new Map<string,PathGrant>();
-  async create(owner: string,path: string,direction: 'upload'|'download',replace=false): Promise<PathGrant> {
+  async create(owner: string,path: string,direction: 'upload'|'download',replace:boolean|'prompt'=false): Promise<PathGrant> {
     const absolute = resolve(path);
     const parent = await realpath(dirname(absolute));
     if ((await lstat(dirname(absolute))).isSymbolicLink()) throw new AppError('IPC005','不允许通过目录链接授权文件。');
     if (direction === 'upload') { const stat = await lstat(absolute); if (!stat.isFile() || stat.isSymbolicLink()) throw new AppError('IPC005','请选择普通文件。'); }
-    else { try { const info=await lstat(absolute);if(replace&&info.isFile()&&!info.isSymbolicLink()){}else throw new AppError('FILE_CONFLICT','下载目标已存在，请选择新文件名。'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; } }
+    else { try { const info=await lstat(absolute);if(replace==='prompt'||replace&&info.isFile()&&!info.isSymbolicLink()){}else throw new AppError('FILE_CONFLICT','下载目标已存在，请选择新文件名。'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; } }
     const grant = { id:randomUUID(),owner,path:join(parent,basename(absolute)),direction,expires:Date.now()+15*60*1000,parent };
     this.grants.set(grant.id,grant); return grant;
   }

@@ -42,7 +42,7 @@ export class Transfers {
     const plan:Plan={ftpText,expectedTarget:context?.expectedTarget,preserveModified:context?.preserveModified,expectedSource:context?.expectedSource,remoteParent:context?.remoteParent,localPath,localParent,remotePath,profileRevision:c.profile.revision,temp:direction==='upload'?posix.join(posix.dirname(remotePath),'.hornet-'+id+'.part'):join(dirname(localPath),'.hornet-'+id+'.part')};
     if(isFtp)plan.transport='ftp';
     if(isS3)plan.transport='s3';
-    const task:Task={owner,key,hash,plan,snapshot:{taskId:id,profileId:c.profile.profileId,direction,name:direction==='upload'?basename(localPath):posix.basename(remotePath),state:'queued',totalBytes:0,transferredBytes:0,revision:1,updatedAt:Date.now()}};
+    const task:Task={owner,key,hash,plan,snapshot:{taskId:id,profileId:c.profile.profileId,direction,localPath,remotePath,createdAt:Date.now(),name:direction==='upload'?basename(localPath):posix.basename(remotePath),state:'queued',totalBytes:0,transferredBytes:0,revision:1,updatedAt:Date.now()}};
     this.tasks.set(id,task);this.persist(task);this.emit(owner,{type:'task.state',task:task.snapshot});this.pump();return task.snapshot;
   }
   private get(owner:string,id:string,revision:number){const t=this.tasks.get(id);if(!t||t.owner!==owner)throw new AppError('IPC005','无权访问任务。');if(t.snapshot.revision!==revision)throw new AppError('TASK_STATE_CONFLICT','任务状态已改变，请刷新。');return t;}
@@ -69,7 +69,7 @@ export class Transfers {
     const abort=new AbortController();t.abort=abort;const signal=abort.signal;const p=t.plan;
     const check=()=>{if(signal.aborted)throw new AppError('IPC006','任务已停止。');};
     try{
-      this.change(t,'running');
+      t.snapshot.startedAt??=Date.now();this.change(t,'running');
       if(await realpath(dirname(p.localPath))!==p.localParent)throw new AppError('FILE_CONFLICT','本地目录身份已改变。');
       if(this.store.profile(t.snapshot.profileId).revision!==p.profileRevision)throw new AppError('FILE_CONFLICT','连接配置已改变，不能继续旧任务。');
       if(p.transport==='ftp'){

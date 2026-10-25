@@ -31,7 +31,7 @@ try{
  await expect.poll(()=>server.files.get('/upload.txt')?.toString()).toBe('LOCAL DRAG');await expect.poll(()=>server.files.get('/second.txt')?.toString()).toBe('SECOND DRAG');
  await drag(page,right.getByRole('row').filter({hasText:'hello.txt'}),left);await expect.poll(async()=>{try{return await readFile(join(local,'hello.txt'),'utf8');}catch{return '';}}).toBe('hello 世界\n');
  // A second download to the same name must preserve the existing local contents.
- await writeFile(join(local,'hello.txt'),'KEEP EXISTING');await drag(page,right.getByRole('row').filter({hasText:'hello.txt'}),left);await expect(page.locator('.error-banner')).toContainText('下载目标已存在');expect(await readFile(join(local,'hello.txt'),'utf8')).toBe('KEEP EXISTING');await page.locator('.error-banner').getByRole('button').click();
+ await writeFile(join(local,'hello.txt'),'KEEP EXISTING');await drag(page,right.getByRole('row').filter({hasText:'hello.txt'}),left);const conflict=page.getByRole('dialog',{name:'目标文件已存在',exact:true});await expect(conflict).toBeVisible();expect(await readFile(join(local,'hello.txt'),'utf8')).toBe('KEEP EXISTING');await conflict.getByLabel('操作',{exact:true}).selectOption('skip');await conflict.getByRole('button',{name:'确定',exact:true}).click();await expect(conflict).toBeHidden();await expect(page.locator('.error-banner')).toHaveCount(0);
  await page.getByRole('button',{name:'◈ 工作台',exact:true}).click();await expect(page.locator('.host .system-icon[data-system=ubuntu]')).toBeVisible();
  await page.screenshot({path:'test-results/file-drag-system-icon.png'});expect(errors).toEqual([]);
  await app.evaluate(({app})=>app.exit(0));app=undefined;

@@ -1,4 +1,6 @@
 import { LocalFileBrowser } from './LocalFileBrowser';
+import { TransferConflictHost } from './TransferConflictDialog';
+import { DirectoryTransferHost } from './DirectoryTransferHost';
 import type { ManagedKey } from '../../../packages/contracts/identities';
 import { useWorkspacePreferences } from './workspace-preferences';
 import { ProfileDialog } from './ProfileDialog';
@@ -144,10 +146,12 @@ export function App(){
     <section className="view terminal-session-workspace" data-view-id={active?.kind==='terminal'?active.id:undefined} style={{display:active?.kind==='terminal'?'flex':'none'}}><TerminalWorkspace splitActive={splitActive} renderTabs={renderTabs}/></section>
     {s.views.filter(v=>v.kind!=='terminal').map(v=><section key={v.id} className="view" data-view-id={v.id} style={{display:s.active===v.id?'flex':'none'}}>{v.kind!=='terminal'&&v.kind!=='localFiles'&&<div className="view-meta"><span>{v.profile.name} / {v.profile.host}</span><span>{s.connectionStates[v.connectionId]==='closed'?tr("已断开"):v.profile.session?.s3?'AWS S3 · HTTPS':v.profile.protocol==='ftp'?(v.profile.ftpSecurity==='none'?tr("FTP · 明文"):tr("FTPS · TLS 加密连接")):tr("SSH · 加密连接")}</span><button hidden={v.profile.protocol==='ftp'||!!v.profile.session?.s3} disabled={pending} onClick={()=>void connect(v.profile,v.kind==='files'?'terminal':'files')}>{v.kind==='files'?tr("打开终端"):tr("打开文件")}</button></div>}{v.kind==='localFiles'?<LocalFileBrowser view={v}/>:v.kind==='vnc'?<VncView view={v}/>:v.kind==='files'?<FileWorkspace view={v}/>:<EditorView view={v}/>}</section>)}
    </div>
-   {workspacePreferences.transferQueue&&<TaskCenter activeId={s.active} quiet={!active}/>}
+   <TaskCenter activeId={s.active} quiet={!active}/>
   </main></div>
   <footer hidden={!workspacePreferences.statusBar} className={'statusbar'+(active?.kind==='terminal'?' has-session-properties':'')}><span className="workspace-status"><i className="status-dot"/>{tr("本地工作区")}</span>{active?.kind==='terminal'?<CurrentSessionProperties edit={p=>{setConnectOnSave(false);setForm(p);}}/>:<><span>{active?(active.profile.username?active.profile.username+'@':'')+active.profile.host:tr("核心功能不依赖云账号")}</span><span>SSH / SFTP / FTP / FTPS / Telnet · Windows</span></>}</footer>
   <TerminalTitleMenu/>
+  <TransferConflictHost/>
+  <DirectoryTransferHost/>
   {guide&&<UserGuideDialog firstRun={guide==='startup'} close={closeGuide} tour={startTour}/>}
   {tourOpen&&<UserTour close={()=>setTourOpen(false)} manual={()=>{setTourOpen(false);setGuide('manual');}}/>}
   <QuickCommandHost/><AutoReconnect/>

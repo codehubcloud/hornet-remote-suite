@@ -217,3 +217,80 @@
 .file-drag-hint{font-size:11px;color:var(--c-829bb6);padding:5px 10px;margin:0;border-bottom:1px solid var(--c-233347)}
 
 .recent-session .system-icon{float:left;margin-top:4px;margin-right:10px}
+
+/* File workspace: independent panes above a docked transfer grid. */
+.file-workspace>.local-file-pane,.file-workspace>.remote-file-pane{overflow:hidden;min-width:0;min-height:0;border:0}
+.file-workspace .files{flex:1 1 0;min-height:0;overflow:hidden}
+.file-workspace .table-scroll{flex:1 1 0;min-height:0;overflow:auto}
+.file-workspace .local-filebar,.file-workspace .filebar{padding:6px 8px;gap:4px}
+.file-workspace .local-filebar button,.file-workspace .filebar button{padding:4px 7px}
+.file-workspace .file-panel-heading{min-height:36px;padding:5px 8px}
+.file-pane-divider{grid-column:2;grid-row:2;background:var(--c-27394c);cursor:col-resize;touch-action:none}
+.file-pane-divider:hover,.file-pane-divider:focus{background:var(--c-36c9b9);outline:0}
+.file-workspace table{table-layout:fixed;font-size:12px}
+.file-workspace th{z-index:1;padding:6px 8px}
+.file-workspace td{height:29px;padding:4px 8px}
+.file-workspace tbody tr[aria-selected=true]{background:var(--c-25354a);outline:1px solid var(--c-476381);outline-offset:-1px}
+.file-workspace .local-file-pane th:nth-child(3){width:90px}.file-workspace .local-file-pane th:nth-child(4){width:170px}
+.file-workspace .remote-file-pane th:nth-child(3){width:85px}.file-workspace .remote-file-pane th:nth-child(4){width:165px}.file-workspace .remote-file-pane th:nth-child(5){width:54px}.file-workspace .remote-file-pane th:last-child{width:42px}
+.files:not(.files-compact) .file-row-actions>button:not(.file-more-button){display:none}
+.file-more-button{padding:0 7px!important;font-size:17px!important}
+.file-batch{display:flex;align-items:center;gap:5px;min-height:34px;flex-shrink:0}
+.file-workspace .footnote{flex-shrink:0;max-height:45px;overflow:auto;padding:5px 8px}
+.file-workspace .file-summary{min-height:27px;padding:5px 8px}
+.transfer-tabs{display:flex;gap:2px;flex-shrink:0;border-bottom:1px solid var(--c-29384b);background:var(--c-101a29);height:28px}
+.transfer-tabs button{border:0;border-radius:0;background:transparent;padding:3px 12px;font-size:12px}
+.transfer-tabs button[aria-selected=true]{box-shadow:inset 0 -2px var(--c-36c9b9);background:var(--c-182437)}
+.transfer-preparing{flex-shrink:0;padding:4px 10px;font-size:11px;color:var(--c-829bb6)}
+.transfer-table-scroll{height:100%;min-height:0;overflow:auto}
+.transfer-table{min-width:1220px;table-layout:fixed;font-size:12px}
+.transfer-table th{padding:5px 8px;z-index:1;border-right:1px solid var(--c-29384b);white-space:nowrap}
+.transfer-table tr.task{display:table-row;padding:0}
+.transfer-table td{padding:5px 8px;border-right:1px solid var(--c-29384b);font-size:11px;white-space:nowrap;vertical-align:middle}
+.transfer-table th:nth-child(1){width:160px}.transfer-table th:nth-child(2){width:180px}.transfer-table th:nth-child(3){width:155px}.transfer-table th:nth-child(4){width:90px}.transfer-table th:nth-child(5),.transfer-table th:nth-child(7){width:200px}.transfer-table th:nth-child(6){width:40px}.transfer-table th:nth-child(8){width:95px}.transfer-table th:nth-child(9){width:110px}.transfer-table th:nth-child(10){width:85px}.transfer-table th:nth-child(11){width:120px}
+.transfer-table .task-actions{min-width:0;justify-content:flex-start;gap:3px}.transfer-table .task-actions button{padding:2px 5px}
+.transfer-table .task-direction{text-align:center;font-size:16px}
+.transfer-table .progress{height:5px;margin:3px 0}.transfer-table .progress i{height:5px}
+.transfer-table small{display:block;font-size:10px;overflow:hidden;text-overflow:ellipsis}
+.transfer-error{color:var(--c-e79b76)}.task-verification{color:var(--c-829bb6)}
+.transfer-log{flex:1;min-height:0;overflow:auto;padding:5px 10px;font-size:11px;line-height:1.8;overflow-wrap:anywhere}.transfer-log time{color:var(--c-829bb6)}
+.transfer-conflict-backdrop{z-index:40}.transfer-conflict-dialog{width:min(650px,94vw);max-height:90vh;overflow:auto}
+.conflict-files{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+.conflict-files section{padding:12px;border:1px solid var(--c-29384b);border-radius:5px;min-width:0}
+.conflict-files .mono{margin:7px 0;overflow-wrap:anywhere}.conflict-files small{color:var(--c-829bb6)}
+.conflict-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;margin-top:20px}
+.file-workspace input:not([type=checkbox]),.file-workspace select{padding:4px 7px;height:28px;font-size:12px}
+.file-workspace .files>.filebar{flex-wrap:nowrap;overflow:auto;flex-shrink:0}
+.file-workspace .files>.filebar input{order:0;flex-basis:auto;min-width:100px}
+.file-workspace .files>.file-drag-hint{display:none}
+.file-workspace .file-filter{height:28px;margin:4px 8px;flex-shrink:0}
+.transfer-table{min-width:1080px}
+.transfer-table th:nth-child(1){width:130px}.transfer-table th:nth-child(2){width:120px}.transfer-table th:nth-child(3){width:120px}.transfer-table th:nth-child(4){width:110px}.transfer-table th:nth-child(5),.transfer-table th:nth-child(7){width:auto}.transfer-table th:nth-child(6){width:30px}.transfer-table th:nth-child(8){width:75px}.transfer-table th:nth-child(9){width:90px}.transfer-table th:nth-child(10){width:70px}.transfer-table th:nth-child(11){width:95px}
+.transfer-table td{height:30px;padding:3px 7px}
+.transfer-progress-cell>span{float:right;width:42px;text-align:right;font-variant-numeric:tabular-nums}
+.transfer-progress-cell>.progress{width:calc(100% - 47px);margin:6px 0;height:5px}
+.transfer-progress-cell>small{display:none}
+.modal.conflict-dialog-classic{width:min(520px,94vw);padding:18px 16px;border-radius:7px}
+.conflict-warning{display:flex;gap:24px;align-items:center;margin:1px 4px 25px}
+.conflict-warning>span{display:grid;place-items:center;flex-shrink:0;width:28px;height:28px;border:2px solid currentColor;border-radius:50%;font-size:21px;font-weight:700}
+.conflict-warning p{margin:0;line-height:1.5;font-size:13px}
+.conflict-name{display:grid;grid-template-columns:76px minmax(0,1fr);gap:8px;margin:0 0 20px}.conflict-name strong{font-weight:400;overflow-wrap:anywhere}
+.conflict-dialog-classic hr{border:0;border-top:1px solid var(--c-29384b);margin:13px 0 16px}
+.conflict-detail{margin:0 0 21px}.conflict-detail h3{font-size:13px;font-weight:400;margin:0 0 12px}
+.conflict-detail-body{display:grid;grid-template-columns:76px minmax(0,1fr);gap:8px;align-items:center}
+.conflict-detail-body>div{min-width:0;line-height:1.5;font-size:12px}
+.conflict-file-path{font-size:11px;color:var(--c-829bb6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px}
+.conflict-file-symbol{display:block;position:relative;width:32px;height:40px;margin-left:4px;color:var(--c-829bb6)}
+.conflict-file-symbol svg{width:32px;height:40px}
+.conflict-file-symbol b{position:absolute;left:0;top:12px;padding:1px 3px;background:#1765ce;color:#fff;border-radius:2px;font:bold 12px/17px "Segoe UI",sans-serif}
+.conflict-file-symbol b[data-kind=X]{background:#187746}.conflict-file-symbol b[data-kind=P]{background:#bc4725}.conflict-file-symbol b[data-kind=PDF]{background:#be302a;font-size:9px}
+.conflict-operation{display:grid;grid-template-columns:76px minmax(100px,170px) minmax(0,1fr);align-items:center;gap:8px;margin-top:16px}
+.conflict-operation>label,.conflict-rename>label{display:block;margin:0;font-size:13px;color:inherit}
+.conflict-operation select{width:100%;min-width:0;padding:5px 7px}
+.conflict-operation .checkbox{display:flex;flex-direction:row;gap:5px;align-items:center;margin:0;white-space:nowrap;font-size:12px}
+.conflict-operation .checkbox input{margin:0;width:auto}
+.conflict-rename{display:grid;grid-template-columns:76px minmax(0,1fr);gap:8px;align-items:center;margin-top:12px}
+.conflict-rename input{min-width:0;padding:6px 7px;font-size:12px}.conflict-rename small{grid-column:2;font-size:11px;color:var(--c-829bb6)}
+.conflict-confirm.modal-actions{margin-top:24px;gap:12px}.conflict-confirm button{min-width:90px}
+@media(max-width:480px){.conflict-operation{grid-template-columns:62px minmax(0,1fr)}.conflict-operation .checkbox{grid-column:2}.conflict-warning{gap:15px}.conflict-detail-body,.conflict-name,.conflict-rename{grid-template-columns:62px minmax(0,1fr)}}
+@media(max-width:900px){.file-workspace table{min-width:420px}.file-workspace .remote-file-pane th:nth-child(4){width:145px}.conflict-files{grid-template-columns:1fr}}

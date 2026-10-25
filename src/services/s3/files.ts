@@ -21,6 +21,7 @@ async function bodyBuffer(body:unknown,limit:number){
 }
 export class S3Files {
  constructor(private connections:S3Connections){}
+ async transferInfo(owner:string,id:string,path:string,_withHash=false):Promise<import('../../packages/contracts/file-transfer').TransferInfo>{const c=this.connections.get(owner,id),canonical=s3Path(path);try{const info=await c.client.send(new HeadObjectCommand({Bucket:c.bucket,Key:s3Key(path)}));return {transport:'s3',path:canonical,file:{path:canonical,kind:'file',size:info.ContentLength??0,modified:info.LastModified?.getTime()??0}};}catch(error){if((error as {$metadata?:{httpStatusCode?:number}}).$metadata?.httpStatusCode===404)return {transport:'s3',path:canonical};throw error;}}
  async list(owner:string,id:string,path:string):Promise<FilePage>{
   const normalized=s3Path(path),prefix=s3Key(normalized),folderPrefix=prefix?prefix.replace(/\/?$/,'/'):'',entries=new Map<string,FilePage['entries'][number]>();let token:string|undefined;
   do{

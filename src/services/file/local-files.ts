@@ -93,7 +93,7 @@ export class LocalFiles {
  }
  async hash(owner:string,id:string,value:string){const {path}=await this.path(owner,id,value);const before=await lstat(path);if(!before.isFile())throw new AppError('FILE_CONFLICT','源必须为普通文件。');const hash=await hashFile(createReadStream(path));const after=await lstat(path);if(!after.isFile()||after.isSymbolicLink()||before.size!==after.size||before.mtimeMs!==after.mtimeMs)throw new AppError('FILE_CONFLICT','比较期间文件发生变化。');return {size:after.size,modified:after.mtimeMs,hash};}
  private name(name:string){if(!name||name.length>255||/[<>:"/\\|?*\x00-\x1f\x7f]/.test(name)||/[. ]$/.test(name)||/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(name))throw new AppError('IPC005','本地文件名无效。');}
- async grant(owner:string,id:string,value:string,direction:'upload'|'download',name?:string,replace=false){
+ async grant(owner:string,id:string,value:string,direction:'upload'|'download',name?:string,replace:boolean|'prompt'=false){
   if(direction==='download'){this.name(name??'');const parent=await this.path(owner,id,value);value=join(parent.rel,name!);}
   const {path}=await this.path(owner,id,value,direction==='download');
   const grant=await this.grants.create(owner,path,direction,replace);return {pathGrantId:grant.id};

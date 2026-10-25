@@ -1,6 +1,6 @@
 {
   "name": "hornet-remote-suite",
-  "version": "0.0.31",
+  "version": "0.0.32",
   "private": true,
   "description": "Unified remote workstation",
   "main": "dist/main.cjs",
@@ -34,6 +34,7 @@
     "test:terminal-automation": "node tools/terminal-automation-smoke.mjs",
     "test:file-sync": "node tools/file-sync-smoke.mjs",
     "test:file-drag": "node tools/file-drag-smoke.mjs",
+    "test:file-transfers": "node tools/file-transfer-ui-smoke.mjs",
     "build:release": "node tools/build.mjs --release",
     "package": "npm run prepare:runtime && npm run build:release && electron-builder --config electron-builder.cjs --publish never",
     "package:dir": "npm run prepare:runtime && npm run build:release && electron-builder --config electron-builder.cjs --dir --publish never",
