@@ -62,7 +62,7 @@ try{
  await expect(second.locator('.terminal-host')).toBeVisible();
  await setClipboard('selection marker');await selectFixture(second);await page.keyboard.press('Control+Shift+C');await expect.poll(clipboard).toBe('fixture');
  const context=page.getByRole('menu',{name:'终端内容菜单',exact:true});
- const openContext=async cell=>{await cell.locator('.terminal-host').click({button:'right',position:{x:150,y:50}});await expect(context).toBeVisible();};
+ const openContext=async cell=>{await cell.locator('.terminal-host').click({button:'right'});await expect(context).toBeVisible();};
  await setClipboard('previous clipboard');await openContext(second);
  await expect(second).toHaveClass(/selected/);await expect(context.getByRole('menuitem',{name:'复制',exact:true})).toBeEnabled();
  if(!executable)await page.screenshot({path:'test-results/terminal-context-menu.png'});
