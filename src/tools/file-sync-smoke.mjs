@@ -16,7 +16,11 @@ try{
  await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},local);
  await page.getByLabel('快速连接地址',{exact:true}).fill('tester@127.0.0.1:'+server.port);await page.locator('.quick-connect-bar').getByRole('button',{name:'连接',exact:true}).click();await page.getByLabel('名称',{exact:true}).fill('Sync fixture');await page.getByRole('button',{name:'保存并连接',exact:true}).click();
  await page.getByLabel('认证信息',{exact:true}).fill('test-password');await page.getByRole('button',{name:'继续连接',exact:true}).click();await page.getByRole('button',{name:'已核对，信任此主机',exact:true}).click();await page.getByRole('button',{name:'打开文件',exact:true}).click();
- await page.getByRole('region',{name:'本地文件',exact:true}).getByRole('button',{name:'选择本地目录',exact:true}).click();await page.getByRole('button',{name:'双向同步…',exact:true}).click();
+ await page.getByRole('region',{name:'本地文件',exact:true}).getByRole('button',{name:'选择本地目录',exact:true}).click();
+ for(const [region,pathLabel,filterLabel]of [['本地文件','本地相对路径','筛选本地文件'],['远端文件','远端路径','筛选当前目录']]){
+  const pane=page.getByRole('region',{name:region,exact:true});await pane.getByRole('textbox',{name:pathLabel,exact:true}).click();await page.getByRole('navigation',{name:'应用菜单'}).getByRole('button',{name:'编辑',exact:true}).click();await page.getByRole('menuitem',{name:'查找…',exact:true}).click();const filter=pane.getByRole('textbox',{name:filterLabel,exact:true});await expect(filter).toBeFocused();await page.keyboard.press('Escape');await expect(filter).toHaveCount(0);
+ }
+ await page.getByRole('button',{name:'双向同步…',exact:true}).click();
  const preview=page.getByRole('dialog',{name:'目录传输预览',exact:true}),row=name=>preview.getByRole('row').filter({hasText:name});
  await expect(row('up.txt')).toContainText('本地 → 远端');await expect(row('up.txt')).toContainText('覆盖文件');await expect(row('down.txt')).toContainText('远端 → 本地');await expect(row('same.txt')).toContainText('文件内容相同');await expect(row('tie.txt')).toContainText('跳过冲突');
  await preview.getByRole('button',{name:'关闭预览',exact:true}).click();expect(server.files.get('/up.txt').toString()).toBe('REMOTE_OLD');expect(await readFile(join(local,'down.txt'),'utf8')).toBe('LOCAL_OLD');

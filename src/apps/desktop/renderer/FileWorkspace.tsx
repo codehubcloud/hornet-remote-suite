@@ -11,6 +11,7 @@ import type { TreePreview,TreeRequest,SyncPolicy } from '../../../packages/contr
 import { TreeTransferDialog } from './TreeTransferDialog';
 import type { LocalDirectory } from '../../../packages/contracts/local-files';
 import { FileView,formatBytes } from './FileView';
+import { FileToolButton } from './FileToolbar';
 import { useStore,type View } from './store';
 
 export function FileWorkspace({view}:{view:View}){
@@ -26,6 +27,8 @@ export function FileWorkspace({view}:{view:View}){
  const [selected,setSelected]=useState<string[]>([]),[busy,setBusy]=useState(false),[name,setName]=useState<string|null>(null),[remoteRefresh,setRemoteRefresh]=useState(0);
  const [preview,setPreview]=useState<TreePreview|null>(null),[notice,setNotice]=useState('');
  const [localOp,setLocalOp]=useState<'mkdir'|'rename'>('mkdir');
+ const [filterOpen,setFilterOpen]=useState(false);
+ useEffect(()=>{if(filterOpen)filterInput.current?.focus();},[filterOpen]);
  const compared=useRef<TreeRequest|null>(null);
  const activePreview=useRef(preview);activePreview.current=preview;
  const current=useRef(local);current.current=local;
@@ -75,7 +78,7 @@ export function FileWorkspace({view}:{view:View}){
   refresh:local&&!busy?()=>void load(local.path):undefined,up:local?.path&&!busy?()=>void load(local.path.split(/[\\/]/).slice(0,-1).join('/')):undefined,
   copy:busy||!local||!selected.length?undefined:()=>useFileClipboard.getState().set({source:'local',rootId:local.rootId,paths:[...selected]}),
   paste:busy||!local||!clipboard?undefined:()=>void run(async()=>{await pasteToLocal(clipboard,local);await load(local.path);}),
-  selectAll:local?()=>setSelected(local.entries.filter(entry=>entry.kind==='file'||entry.kind==='directory').map(entry=>entry.path)):undefined,search:()=>filterInput.current?.focus(),
+  selectAll:local?()=>setSelected(local.entries.filter(entry=>entry.kind==='file'||entry.kind==='directory').map(entry=>entry.path)):undefined,search:()=>{setFilterOpen(true);filterInput.current?.focus();},
   upload:busy||!local||!selected.length?undefined:()=>void upload(),
   mkdir:busy||!local?undefined:()=>{setLocalOp('mkdir');setName('');},
   rename:busy||!local||!one?undefined:()=>{setLocalOp('rename');setName(one.name);},
@@ -89,24 +92,26 @@ export function FileWorkspace({view}:{view:View}){
  return <div className="file-workspace" ref={root} style={{gridTemplateColumns:split+'fr 5px '+(100-split)+'fr'}}>
   <div className="directory-sync-bar" hidden={ftp||s3}><strong>{tr("目录比较 / 同步")}</strong><label><input type="checkbox" checked={sync} disabled={!local} onChange={toggleSync}/>{tr('同步浏览')}</label><button disabled={busy||!local} onClick={()=>void run(()=>compare('upload'))}>{tr("比较并补齐远端 →")}</button><button disabled={busy||!local} onClick={()=>void run(()=>compare('download'))}>{tr("← 比较并补齐本地")}</button><button disabled={busy||!local} onClick={()=>void run(()=>compare('bidirectional',undefined,'newer'))}>{tr("双向同步…")}</button><span role="status">{busy?tr("正在处理…"):notice}</span></div>
   <section onPointerDownCapture={()=>useWorkspaceCommands.getState().focus(view.id,'local')} data-file-display={fileDisplay} className={"local-file-pane"+localDrop.className} {...localDrop.handlers} aria-label={tr("本地文件")}>
-   <div className="file-panel-heading"><strong>{tr("本地文件")}</strong><button disabled={busy} onClick={()=>void choose()}>{tr("选择本地目录")}</button></div>
+   <div className="file-panel-heading"><strong title={local?.rootPath}>{tr("本地文件")}</strong><span className="file-pane-meta">{local&&local.entries.length+tr(' 个条目')}</span><div className="file-pane-actions">
+    <FileToolButton icon="folder" label={tr('选择本地目录')} disabled={busy} onClick={()=>void choose()}/>
+    {local&&<><FileToolButton icon="mkdir" label={tr('新建本地目录')} disabled={busy} onClick={()=>{setLocalOp('mkdir');setName('');}}/>
+    <FileToolButton icon="upload" label={tr('上传所选（')+selected.length+'）→'} count={selected.length} className="primary" disabled={busy||!selected.length} onClick={()=>void upload()}/>
+    <FileToolButton icon="filter" label={tr('筛选本地文件')} aria-expanded={filterOpen} aria-pressed={filterOpen} onClick={()=>{setFilterOpen(value=>!value);if(filterOpen)setFilter('');}}/></>}
+   </div></div>
    {local?<>
-    <div className="file-summary" title={local.rootPath}>{local.rootPath}</div>
     <form className="local-filebar" onSubmit={e=>{e.preventDefault();void load(path);}}>
-     <input aria-label={tr("本地相对路径")} placeholder={tr("所选目录内的相对路径")} value={path} onChange={e=>setPath(e.target.value)}/><button>{tr("转到")}</button>
-     <button type="button" disabled={!local.path} onClick={()=>void load(local.path.split(/[\\/]/).slice(0,-1).join('/'))}>{tr("上级")}</button>
-     <button type="button" onClick={()=>void load(local.path)}>{tr("刷新本地")}</button>
-     <button type="button" onClick={()=>{setLocalOp('mkdir');setName('');}}>{tr("新建本地目录")}</button>
-     <button type="button" className="primary" disabled={busy||!selected.length} onClick={()=>void upload()}>{tr("上传所选（")}{selected.length}）→</button>
+     <FileToolButton icon="up" label={tr('上级')} disabled={!local.path||busy} onClick={()=>void load(local.path.split(/[\\/]/).slice(0,-1).join('/'))}/>
+     <div className="file-path-field"><span title={local.rootPath}>{local.rootPath}</span><input aria-label={tr("本地相对路径")} placeholder={tr("所选目录内的相对路径")} title={local.rootPath+(path?'/'+path:'')} value={path} onChange={e=>setPath(e.target.value)}/></div>
+     <FileToolButton icon="go" label={tr('转到')} type="submit" disabled={busy}/><FileToolButton icon="refresh" label={tr('刷新本地')} disabled={busy} onClick={()=>void load(local.path)}/>
     </form>
-    <input ref={filterInput} className="file-filter" aria-label={tr("筛选本地文件")} placeholder={tr("筛选本地文件…")} value={filter} onChange={e=>setFilter(e.target.value)}/>
+    {filterOpen&&<input ref={filterInput} className="file-filter" aria-label={tr("筛选本地文件")} placeholder={tr("筛选本地文件…")} value={filter} onChange={e=>setFilter(e.target.value)} onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();setFilter('');setFilterOpen(false);}}}/>}
     <div className="table-scroll"><table><thead><tr><th><input type="checkbox" disabled={busy} aria-label={tr("选择全部本地文件")} checked={entries.some(e=>(e.kind==='file'||e.kind==='directory'))&&entries.filter(e=>(e.kind==='file'||e.kind==='directory')).every(e=>selected.includes(e.path))} onChange={e=>setSelected(e.target.checked?entries.filter(e=>(e.kind==='file'||e.kind==='directory')).map(e=>e.path):[])}/></th><th>{tr("名称")}</th><th>{tr("大小")}</th><th>{tr("修改时间")}</th></tr></thead><tbody>
      {entries.map(file=><tr key={file.path} aria-selected={selected.includes(file.path)} tabIndex={0} onClick={event=>{if(!busy&&!(event.target as HTMLElement).closest('input,button'))setSelected(old=>event.ctrlKey||event.metaKey?old.includes(file.path)?old.filter(path=>path!==file.path):[...old,file.path]:[file.path]);}} draggable={!busy&&(file.kind==='file'||file.kind==='directory')} onDragStart={event=>{if((event.target as HTMLElement).closest('input')){event.preventDefault();return;}const paths=selected.includes(file.path)?selected:[file.path];startFileDrag(event,{source:'local',rootId:local.rootId,paths});}} onDragEnd={endFileDrag} onDoubleClick={()=>{if(file.kind==='directory')void load(file.path);else if(file.kind==='file'&&local)void run(async()=>{const grant=await window.hornet.localFiles.grant(local.rootId,file.path,'upload');if(remote.current)await queueTransfer({connectionId:view.connectionId,direction:'upload',pathGrantId:grant.pathGrantId,remotePath:(remote.current==='/'?'':remote.current)+'/'+file.name});});}}><td>{(file.kind==='file'||file.kind==='directory')&&<input type="checkbox" aria-label={tr("选择本地文件 ")+file.name} checked={selected.includes(file.path)} onChange={e=>setSelected(old=>e.target.checked?[...old,file.path]:old.filter(p=>p!==file.path))}/>}</td><td>{file.kind==='directory'?<button onClick={()=>void load(file.path)}>▰ {file.name}</button>:file.name}{file.kind==='link'?' ↗':''}</td><td>{file.kind==='file'?formatBytes(file.size):'—'}</td><td>{formatDate(file.modified)}</td></tr>)}
     </tbody></table>{!entries.length&&<p className="empty">{tr("此目录没有匹配文件")}</p>}</div>
     <p className="footnote">{local.entries.length}{tr(" 个条目")}{local.truncated?tr(" · 仅显示前 5000 项"):''}{tr("。文件传输进度显示在任务中心。")}</p>
    </>:<div className="empty">{tr("选择本地工作目录后，可浏览子目录、批量上传，并将右侧文件下载到当前目录。")}</div>}
   </section>
-  <div className="file-pane-divider" role="separator" aria-label={tr('调整文件面板宽度')} aria-orientation="vertical" aria-valuemin={20} aria-valuemax={80} aria-valuenow={split} tabIndex={0} onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();resizing.current=true;event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{if(!resizing.current||!root.current)return;const rect=root.current.getBoundingClientRect();setSplit(Math.max(20,Math.min(80,(event.clientX-rect.left)/rect.width*100)));}} onPointerUp={()=>{resizing.current=false;}} onLostPointerCapture={()=>{resizing.current=false;}} onKeyDown={event=>{if(['ArrowLeft','ArrowRight','Home'].includes(event.key)){event.preventDefault();setSplit(value=>event.key==='Home'?50:Math.max(20,Math.min(80,value+(event.key==='ArrowRight'?2:-2))));}}}/><section className="remote-file-pane" aria-label={tr("远端文件")}><div className="file-panel-heading"><strong>{tr("远端文件 · ")}{view.profile.name}</strong></div><FileView view={view} followTarget={syncTarget} onDirectory={remoteChanged} uploadSelected={upload} downloadTo={download} downloadSelection={ftp||s3?undefined:files=>run(()=>compare('download',files.map(f=>f.name)))} refreshKey={remoteRefresh}/></section>
+  <div className="file-pane-divider" role="separator" aria-label={tr('调整文件面板宽度')} aria-orientation="vertical" aria-valuemin={20} aria-valuemax={80} aria-valuenow={split} tabIndex={0} onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();resizing.current=true;event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{if(!resizing.current||!root.current)return;const rect=root.current.getBoundingClientRect();setSplit(Math.max(20,Math.min(80,(event.clientX-rect.left)/rect.width*100)));}} onPointerUp={()=>{resizing.current=false;}} onLostPointerCapture={()=>{resizing.current=false;}} onKeyDown={event=>{if(['ArrowLeft','ArrowRight','Home'].includes(event.key)){event.preventDefault();setSplit(value=>event.key==='Home'?50:Math.max(20,Math.min(80,value+(event.key==='ArrowRight'?2:-2))));}}}/><section className="remote-file-pane" aria-label={tr("远端文件")}><FileView view={view} heading={tr('远端文件 · ')+view.profile.name} followTarget={syncTarget} onDirectory={remoteChanged} uploadSelected={selected.length?upload:undefined} downloadTo={download} downloadSelection={ftp||s3?undefined:files=>run(()=>compare('download',files.map(f=>f.name)))} refreshKey={remoteRefresh}/></section>
   {preview&&<TreeTransferDialog preview={preview} busy={busy} recompare={policy=>void run(()=>compare(compared.current!.direction,compared.current!.names,policy))} close={closePreview} execute={()=>void executePreview()}/>}
   {name!==null&&<div className="modal-backdrop"><form className="modal" onSubmit={e=>{e.preventDefault();void run(async()=>{const p=current.current;if(!p)return;if(localOp==='mkdir')await window.hornet.localFiles.mkdir(p.rootId,p.path,name);else await window.hornet.localFiles.rename(p.rootId,selected[0],name);setName(null);await load(p.path);});}}><h2>{tr(localOp==='mkdir'?"新建本地目录":"重命名")}</h2><label>{tr("名称")}<input autoFocus required value={name} onChange={e=>setName(e.target.value)}/></label><div className="modal-actions"><button type="button" onClick={()=>setName(null)}>{tr("取消")}</button><button disabled={busy}>{tr(localOp==='mkdir'?"创建目录":"保存")}</button></div></form></div>}
  </div>;
