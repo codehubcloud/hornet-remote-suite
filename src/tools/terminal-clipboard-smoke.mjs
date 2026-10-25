@@ -99,8 +99,12 @@ try{
  await openContext(second);await expect(context.getByRole('menuitem',{name:'断开',exact:true})).toBeDisabled();await context.getByRole('menuitem',{name:'重新连接',exact:true}).click();
  await expect.poll(()=>server.shellCount).toBe(3);await expect(second).toHaveAttribute('data-terminal-id',/.+/);await expect.poll(()=>second.getAttribute('data-terminal-id')).not.toBe(id);
  await expect(second.locator('.terminal-disconnected')).toHaveCount(0);await expect(second.locator('.tabs')).toContainText('Renamed pane');expect(server.authCount).toBe(1);
+ await expect(second.locator('.terminal-host')).toContainText('fixture ready');
+ await page.setViewportSize({width:1024,height:650});
  server.disconnect();await expect(first.locator('.terminal-disconnected')).toBeVisible();await expect(second.locator('.terminal-disconnected')).toBeVisible();
- await expect(first.locator('.terminal-host')).toContainText('fixture ready');await expect(second.locator('.terminal-host')).toContainText('fixture ready');
+ // A disconnect transcript may scroll earlier output out of short split panes.
+ // Check both complete buffers through the public copy action, not visible rows.
+ await openContext(first);await context.getByRole('menuitem',{name:'全选',exact:true}).click();await openContext(first);await context.getByRole('menuitem',{name:'复制',exact:true}).click();await expect.poll(clipboard).toContain('fixture ready');
  await openContext(second);await context.getByRole('menuitem',{name:'全选',exact:true}).click();await openContext(second);await context.getByRole('menuitem',{name:'复制',exact:true}).click();await expect.poll(clipboard).toContain('fixture ready');
  await openContext(second);await context.getByRole('menuitem',{name:'关闭当前标签',exact:true}).click();await expect(page.locator('.terminal-cell')).toHaveCount(1);
  expect(errors).toEqual([]);await expect(page.locator('.error-banner')).toHaveCount(0);
