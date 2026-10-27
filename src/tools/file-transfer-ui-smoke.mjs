@@ -23,10 +23,14 @@ try{
  await expect(tasks).toContainText(/(?:KiB|MiB)\/s/);await page.screenshot({path:'test-results/file-transfer-progress.png'});
  await tasks.locator('.task').filter({hasText:'progress.bin'}).click({button:'right'});
  await expect(page.getByRole('menuitem',{name:'清除此条记录',exact:true})).toBeDisabled();await expect(page.getByRole('menuitem',{name:'清除传输历史',exact:true})).toBeDisabled();await page.keyboard.press('Escape');
- expect(await page.evaluate(()=>window.hornet.task.clearHistory())).toEqual([]);
+ // Pause before clearing the log so completion cannot race with menu interaction
+ // on faster CI runners. Resume explicitly to produce new states afterwards.
+ expect(await page.evaluate(async()=>{const cleared=await window.hornet.task.clearHistory(),task=(await window.hornet.task.list()).find(task=>task.name==='progress.bin');await window.hornet.task.pause(task.taskId,task.revision);return cleared;})).toEqual([]);
+ await expect.poll(()=>page.evaluate(async()=>(await window.hornet.task.list()).find(task=>task.name==='progress.bin')?.state)).toBe('paused');
  await tasks.getByRole('tab',{name:'日志',exact:true}).click();const transferLog=tasks.getByRole('log');await expect(transferLog).toContainText('progress.bin');await transferLog.click({button:'right'});
  await expect(page.getByRole('menuitem',{name:'清除传输历史',exact:true})).toHaveCount(0);await page.getByRole('menuitem',{name:'清空日志',exact:true}).click();await expect(transferLog).toBeEmpty();
  expect((await page.evaluate(()=>window.hornet.task.list())).some(task=>task.name==='progress.bin')).toBe(true);await tasks.getByRole('tab',{name:/传输/}).click();
+ await tasks.locator('.task').filter({hasText:'progress.bin'}).getByRole('button',{name:'恢复',exact:true}).click();
  await expect.poll(()=>page.evaluate(async()=>(await window.hornet.task.list()).find(task=>task.name==='progress.bin')?.state),{timeout:45000}).toBe('succeeded');
  await tasks.getByRole('tab',{name:'日志',exact:true}).click();await expect(transferLog).toContainText('已完成');await tasks.getByRole('tab',{name:/传输/}).click();
  await tasks.locator('.task').filter({hasText:'progress.bin'}).click({button:'right'});await page.getByRole('menuitem',{name:'清除此条记录',exact:true}).click();await expect(tasks.locator('.task')).toHaveCount(0);
