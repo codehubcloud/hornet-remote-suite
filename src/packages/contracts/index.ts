@@ -111,6 +111,7 @@ export const schemas = {
   'file.save': z.object({ connectionId: id, path: remotePath, content: z.string().max(131072), expectedHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
   'transfer.start': z.object({ connectionId: id, direction: z.enum(['upload','download']), pathGrantId: id, remotePath, idempotencyKey: id }).strict(),
   'task.list': z.object({}).strict(),
+  'task.clearHistory': z.object({taskId:id.optional()}).strict(),
   'task.cancel': z.object({ taskId: id, expectedRevision: z.number().int().positive() }).strict(),
   'task.pause': z.object({ taskId: id, expectedRevision: z.number().int().positive() }).strict(),
   'task.resume': z.object({ taskId: id, expectedRevision: z.number().int().positive() }).strict(),
@@ -147,6 +148,7 @@ export type HornetEvent =
   | { type: 'terminal.data'; terminalId: string; generation: number; seq: number; data: Uint8Array }
   | { type: 'terminal.closed'; terminalId: string; generation?:number; disconnect?: import('./terminal-disconnect').TerminalDisconnect }
   | { type: 'task.state'; task: TaskSnapshot }
+  | { type: 'task.removed'; taskIds: string[] }
   | { type:'update.progress';receivedBytes:number;totalBytes:number|null;state:'downloading'|'downloaded' }
   | { type: 'service.error'; message: string };
 export interface Layout { profileIds: string[]; activeProfileId?: string }
@@ -185,7 +187,7 @@ export interface HornetApi {
   ftp:{mode(connectionId:string,mode?:'binary'|'text'|'auto'):Promise<'binary'|'text'|'auto'>;command(connectionId:string,command:string):Promise<string>};
   file: { chmod(connectionId:string,path:string,mode:number):Promise<void>; list(connectionId: string,path: string): Promise<FilePage>; read(connectionId: string,path: string): Promise<{ content: string; hash: string }>; save(connectionId: string,path: string,content: string,expectedHash: string): Promise<{ hash: string }>; choose(direction: 'upload'|'download',name?: string,allowExisting?:boolean): Promise<{ pathGrantId: string; name: string }|null>; mkdir(connectionId:string,path:string):Promise<void>; rename(connectionId:string,path:string,target:string):Promise<void>; remove(connectionId:string,path:string):Promise<void> };
   transfer: { prepare(request:import('./file-transfer').TransferRequest):Promise<import('./file-transfer').TransferPreparation>;checkName(id:string,name:string):Promise<void>;resolve(id:string,action:import('./file-transfer').ConflictAction,name?:string):Promise<import('./file-transfer').TransferPreparation>; start(connectionId: string,direction: 'upload'|'download',pathGrantId: string,remotePath: string,idempotencyKey: string): Promise<TaskSnapshot> };
-  task: { list(): Promise<TaskSnapshot[]>; pause(taskId: string,expectedRevision: number): Promise<void>; cancel(taskId: string,expectedRevision: number): Promise<void>; resume(taskId: string,expectedRevision: number): Promise<void> };
+  task: { list(): Promise<TaskSnapshot[]>; clearHistory(taskId?:string): Promise<string[]>; pause(taskId: string,expectedRevision: number): Promise<void>; cancel(taskId: string,expectedRevision: number): Promise<void>; resume(taskId: string,expectedRevision: number): Promise<void> };
   layout: { load(): Promise<Layout>; save(layout: Layout): Promise<void> };
   capabilities(): Promise<Capability[]>;
   onEvent(listener: (event: HornetEvent) => void): () => void;

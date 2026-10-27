@@ -10,6 +10,7 @@ import { stat,unlink,rename,realpath as remoteRealpath } from './files';
 import { Storage } from '../../packages/storage/database';
 import type { TaskSnapshot,HornetEvent } from '../../packages/contracts';
 import { AppError,safeError } from '../../packages/core/errors';
+import { clearableTransferStates } from '../../packages/core/transfer-progress';
 
 import type { TransferContext } from './tree-transfers';
 import type { FtpTransfers } from '../ftp/transfers';
@@ -29,6 +30,13 @@ export class Transfers {
     }
   }
   list(owner:string){return [...this.tasks.values()].filter(t=>t.owner===owner).map(t=>t.snapshot).sort((a,b)=>b.updatedAt-a.updatedAt);}
+  clearHistory(owner:string,taskId?:string){
+    const ids=this.list(owner).filter(task=>(taskId===undefined||task.taskId===taskId)&&clearableTransferStates.has(task.state)).map(task=>task.taskId);
+    this.store.removeTransferHistory(owner,ids);
+    for(const id of ids)this.tasks.delete(id);
+    if(ids.length)this.emit(owner,{type:'task.removed',taskIds:ids});
+    return ids;
+  }
   hasProfile(profileId:string){return [...this.tasks.values()].some(t=>t.snapshot.profileId===profileId&&!['succeeded','cancelled','failed','conflict'].includes(t.snapshot.state));}
   async start(owner:string,connectionId:string,direction:'upload'|'download',localPath:string,localParent:string,remotePath:string,key:string,context?:TransferContext){
     const isS3=this.s3?.connections.has(connectionId),isFtp=this.ftp?.connections.has(connectionId),c=isS3?this.s3!.connections.get(owner,connectionId):isFtp?this.ftp!.connections.get(owner,connectionId):this.connections.get(owner,connectionId);
@@ -57,7 +65,7 @@ export class Transfers {
     for(const t of this.tasks.values()){
       if(this.running.size>=4)break;
       if(t.snapshot.state!=='queued')continue;
-      if([...this.running].some(id=>this.destination(this.tasks.get(id)!)===this.destination(t)))continue;
+      if([...this.running].some(id=>{const running=this.tasks.get(id);return running&&this.destination(running)===this.destination(t);}))continue;
       const active=[...this.running].filter(id=>this.tasks.get(id)?.snapshot.profileId===t.snapshot.profileId).length;
       if(active>=2)continue;
       this.running.add(t.snapshot.taskId);

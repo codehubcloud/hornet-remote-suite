@@ -144,6 +144,7 @@ async function dispatch(m:Message):Promise<unknown>{
     case 'file.save':{const v=schemas['file.save'].parse(p);return fileService(v.connectionId).save(owner,v.connectionId,v.path,v.content,v.expectedHash);}
     case 'transfer.start':{const v=schemas['transfer.start'].parse(p);if(!m.context)throw new AppError('IPC005','缺少文件授权。');return transfers.start(owner,v.connectionId,v.direction,m.context.localPath,m.context.localParent,v.remotePath,v.idempotencyKey,m.context);}
     case 'task.list':return transfers.list(owner);
+    case 'task.clearHistory':return transfers.clearHistory(owner,schemas['task.clearHistory'].parse(p).taskId);
     case 'task.pause':{const v=schemas['task.pause'].parse(p);return transfers.pause(owner,v.taskId,v.expectedRevision);}
     case 'task.cancel':{const v=schemas['task.cancel'].parse(p);return transfers.cancel(owner,v.taskId,v.expectedRevision);}
     case 'task.resume':{const v=schemas['task.resume'].parse(p);return transfers.resume(owner,v.taskId,v.expectedRevision);}

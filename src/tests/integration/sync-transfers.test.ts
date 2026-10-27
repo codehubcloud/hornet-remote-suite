@@ -64,3 +64,16 @@ it('detects an external target edit during the upload before atomic replacement'
   const tasks=await f.done([id]);expect(tasks[0].state).toBe('conflict');expect(tasks[0].error).toContain('内容发生变化');expect(f.server.files.get('/sync/changing')?.toString()).toBe('CHANGED!');
  }finally{await f.close();}
 },30000);
+it('clears completed history alongside an active upload without interrupting it or changing files',async()=>{
+ const f=await fixture(true,25);try{
+  await f.localFile('large','N'.repeat(4*1024*1024));await f.localFile('small','small');
+  const preview=await f.batch.preview('a',f.request),result=await f.batch.execute('a',preview.planId);
+  await expect.poll(()=>f.transfers.list('a').find(task=>task.name==='small')?.state).toBe('succeeded');
+  const large=f.transfers.list('a').find(task=>task.name==='large')!,small=f.transfers.list('a').find(task=>task.name==='small')!;
+  expect(large.state).toBe('running');expect(f.transfers.clearHistory('a',large.taskId)).toEqual([]);
+  expect(f.transfers.clearHistory('a')).toEqual([small.taskId]);expect(f.transfers.list('a').map(task=>task.taskId)).toEqual([large.taskId]);
+  expect((await f.done([large.taskId]))[0].state).toBe('succeeded');
+  expect(f.transfers.clearHistory('a')).toEqual([large.taskId]);expect(f.transfers.list('a')).toEqual([]);
+  expect(f.server.files.get('/sync/large')?.length).toBe(4*1024*1024);expect(f.server.files.get('/sync/small')?.toString()).toBe('small');
+ }finally{await f.close();}
+},30000);

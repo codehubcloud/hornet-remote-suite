@@ -1,5 +1,6 @@
 import type { TaskSnapshot } from '../contracts';
 export const activeTransferStates=new Set(['queued','running','verifying','committing','pausing','cancelling']);
+export const clearableTransferStates=new Set(['succeeded','cancelled','failed']);
 export const transferStateLabels:Record<string,string>={queued:'排队',running:'传输中',verifying:'校验中',committing:'提交中',pausing:'正在暂停',paused:'已暂停',cancelling:'正在取消',cancelled:'已取消',succeeded:'已完成',failed:'失败',conflict:'冲突'};
 interface Sample {at:number;bytes:number}
 interface History {at:number;bytes:number;elapsed:number;active:boolean;samples:Sample[]}

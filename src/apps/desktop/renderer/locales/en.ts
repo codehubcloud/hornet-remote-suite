@@ -1171,4 +1171,6 @@ export const english:Record<string,string> = {
   "安装包已保留。暂不安装时，下次启动软件或检查更新可直接安装，无需重新下载或重启电脑。": "The installer is saved. If you postpone installation, restart the app or check for updates to install it without downloading again or restarting your computer.",
 "您已连接到 {address}。\n您要断开这个会话吗？":"You are connected to {address}.\nDo you want to disconnect this session?",
 "您已连接到 {address}。\n您要断开并关闭这个标签吗？":"You are connected to {address}.\nDo you want to disconnect and close this tab?",
+  "清除此条记录": "Clear this record",
+  "清除传输历史": "Clear transfer history",
 };

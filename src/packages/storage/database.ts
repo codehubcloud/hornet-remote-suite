@@ -155,6 +155,9 @@ export class Storage {
       this.db.prepare('INSERT INTO transfer_task(task_id,source_json,target_json,total_bytes,confirmed_bytes,source_version_json,conflict_policy) VALUES (?,?,?,?,?,?,?) ON CONFLICT(task_id) DO UPDATE SET source_json=excluded.source_json,total_bytes=excluded.total_bytes,confirmed_bytes=excluded.confirmed_bytes').run(snapshot.taskId,JSON.stringify({snapshot,detail}),'{}',snapshot.totalBytes,0,'{}','fail');
     });
   }
+  removeTransferHistory(owner:string,taskIds:string[]) {
+    this.transaction(()=>{for(const taskId of taskIds)this.db.prepare("DELETE FROM task WHERE id=? AND owner_id=? AND kind='transfer' AND state IN ('succeeded','cancelled','failed')").run(taskId,owner);});
+  }
   loadTasks(): {owner:string;key:string;hash:string;snapshot:TaskSnapshot;detail:unknown}[] {
     return (this.db.prepare('SELECT t.owner_id,t.idempotency_key,t.request_hash,x.source_json FROM task t JOIN transfer_task x ON x.task_id=t.id WHERE t.kind=? ORDER BY t.created_at DESC').all('transfer') as Record<string,unknown>[]).map(r=>({...JSON.parse(String(r.source_json)),owner:String(r.owner_id),key:String(r.idempotency_key),hash:String(r.request_hash)}));
   }
